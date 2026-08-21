@@ -39,10 +39,16 @@ set or remove the managed `id` attribute and that accept only canonical positive
 
 The reconnect path observes a five-second grace period after a WebSocket
 failure. It neither shows the connection-lost indicator nor probes
-`/jaws/.ping` before that period elapses. It reloads only after the navigation
-is old enough. Pagehide invalidates active and reconnecting state, and a bfcache
-pageshow reloads. Keep reconnect constants and behavior covered by the
-JavaScript runtime tests.
+`/jaws/.ping` before that period elapses. If the old document remains active,
+the first probe reloads an old enough page without showing the indicator when
+the server is available; otherwise, the indicator appears after the probe
+completes and elapsed-time backoff begins. A stalled probe can defer the
+indicator until its ten-second timeout, roughly 15 seconds after failure. A
+cross-document navigation that leaves the old document active beyond the grace
+period can still show the indicator or be superseded by a reconnect-triggered
+reload before pagehide invalidates reconnecting state. A bfcache pageshow
+reloads. Keep reconnect constants and behavior covered by the JavaScript
+runtime tests.
 
 ## Browser helpers
 

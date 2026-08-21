@@ -2025,7 +2025,7 @@ jawsElement = function(html) {
 func TestJawsJS_LostUsesDataAttributeHook(t *testing.T) {
 	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
 setTimeout = function() {};
-jaws = new Date(Date.now() - 5000);
+jaws = new Date();
 
 jawsLost();
 lostIndicatorElem = { innerHTML: "old" };
@@ -2062,6 +2062,9 @@ func TestJawsJS_FailureRecoveryWaitsFiveSeconds(t *testing.T) {
 	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
 let now = 100000;
 Date.now = function() { return now; };
+global.performance = { now: function() { return 60000; } };
+let reloads = 0;
+window.location.reload = function() { reloads++; };
 let reconnects = 0;
 jawsReconnect = function() { reconnects++; };
 const timers = [];
@@ -2095,18 +2098,34 @@ const afterGrace = {
 	created: lostIndicatorCreated
 };
 
-// A failed probe after the grace period updates the banner and backs off.
-jawsLost();
+// An available server reloads an old page without flashing the banner first.
+jawsHandleReconnect({ currentTarget: { status: 204 } });
+const afterSuccessfulProbe = {
+	reconnects: reconnects,
+	delays: timers.map(function(timer) { return timer.ms; }),
+	selectors: lostIndicatorSelectors.length,
+	prepended: lostIndicatorPrepended,
+	reloads: reloads,
+	bodyScrollTop: document.body.scrollTop,
+	documentScrollTop: document.documentElement.scrollTop
+};
+
+// Exercise the failed-probe outcome independently of the stubbed reload above.
+reloads = 0;
+jawsHandleReconnect({ currentTarget: { status: 0 } });
 const afterFailedProbe = {
 	reconnects: reconnects,
 	delays: timers.map(function(timer) { return timer.ms; }),
 	selectors: lostIndicatorSelectors.length,
-	prepended: lostIndicatorPrepended
+	prepended: lostIndicatorPrepended,
+	created: lostIndicatorCreated,
+	reloads: reloads
 };
 
 process.stdout.write(JSON.stringify({
 	afterFailure: afterFailure,
 	afterGrace: afterGrace,
+	afterSuccessfulProbe: afterSuccessfulProbe,
 	afterFailedProbe: afterFailedProbe
 }));
 `)
@@ -2117,11 +2136,15 @@ process.stdout.write(JSON.stringify({
 		Selectors  int    `json:"selectors"`
 		Prepended  int    `json:"prepended"`
 		Created    string `json:"created"`
+		Reloads    int    `json:"reloads"`
+		BodyScroll int    `json:"bodyScrollTop"`
+		DocScroll  int    `json:"documentScrollTop"`
 	}
 	var got struct {
-		AfterFailure     state `json:"afterFailure"`
-		AfterGrace       state `json:"afterGrace"`
-		AfterFailedProbe state `json:"afterFailedProbe"`
+		AfterFailure         state `json:"afterFailure"`
+		AfterGrace           state `json:"afterGrace"`
+		AfterSuccessfulProbe state `json:"afterSuccessfulProbe"`
+		AfterFailedProbe     state `json:"afterFailedProbe"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
@@ -2129,30 +2152,33 @@ process.stdout.write(JSON.stringify({
 	if want := (state{Delays: []int{5000}}); !reflect.DeepEqual(got.AfterFailure, want) {
 		t.Fatalf("state after failure = %+v, want %+v", got.AfterFailure, want)
 	}
-	if got.AfterGrace.Reconnects != 1 || !reflect.DeepEqual(got.AfterGrace.Delays, []int{5000}) ||
-		got.AfterGrace.Selectors != 1 || got.AfterGrace.Prepended != 1 ||
-		!strings.Contains(got.AfterGrace.Created, "Server connection lost 5 seconds ago") {
-		t.Fatalf("state after grace = %+v, want delayed recovery to begin", got.AfterGrace)
+	if want := (state{Reconnects: 1, Delays: []int{5000}}); !reflect.DeepEqual(got.AfterGrace, want) {
+		t.Fatalf("state after grace = %+v, want probe without lost indicator %+v", got.AfterGrace, want)
 	}
-	if want := (state{Reconnects: 1, Delays: []int{5000, 5000}, Selectors: 2, Prepended: 1}); !reflect.DeepEqual(got.AfterFailedProbe, want) {
-		t.Fatalf("state after failed probe = %+v, want %+v", got.AfterFailedProbe, want)
+	if want := (state{Reconnects: 1, Delays: []int{5000}, Reloads: 1, BodyScroll: 10, DocScroll: 10}); !reflect.DeepEqual(got.AfterSuccessfulProbe, want) {
+		t.Fatalf("state after successful probe = %+v, want reload without indicator %+v", got.AfterSuccessfulProbe, want)
+	}
+	if got.AfterFailedProbe.Reconnects != 1 ||
+		!reflect.DeepEqual(got.AfterFailedProbe.Delays, []int{5000, 5000}) ||
+		got.AfterFailedProbe.Selectors != 1 || got.AfterFailedProbe.Prepended != 1 ||
+		got.AfterFailedProbe.Reloads != 0 ||
+		!strings.Contains(got.AfterFailedProbe.Created, "Server connection lost 5 seconds ago") {
+		t.Fatalf("state after failed probe = %+v, want indicator and delayed retry", got.AfterFailedProbe)
 	}
 }
 
-func TestJawsJS_PagehideCancelsDelayedFailureRecovery(t *testing.T) {
+func TestJawsJS_PagehideInvalidatesDelayedFailureRecovery(t *testing.T) {
 	raw := runJawsJSSnippet(t, lostIndicatorStubs+`
 global.performance = { now: function() { return 60000; } };
 let reloads = 0;
 window.location.reload = function() { reloads++; };
 const timers = [];
-const cleared = [];
 let nextTimer = 1;
 setTimeout = function(fn, ms) {
 	const timer = { id: nextTimer++, fn: fn, ms: ms };
 	timers.push(timer);
 	return timer.id;
 };
-clearTimeout = function(id) { cleared.push(id); };
 
 const requests = [];
 function FakeXHR() {
@@ -2184,7 +2210,6 @@ process.stdout.write(JSON.stringify({
 	jawsIsNull: jaws === null,
 	requests: requests.length,
 	delays: timers.map(function(timer) { return timer.ms; }),
-	cleared: cleared,
 	selectors: lostIndicatorSelectors.length,
 	prepended: lostIndicatorPrepended,
 	reloads: reloads
@@ -2195,7 +2220,6 @@ process.stdout.write(JSON.stringify({
 		JawsIsNull bool  `json:"jawsIsNull"`
 		Requests   int   `json:"requests"`
 		Delays     []int `json:"delays"`
-		Cleared    []int `json:"cleared"`
 		Selectors  int   `json:"selectors"`
 		Prepended  int   `json:"prepended"`
 		Reloads    int   `json:"reloads"`
@@ -2204,9 +2228,8 @@ process.stdout.write(JSON.stringify({
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
 	if !got.JawsIsNull || got.Requests != 0 || !reflect.DeepEqual(got.Delays, []int{5000}) ||
-		!reflect.DeepEqual(got.Cleared, []int{1}) || got.Selectors != 0 ||
-		got.Prepended != 0 || got.Reloads != 0 {
-		t.Fatalf("state after pagehide = %+v, want delayed work canceled", got)
+		got.Selectors != 0 || got.Prepended != 0 || got.Reloads != 0 {
+		t.Fatalf("state after pagehide = %+v, want delayed work inert", got)
 	}
 }
 
@@ -2339,7 +2362,7 @@ process.stdout.write(JSON.stringify({
 		t.Fatalf("reconnect attempts = %d requests, %d sends; want 6 each", len(got.Attempts), got.Sends)
 	}
 	if got.Pending != (counts{Timers: 1}) {
-		t.Fatalf("pending reconnect state = %+v, want one failure-grace timer", got.Pending)
+		t.Fatalf("reconnect state before results = %+v, want only the elapsed grace timeout", got.Pending)
 	}
 	for i, attempt := range got.Attempts {
 		if attempt.Method != "GET" || attempt.URL != "http://example.test/jaws/.ping" || !attempt.Async {
