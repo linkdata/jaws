@@ -121,10 +121,10 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // lookupers and rendered with a [With] value as the template data, exposing
 // dot through its Dot field. Unless the response already has a Content-Type,
 // Handler sets it to "text/html; charset=utf-8" when rendering writes its first
-// bytes. Handler sets Cache-Control to "no-store" so an HTTP cache does not reuse
-// responses containing the one-use request key emitted by
-// [jaws.Request.HeadHTML]. A render failure before any output retains
-// [http.Error]'s text response.
+// bytes. Handler always sets Cache-Control to "no-store", replacing any value
+// already present, so an HTTP cache does not reuse responses containing the
+// one-use request key emitted by [jaws.Request.HeadHTML]. A render failure before
+// any output retains [http.Error]'s text response.
 //
 // Handler renders without a generated wrapper and does not use dot as a tag, so
 // dot may be arbitrary template data. The handler reuses dot across requests;
