@@ -31,7 +31,7 @@ func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 	}
 	defer jw.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		b.Fatal("expected a request")
 	}

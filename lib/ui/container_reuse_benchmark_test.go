@@ -50,7 +50,7 @@ func benchReuseRequest(b *testing.B) (*jaws.Jaws, *jaws.Request) {
 		jw.Close()
 		b.Fatal(err)
 	}
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		jw.Close()
 		b.Fatal("nil request")

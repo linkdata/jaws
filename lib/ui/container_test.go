@@ -496,7 +496,7 @@ func benchRequest(b *testing.B) (*jaws.Jaws, *jaws.Request) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		jw.Close()
 		b.Fatal("nil request")

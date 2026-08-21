@@ -104,7 +104,7 @@ func TestJaws_ServePanicDoesNotWaitForOpenLoggerQueue(t *testing.T) {
 	}()
 	waitForServeLoop(t, jw)
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	tagValue := panickingServeTag{}
 	elem := rq.NewElement(&testUi{})
 	rq.TagExpanded(elem, []any{tagValue})
@@ -164,7 +164,7 @@ func TestJaws_ServePanicDoesNotWaitForClosingLoggerQueue(t *testing.T) {
 
 		stringStarted := make(chan struct{}, 1)
 		tagValue := panickingServeTag{started: stringStarted, release: stringRelease}
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		elem := rq.NewElement(&testUi{})
 		rq.Tag(elem, tagValue)
 		msgCh := make(chan wire.Message)
@@ -242,7 +242,7 @@ func TestJaws_ServeMaintenanceLoggerCanBroadcastRepeatedly(t *testing.T) {
 		}()
 		waitForServeLoop(t, jw)
 
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		// Maintenance uses whole-second samples and expires only after the timeout.
 		time.Sleep(3 * time.Second)
 		synctest.Wait()
@@ -286,7 +286,7 @@ func TestJaws_ServeOverloadLoggerCanBroadcastRepeatedly(t *testing.T) {
 		}()
 		waitForServeLoop(t, jw)
 
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		msgCh := make(chan wire.Message)
 		jw.subCh <- subscription{msgCh: msgCh, rq: rq}
 		waitForServeLoop(t, jw)
@@ -323,7 +323,7 @@ func TestJaws_MaintenanceRetiresExpiredRequestOnce(t *testing.T) {
 	logger := &maintenanceTestLogger{}
 	jw.Logger = logger
 	initial := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(initial)
+	rq := jw.newRequest(initial)
 	key := rq.JawsKey
 	jw.runtimeSeconds.Store(rq.lastWriteSeconds.Load() + 2)
 

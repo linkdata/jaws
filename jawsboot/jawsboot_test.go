@@ -64,12 +64,12 @@ func TestJawsBoot_Setup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rq := jw.NewRequest(nil)
-	var sb strings.Builder
-	if err = (ui.RequestWriter{Request: rq, Writer: &sb}).HeadHTML(); err != nil {
+	rr := httptest.NewRecorder()
+	rq := jw.NewRequest(rr, nil)
+	if err = (ui.RequestWriter{Request: rq, Writer: rr}).HeadHTML(); err != nil {
 		t.Fatal(err)
 	}
-	txt := sb.String()
+	txt := rr.Body.String()
 	if !strings.Contains(txt, rq.JawsKeyString()) {
 		t.Error(txt)
 	}
@@ -198,12 +198,12 @@ func TestJawsBoot_SetupNilHandleFuncGeneratesHead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rq := jw.NewRequest(nil)
-	var sb strings.Builder
-	if err := (ui.RequestWriter{Request: rq, Writer: &sb}).HeadHTML(); err != nil {
+	rr := httptest.NewRecorder()
+	rq := jw.NewRequest(rr, nil)
+	if err := (ui.RequestWriter{Request: rq, Writer: rr}).HeadHTML(); err != nil {
 		t.Fatal(err)
 	}
-	head := sb.String()
+	head := rr.Body.String()
 	for _, exp := range expected {
 		if !strings.Contains(head, `"`+exp.uri+`"`) {
 			t.Errorf("expected head html to include %q", exp.uri)
@@ -232,12 +232,12 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 				t.Fatal(setupErr)
 			}
 
-			rq := jw.NewRequest(nil)
-			var sb strings.Builder
-			if err := (ui.RequestWriter{Request: rq, Writer: &sb}).HeadHTML(); err != nil {
+			rr := httptest.NewRecorder()
+			rq := jw.NewRequest(rr, nil)
+			if err := (ui.RequestWriter{Request: rq, Writer: rr}).HeadHTML(); err != nil {
 				t.Fatal(err)
 			}
-			head := sb.String()
+			head := rr.Body.String()
 
 			for _, exp := range assets {
 				wantURI := expectedJawsBootURL(tc.wantRoot, exp.ss.Name)

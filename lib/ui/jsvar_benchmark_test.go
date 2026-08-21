@@ -34,7 +34,7 @@ func newBenchmarkJsVar(b *testing.B) (jsvar *JsVar[benchmarkJsVarState], elem *j
 	b.Cleanup(jw.Close)
 	go jw.Serve()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		b.Fatal("nil request")
 	}
@@ -79,7 +79,7 @@ func BenchmarkJsVarPathSetterMutation(b *testing.B) {
 		b.Fatal(err)
 	}
 	b.Cleanup(jw.Close)
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		b.Fatal("nil request")
 	}
@@ -123,7 +123,7 @@ func BenchmarkJsVarClientWrite(b *testing.B) {
 		}
 		b.Cleanup(jw.Close)
 		go jw.Serve()
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 		if rq == nil {
 			b.Fatal("nil request")
 		}

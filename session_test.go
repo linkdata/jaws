@@ -347,7 +347,7 @@ func TestSessionMiddleware_CloseDuringResponseHeader(t *testing.T) {
 		h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			got.handlerCalled = true
 			got.requestCookies = r.Cookies()
-			got.rq = jw.NewRequest(r)
+			got.rq = jw.newRequest(r)
 			w.WriteHeader(http.StatusNoContent)
 		}))
 		h.ServeHTTP(rw, hr)
@@ -418,7 +418,7 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 		t.Helper()
 		r := makeRequest(remoteAddr)
 		r.AddCookie(cookie)
-		if rq = jw.NewRequest(r); rq.Session() != want {
+		if rq = jw.newRequest(r); rq.Session() != want {
 			t.Fatalf("attached request session = %p, want %p", rq.Session(), want)
 		}
 		return
@@ -460,7 +460,7 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	if got := jw.GetSession(r); got != fresh {
 		t.Fatalf("GetSession() = %p, want fresh session %p", got, fresh)
 	}
-	if got := jw.NewRequest(r).Session(); got != fresh {
+	if got := jw.newRequest(r).Session(); got != fresh {
 		t.Fatalf("NewRequest().Session() = %p, want fresh session %p", got, fresh)
 	}
 	for _, old := range []struct {
@@ -642,7 +642,7 @@ func TestSession_Use(t *testing.T) {
 
 		var sb strings.Builder
 		sess := jw.GetSession(r)
-		rq := jw.NewRequest(r).Writer(&sb)
+		rq := jw.newRequest(r).Writer(&sb)
 		if sess != rq.Session() {
 			t.Error(sess)
 		}
@@ -793,11 +793,11 @@ func TestSession_Broadcast(t *testing.T) {
 		t.Fatal("expected session")
 	}
 
-	rq1 := jw.NewRequest(hr)
+	rq1 := jw.newRequest(hr)
 	hr2 := httptest.NewRequest(http.MethodGet, "/2", nil)
 	hr2.RemoteAddr = hr.RemoteAddr
 	hr2.AddCookie(sess.Cookie())
-	rq2 := jw.NewRequest(hr2)
+	rq2 := jw.newRequest(hr2)
 
 	if got := rq1.Session(); got != sess {
 		t.Fatalf("request 1 session mismatch: %v", got)
@@ -857,7 +857,7 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	sess := jw.NewSession(rr, hr)
 	th.True(sess != nil)
 
-	live := jw.NewRequest(hr)
+	live := jw.newRequest(hr)
 	th.True(live.Session() == sess)
 
 	// Session methods snapshot sess.requests under sess.mu, then process the snapshot
@@ -941,8 +941,8 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 
 	sessionHTTP := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
 	sess := jw.NewSession(httptest.NewRecorder(), sessionHTTP)
-	first := jw.NewRequest(sessionHTTP)
-	stale := jw.NewRequest(sessionHTTP)
+	first := jw.newRequest(sessionHTTP)
+	stale := jw.newRequest(sessionHTTP)
 	if first.Session() != sess || stale.Session() != sess {
 		t.Fatal("test requests did not attach to the session")
 	}
@@ -1001,7 +1001,7 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 	defer server.Close()
 	unrelatedHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/unrelated", nil)
 	unrelatedHTTP.RemoteAddr = "127.0.0.1:2000"
-	unrelated := jw.NewRequest(unrelatedHTTP)
+	unrelated := jw.newRequest(unrelatedHTTP)
 	if unrelated == stale {
 		t.Fatal("later client reused stale Request identity")
 	}
@@ -1079,7 +1079,7 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 	sessionHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
 	sessionHTTP.RemoteAddr = "127.0.0.1:1"
 	sess := jw.NewSession(httptest.NewRecorder(), sessionHTTP)
-	target := jw.NewRequest(sessionHTTP)
+	target := jw.newRequest(sessionHTTP)
 	if target.Session() != sess {
 		t.Fatal("target Request was not associated with the session")
 	}
@@ -1091,7 +1091,7 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 	// probe against the serve loop: broadcasts are processed in order.
 	controlHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
 	controlHTTP.RemoteAddr = "127.0.0.2:1"
-	control := jw.NewRequest(controlHTTP)
+	control := jw.newRequest(controlHTTP)
 	if control.Session() != nil {
 		t.Fatal("control Request must not share the session")
 	}
@@ -1189,7 +1189,7 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 	sessionHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
 	sessionHTTP.RemoteAddr = "127.0.0.1:1"
 	sess := jw.NewSession(httptest.NewRecorder(), sessionHTTP)
-	rq := jw.NewRequest(sessionHTTP)
+	rq := jw.newRequest(sessionHTTP)
 	if rq.Session() != sess {
 		t.Fatal("Request was not associated with the session")
 	}
@@ -1259,7 +1259,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 
 	// A drained control subscription proves a broadcast was processed: broadcasts
 	// are ordered, so once its marker arrives every earlier broadcast is handled.
-	control := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	control := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	controlCh := jw.subscribe(control, 32)
 	if controlCh == nil {
 		t.Fatal("control subscription failed")
@@ -1296,7 +1296,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 
 	// A nil-destination Update is the coalescible dirty-render tick: overflowing it
 	// must neither cancel the Request nor kill its subscription.
-	dropRq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	dropRq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	dropCh := jw.subscribe(dropRq, 1) // not drained during the overflow below
 	if dropCh == nil {
 		t.Fatal("drop subscription failed")
@@ -1337,7 +1337,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 
 	// A tag-targeted Update is one-shot (no periodic re-send), so overflow must
 	// fail-fast.
-	tagRq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	tagRq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	tagRq.NewElement(&testUi{}).Tag(tag.Tag("overload-tag"))
 	if jw.subscribe(tagRq, 1) == nil { // never drained
 		t.Fatal("tag subscription failed")
@@ -1349,7 +1349,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	awaitCancel("tag-targeted Update", tagRq)
 
 	// A key-targeted Update is the Session.Close wake-up: overflow must fail-fast.
-	wakeRq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	wakeRq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if jw.subscribe(wakeRq, 1) == nil { // never drained
 		t.Fatal("wake subscription failed")
 	}
@@ -1440,7 +1440,7 @@ func TestSession_Delete(t *testing.T) {
 		t.Error(x)
 	}
 
-	rq2 := ts.jw.NewRequest(hr2)
+	rq2 := ts.jw.newRequest(hr2)
 	if x := rq2.Session(); x != ts.sess {
 		t.Error(x)
 	}
@@ -1577,7 +1577,7 @@ func TestSession_Cleanup(t *testing.T) {
 			t.Fatal(x)
 		}
 
-		r1 := jw.NewRequest(hr)
+		r1 := jw.newRequest(hr)
 		if x := sess; x != r1.Session() {
 			t.Error(x)
 		}
@@ -1622,7 +1622,7 @@ func TestSession_UnclaimedRequestRecycleKeepsGraceDeadline(t *testing.T) {
 	if sess == nil {
 		t.Fatal("expected session")
 	}
-	r1 := jw.NewRequest(hr)
+	r1 := jw.newRequest(hr)
 	if r1.Session() != sess {
 		t.Fatal("expected request bound to session")
 	}
@@ -1664,7 +1664,7 @@ func TestSession_ClaimedNonLastLeaveKeepsGrace(t *testing.T) {
 
 		// rqA is the live tab: its WebSocket connected, so it is claimed and keeps
 		// the session alive while its (creation-time) deadline ages into the past.
-		rqA := jw.NewRequest(hr)
+		rqA := jw.newRequest(hr)
 		if rqA.Session() != sess {
 			t.Fatal("expected rqA bound to session")
 		}
@@ -1683,7 +1683,7 @@ func TestSession_ClaimedNonLastLeaveKeepsGrace(t *testing.T) {
 		hr2 := httptest.NewRequest(http.MethodGet, "/2", nil)
 		hr2.RemoteAddr = hr.RemoteAddr
 		hr2.AddCookie(sess.Cookie())
-		rqB := jw.NewRequest(hr2)
+		rqB := jw.newRequest(hr2)
 		if rqB.Session() != sess {
 			t.Fatal("expected rqB bound to session")
 		}
@@ -1770,7 +1770,7 @@ func TestSession_CloseDetachesRequestSession(t *testing.T) {
 	}
 	sess.Set("foo", "bar")
 
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	if rq.Session() != sess {
 		t.Fatal("expected request session association")
 	}
@@ -1851,7 +1851,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	s1 := jw.NewSession(w1, h1)
 	is.Equal(jw.GetSession(h1), s1)
 	is.Equal(len(w1.Result().Cookies()), 1)
-	r1 := jw.NewRequest(h1)
+	r1 := jw.newRequest(h1)
 	is.Equal(r1.Session(), s1)
 	c1 := w1.Result().Cookies()[0]
 	is.Equal(c1.MaxAge, 0)
@@ -1871,7 +1871,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	s2 := jw.NewSession(w2, h2)
 	is.Equal(jw.GetSession(h2), s2)
 	is.Equal(len(w2.Result().Cookies()), 1)
-	r2 := jw.NewRequest(h2)
+	r2 := jw.newRequest(h2)
 	is.Equal(r2.Session(), s2)
 	c2 := w2.Result().Cookies()[0]
 	is.Equal(c2.MaxAge, 0)
@@ -1892,7 +1892,7 @@ func TestSession_ReplacesOld(t *testing.T) {
 	w4 := httptest.NewRecorder()
 	h4 := httptest.NewRequest("GET", "/", nil)
 	h4.AddCookie(&c1copy)
-	r4 := jw.NewRequest(h4)
+	r4 := jw.newRequest(h4)
 	is.Equal(r4.Session(), s1)
 	is.Equal(jw.GetSession(h4), s1)
 	is.Equal(len(w4.Result().Cookies()), 0)

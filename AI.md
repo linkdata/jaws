@@ -107,20 +107,17 @@ identity and multiplicity.
 
 The normal page flow has two related HTTP requests:
 
-1. A page handler creates a Request with `Jaws.NewRequest`. `HeadHTML` normally
-   emits the configured resources and request-key metadata. `TailHTML` is
-   optional; placing it before `</body>` applies queued initial updates before
-   the WebSocket connects and can reduce flicker.
+1. Before writing the response, a page handler calls `Jaws.NewRequest(w, r)`,
+   which replaces `Cache-Control` with `no-store`. `HeadHTML` normally emits the
+   configured resources and request-key metadata. `TailHTML` is optional;
+   placing it before `</body>` applies queued initial updates before the
+   WebSocket connects and can reduce flicker.
 2. The bundled script connects to `/jaws/<key>`. `Jaws.ServeHTTP` decodes the
    key, claims the pending Request through `UseRequest`, upgrades the connection,
    and begins event and DOM-update processing.
 
-Page responses containing `HeadHTML` or equivalent Request-key metadata must
-include the `no-store` Cache-Control directive. An HTTP-cached copy would repeat
-the consumed one-use capability and cannot establish another WebSocket
-connection. `ui.Handler` sets `Cache-Control: no-store` automatically; custom
-page handlers must set it explicitly. A bfcache restoration is handled
-separately by the bundled client's `pageshow` reload.
+`HeadHTML` does not manage response headers. The bundled client reloads pages
+restored from the bfcache.
 
 Applications that emit equivalent resources and metadata need not call
 `HeadHTML` or `TailHTML`. Custom routers may parse the trailing key with

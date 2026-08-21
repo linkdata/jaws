@@ -80,7 +80,7 @@ func main() {
 		fmt.Fprintln(w, triggerCount.Load())
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		rq := jw.NewRequest(r)
+		rq := jw.NewRequest(w, r)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, "<!doctype html><html><head>")
 		if err := rq.HeadHTML(w); err != nil {

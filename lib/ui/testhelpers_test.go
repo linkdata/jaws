@@ -105,7 +105,7 @@ func newConfiguredCoreRequest(t *testing.T, configure func(*jaws.Jaws)) (*jaws.J
 	if configure != nil {
 		configure(jw)
 	}
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		t.Fatal("nil request")
 	}
@@ -130,7 +130,7 @@ func newCoreSessionBoundRequest(t *testing.T) (*jaws.Jaws, *jaws.Request) {
 	if sess := jw.NewSession(rr, hr); sess == nil {
 		t.Fatal("expected session")
 	}
-	rq := jw.NewRequest(hr)
+	rq := jw.NewRequest(rr, hr)
 	if rq == nil {
 		t.Fatal("expected request")
 	}

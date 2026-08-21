@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"net/http/httptest"
 	"strings"
 	"sync"
 
@@ -74,7 +75,7 @@ func ExampleTemplate_failureBehavior() {
 	if err = jw.AddTemplateLookuper(tmpl); err != nil {
 		panic(err)
 	}
-	rq := jw.NewRequest(nil)
+	rq := jw.NewRequest(httptest.NewRecorder(), nil)
 	elem := rq.NewElement(ui.NewTemplate("div", "partial", tag.Tag("dot")))
 
 	var out bytes.Buffer

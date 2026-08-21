@@ -36,11 +36,11 @@ import (
 // messages than the buffer holds without reading OutCh stalls the loop, and a
 // wait on DoneCh after [TestRequest.Close] then never completes.
 //
-// Recorder is a sink for the test's own rendering, for example as the Writer
-// of a ui.RequestWriter; nothing in the harness writes to it.
+// Recorder starts with "Cache-Control: no-store" and records response body
+// written by the test; the harness writes no body.
 type TestRequest struct {
 	*jaws.Request
-	Recorder *httptest.ResponseRecorder // sink for the test's own rendering; the harness never writes to it
+	Recorder *httptest.ResponseRecorder // response recorder
 	ReadyCh  chan struct{}              // closed once the processing loop is running
 	DoneCh   chan struct{}              // closed once the processing loop has stopped
 	InCh     chan wire.WsMsg            // send inbound WebSocket messages here
@@ -91,7 +91,7 @@ func NewTestRequestWithPanic(jw *jaws.Jaws, r *http.Request, onPanic func(recove
 		r = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
 	rr := httptest.NewRecorder()
-	rq := newRequest(jw, r)
+	rq := newRequest(jw, rr, r)
 	// The rq == nil guard is defensive against the newRequest seam (NewRequest loops
 	// until a key is allocated and never returns nil in production); the claim check is
 	// the disjunct that fails in practice. Panic rather than returning nil so the

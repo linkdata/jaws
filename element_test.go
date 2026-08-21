@@ -110,7 +110,7 @@ func TestElement_JsCallQueuesElementScopedCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		t.Fatal("NewRequest returned nil")
 	}
@@ -234,7 +234,7 @@ func TestElement_Queued(t *testing.T) {
 			},
 		}
 
-		pendingRq := rq.Jaws.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		pendingRq := rq.Jaws.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		th.NoErr(testRequestWriter{rq: pendingRq, Writer: httptest.NewRecorder()}.UI(tss))
 
 		th.NoErr(rq.UI(tss))
@@ -264,7 +264,7 @@ func TestElement_ChildOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	parent := rq.NewElement(&testUi{})
@@ -338,9 +338,9 @@ func TestElement_ChildOperationsRejectInvalidElement(t *testing.T) {
 				defer jw.Close()
 				logger := &captureErrorLogger{}
 				jw.Logger = logger
-				rq := jw.NewRequest(nil)
+				rq := jw.newRequest(nil)
 				defer jw.recycle(rq)
-				other := jw.NewRequest(nil)
+				other := jw.newRequest(nil)
 				defer jw.recycle(other)
 				parent := rq.NewElement(&testUi{})
 				child := tt.child(parent, other)
@@ -376,7 +376,7 @@ func TestElement_ChildOperationsOnDeletedParentAreInert(t *testing.T) {
 	defer jw.Close()
 	logger := &captureErrorLogger{}
 	jw.Logger = logger
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	parent := rq.NewElement(&testUi{})
 	child := rq.NewElement(&testUi{})
@@ -408,7 +408,7 @@ func TestElement_ReplaceRejectsMissingId(t *testing.T) {
 	defer jw.Close()
 	logger := &captureErrorLogger{}
 	jw.Logger = logger
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "foo"})
 
 	if deadlock.Debug {
@@ -459,9 +459,9 @@ func TestElement_AttrHelpersRejectReservedId(t *testing.T) {
 			defer jw.Close()
 			logger := &captureErrorLogger{}
 			jw.Logger = logger
-			// A plain NewRequest has no running process loop, so nothing drains
+			// A plain Request has no running process loop, so nothing drains
 			// wsQueue underneath the assertion (unlike newTestRequest).
-			rq := jw.NewRequest(nil)
+			rq := jw.newRequest(nil)
 			defer jw.recycle(rq)
 			e := rq.NewElement(&testUi{})
 
@@ -503,9 +503,9 @@ func TestElement_AttrHelpersAllowNormalAttr(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	// A plain NewRequest has no running process loop, so nothing drains wsQueue
+	// A plain Request has no running process loop, so nothing drains wsQueue
 	// underneath the assertion (unlike newTestRequest).
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	e := rq.NewElement(&testUi{})
 	e.SetAttr("hidden", "yes")
@@ -666,7 +666,7 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	tu := &testUi{renderFn: func(*Element, io.Writer, []any) error { return nil }}
 	elem := rq.NewElement(tu)
@@ -720,7 +720,7 @@ func TestElement_JawsRenderDebugTagCanReenterRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	jw.Debug = true
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	tu := &testUi{renderFn: func(elem *Element, _ io.Writer, _ []any) error {
 		elem.Tag(testReentrantDebugTag{rq: rq})
@@ -759,7 +759,7 @@ func TestElement_JawsRenderReturnsDebugWriteError(t *testing.T) {
 	}
 	defer jw.Close()
 	jw.Debug = true
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	elem := rq.NewElement(&testUi{})
 	wantErr := errors.New("debug write failed")
 
@@ -775,7 +775,7 @@ func TestElement_RenderDebugSanitizesHTML5CommentClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Jaws.Debug = true
 
 	tu := &testUi{renderFn: func(*Element, io.Writer, []any) error { return nil }}
@@ -976,7 +976,7 @@ func TestElement_ApplyGetter_NonComparableHandler_NilLogger(t *testing.T) {
 		t.Fatal("expected nil Logger by default")
 	}
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "x"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
 	gotTag := e.ApplyGetter(tch)
@@ -1003,7 +1003,7 @@ func TestElement_ApplyGetter_NonComparableHandler_NoLog(t *testing.T) {
 	var buf bytes.Buffer
 	jw.Logger = slog.New(slog.NewTextHandler(&buf, nil))
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	e := rq.NewElement(&testUi{s: "x"})
 	tch := testNonComparableClickHandler{names: []string{"name"}}
 	e.ApplyGetter(tch)

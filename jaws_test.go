@@ -200,7 +200,7 @@ func TestJaws_CloseClearsSessions(t *testing.T) {
 		}
 		value := "value-" + strconv.Itoa(i)
 		sess.Set("key", value)
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if got := rq.Session(); got != sess {
 			t.Fatalf("Request.Session() = %p, want %p", got, sess)
 		}
@@ -343,7 +343,7 @@ func TestJaws_CloseCancelsPendingHTTPWork(t *testing.T) {
 	requestStarted := make(chan startedRequest, 1)
 	handlerDone := make(chan *Element, 1)
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		requestStarted <- startedRequest{rq: rq, sentinel: rq.NewElement(&testUi{})}
 		<-rq.Context().Done()
 		// A normal HTTP owner may still run cleanup after observing cancellation.
@@ -386,7 +386,7 @@ func TestJaws_CloseRejectsClaimedRequestBeforeServe(t *testing.T) {
 	}
 	initial := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
 	initial.RemoteAddr = "192.0.2.1:1000"
-	rq := jw.NewRequest(initial)
+	rq := jw.newRequest(initial)
 	sentinel := rq.NewElement(&testUi{})
 	key := rq.JawsKey
 	websocketRequest := httptest.NewRequest(http.MethodGet, "http://example.test/jaws/"+key.String(), nil)
@@ -419,9 +419,9 @@ func TestJaws_CloseHandlesRetiredKeyReservation(t *testing.T) {
 	}
 	jw.MaxPendingRequestsPerIP = 1
 
-	retired := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	retired := jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
 	setPendingLimitLastWrite(t, retired, 3600)
-	replacement := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	replacement := jw.newRequest(newPendingLimitRequest("192.0.2.1:1001"))
 
 	jw.Close()
 	if got := jw.RequestCount(); got != 0 {
@@ -458,7 +458,7 @@ func TestJaws_CloseCancelsMixedRequestsWithoutLogging(t *testing.T) {
 		close(serveDone)
 	}()
 
-	pending := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/pending", nil))
+	pending := jw.newRequest(httptest.NewRequest(http.MethodGet, "/pending", nil))
 	active := NewTestRequest(jw, httptest.NewRequest(http.MethodGet, "/active", nil))
 	if active == nil {
 		t.Fatal("NewTestRequest returned nil")
@@ -525,7 +525,7 @@ func TestJaws_NewRequestRacingCloseStartsCanceled(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		go func() {
 			<-start
-			requestCh <- jw.NewRequest(request)
+			requestCh <- jw.newRequest(request)
 		}()
 		go func() {
 			<-start
@@ -545,7 +545,7 @@ func TestJaws_NewRequestRacingCloseStartsCanceled(t *testing.T) {
 		}
 		requestsBefore := jw.RequestCount()
 		pendingBefore := jw.Pending()
-		postClose := jw.NewRequest(request)
+		postClose := jw.newRequest(request)
 		select {
 		case <-postClose.Context().Done():
 		default:
@@ -569,9 +569,9 @@ func TestJaws_MaxPendingRequestsPerIPDisabled(t *testing.T) {
 		defer jw.Close()
 		jw.MaxPendingRequestsPerIP = limit
 
-		jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
-		jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
-		jw.NewRequest(newPendingLimitRequest("192.0.2.1:1002"))
+		jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		jw.newRequest(newPendingLimitRequest("192.0.2.1:1001"))
+		jw.newRequest(newPendingLimitRequest("192.0.2.1:1002"))
 
 		if got := jw.Pending(); got != 3 {
 			t.Fatalf("Pending() with limit %d = %d, want 3", limit, got)
@@ -591,17 +591,17 @@ func TestJaws_MaxPendingRequestsPerIPEvictsOldestPending(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 2
 
 	oldReq := newPendingLimitRequest("192.0.2.1:1000")
-	oldRq := jw.NewRequest(oldReq)
+	oldRq := jw.newRequest(oldReq)
 	oldKey := oldRq.JawsKey
 	setPendingLimitLastWrite(t, oldRq, 7200)
 
 	midReq := newPendingLimitRequest("192.0.2.1:1001")
-	midRq := jw.NewRequest(midReq)
+	midRq := jw.newRequest(midReq)
 	midKey := midRq.JawsKey
 	setPendingLimitLastWrite(t, midRq, 3600)
 
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 	newKey := newRq.JawsKey
 
 	if got := jw.Pending(); got != 2 {
@@ -630,7 +630,7 @@ func TestJaws_MaxPendingRequestsPerIPUsesLiveElapsedBeforeServe(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	oldReq := newPendingLimitRequest("192.0.2.1:1000")
-	oldRq := jw.NewRequest(oldReq)
+	oldRq := jw.newRequest(oldReq)
 	oldKey := oldRq.JawsKey
 
 	// Simulate an hour passing before Serve starts. runtimeSeconds still holds
@@ -638,7 +638,7 @@ func TestJaws_MaxPendingRequestsPerIPUsesLiveElapsedBeforeServe(t *testing.T) {
 	// whether the pending cap may evict oldRq.
 	jw.created = time.Now().Add(-time.Hour)
 	newReq := newPendingLimitRequest("192.0.2.1:1001")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 
 	if got := jw.Pending(); got != 1 {
 		t.Fatalf("Pending() = %d, want 1", got)
@@ -686,7 +686,7 @@ func TestJaws_MaintenanceLoggerCanReenter(t *testing.T) {
 	jw.Logger = reentrantLogger{jw: jw, logged: logged}
 
 	// A pending request idle long enough for the maintenance pass to retire it.
-	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	rq := jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
 	setPendingLimitLastWrite(t, rq, 3600)
 
 	done := make(chan struct{})
@@ -751,14 +751,14 @@ func TestJaws_RetiredPendingRequestRemainsOwnedByInitialHTTPHandler(t *testing.T
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("/blocked", func(w http.ResponseWriter, r *http.Request) {
-				rq := jw.NewRequest(r)
+				rq := jw.newRequest(r)
 				started <- initialRender{rq: rq, elem: rq.NewElement(&testUi{})}
 				<-release
 				resumed <- rq.NewElement(&testUi{})
 				w.WriteHeader(http.StatusNoContent)
 			})
 			mux.HandleFunc("/next", func(w http.ResponseWriter, r *http.Request) {
-				next <- jw.NewRequest(r)
+				next <- jw.newRequest(r)
 				w.WriteHeader(http.StatusNoContent)
 			})
 			server := httptest.NewServer(mux)
@@ -856,13 +856,13 @@ func TestJaws_RetiredRequestKeyRemainsReserved(t *testing.T) {
 	setRandomKeys(t, jw, retiredKey, retiredKey, replacementKey)
 
 	retiredHTTP := newPendingLimitRequest("192.0.2.1:1000")
-	retired := jw.NewRequest(retiredHTTP)
+	retired := jw.newRequest(retiredHTTP)
 	if retired.JawsKey != retiredKey {
 		t.Fatalf("first key = %v, want %v", retired.JawsKey, retiredKey)
 	}
 	setPendingLimitLastWrite(t, retired, 3600)
 
-	replacement := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	replacement := jw.newRequest(newPendingLimitRequest("192.0.2.1:1001"))
 	if replacement.JawsKey != replacementKey {
 		t.Fatalf("replacement key = %v, want %v after rejecting retired key", replacement.JawsKey, replacementKey)
 	}
@@ -907,7 +907,7 @@ func TestReleaseRetiredRequestKey(t *testing.T) {
 		}
 
 		setRandomKeys(t, jw, retiredKey)
-		rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		rq := jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
 		if rq.JawsKey != retiredKey {
 			t.Fatalf("reused key = %v, want %v", rq.JawsKey, retiredKey)
 		}
@@ -921,7 +921,7 @@ func TestReleaseRetiredRequestKey(t *testing.T) {
 		}
 		defer jw.Close()
 		setRandomKeys(t, jw, retiredKey)
-		rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+		rq := jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
 
 		releaseRetiredRequestKey(retiredRequestKey{jw: weak.Make(jw), jawsKey: retiredKey})
 		if got := jw.requests[retiredKey]; got != rq {
@@ -945,7 +945,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 2
 
 	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
-	renderingRq := jw.NewRequest(renderingReq)
+	renderingRq := jw.newRequest(renderingReq)
 	renderingKey := renderingRq.JawsKey
 	// Simulate an in-flight initial render on the oldest pending Request: a fresh
 	// write timestamp. maintenanceInterval is zero here, so the spare window uses
@@ -953,14 +953,14 @@ func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
 	renderingRq.MarkWritten()
 
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
-	idleRq := jw.NewRequest(idleReq)
+	idleRq := jw.newRequest(idleReq)
 	idleKey := idleRq.JawsKey
 	// Age the idle Request well past the spare window so it is the eviction victim.
 	setPendingLimitLastWrite(t, idleRq, 3600)
 
 	// Creating a third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 	newKey := newRq.JawsKey
 
 	// The rendering Request must survive; the idle one is the one evicted.
@@ -995,19 +995,19 @@ func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T)
 
 	// The oldest pending Request wrote recently (its render is still in flight).
 	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
-	renderingRq := jw.NewRequest(renderingReq)
+	renderingRq := jw.newRequest(renderingReq)
 	renderingKey := renderingRq.JawsKey
 	renderingRq.MarkWritten()
 
 	// A genuinely idle Request that rendered long ago is the correct eviction victim.
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
-	idleRq := jw.NewRequest(idleReq)
+	idleRq := jw.newRequest(idleReq)
 	idleKey := idleRq.JawsKey
 	setPendingLimitLastWrite(t, idleRq, 3600)
 
 	// A third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 	newKey := newRq.JawsKey
 
 	// The recently-rendered Request must survive despite its cleared flag; the idle one
@@ -1040,7 +1040,7 @@ func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 
 	// Oldest pending: a single write, then silence. Its timestamp stays fresh.
 	stalledReq := newPendingLimitRequest("192.0.2.1:1000")
-	stalledRq := jw.NewRequest(stalledReq)
+	stalledRq := jw.newRequest(stalledReq)
 	stalledKey := stalledRq.JawsKey
 	stalledRq.MarkWritten()
 
@@ -1051,13 +1051,13 @@ func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
 
 	// A genuinely idle sibling is the correct victim.
 	idleReq := newPendingLimitRequest("192.0.2.1:1001")
-	idleRq := jw.NewRequest(idleReq)
+	idleRq := jw.newRequest(idleReq)
 	idleKey := idleRq.JawsKey
 	setPendingLimitLastWrite(t, idleRq, 3600)
 
 	// A third same-IP Request trips the cap (pending == 2).
 	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 	newKey := newRq.JawsKey
 
 	if claimed := jw.UseRequest(stalledKey, stalledReq); claimed != stalledRq {
@@ -1080,13 +1080,13 @@ func TestJaws_MaxPendingRequestsPerIPEnforcesCapWithFutureWriteTimestamp(t *test
 	jw.MaxPendingRequestsPerIP = 1
 
 	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
-	renderingRq := jw.NewRequest(renderingReq)
+	renderingRq := jw.newRequest(renderingReq)
 	renderingKey := renderingRq.JawsKey
 	nowSeconds := jw.runtimeSeconds.Load()
 	renderingRq.lastWriteSeconds.Store(nowSeconds + 1)
 
 	newReq := newPendingLimitRequest("192.0.2.1:1001")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 	newKey := newRq.JawsKey
 
 	if got := jw.Pending(); got != 1 {
@@ -1114,12 +1114,12 @@ func TestJaws_MaxPendingRequestsPerIPEnforcesCapWhenAllRendering(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	req1 := newPendingLimitRequest("192.0.2.1:1000")
-	rq1 := jw.NewRequest(req1)
+	rq1 := jw.newRequest(req1)
 	rq1Key := rq1.JawsKey
 	rq1.MarkWritten()
 
 	req2 := newPendingLimitRequest("192.0.2.1:1001")
-	rq2 := jw.NewRequest(req2)
+	rq2 := jw.newRequest(req2)
 	if got := jw.Pending(); got != 1 {
 		t.Fatalf("Pending() = %d, want 1", got)
 	}
@@ -1146,10 +1146,10 @@ func TestJaws_MaxPendingRequestsPerIPEvictsLeastRecentlyWrittenWhenAllFresh(t *t
 	jw.MaxPendingRequestsPerIP = 2
 
 	req1 := newPendingLimitRequest("192.0.2.1:1000")
-	rq1 := jw.NewRequest(req1)
+	rq1 := jw.newRequest(req1)
 	rq1Key := rq1.JawsKey
 	req2 := newPendingLimitRequest("192.0.2.1:1001")
-	rq2 := jw.NewRequest(req2)
+	rq2 := jw.newRequest(req2)
 	rq2Key := rq2.JawsKey
 	// The older rq1 wrote more recently than rq2 (a future timestamp keeps it
 	// fresh regardless of test scheduling), so rq2 is the eviction victim even
@@ -1157,7 +1157,7 @@ func TestJaws_MaxPendingRequestsPerIPEvictsLeastRecentlyWrittenWhenAllFresh(t *t
 	setPendingLimitLastWrite(t, rq1, -3600)
 
 	req3 := newPendingLimitRequest("192.0.2.1:1002")
-	rq3 := jw.NewRequest(req3)
+	rq3 := jw.newRequest(req3)
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2", got)
 	}
@@ -1188,11 +1188,11 @@ func TestJaws_MaxPendingRequestsPerIPToleratesUnretirableVictim(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	req1 := newPendingLimitRequest("192.0.2.1:1000")
-	rq1 := jw.NewRequest(req1)
+	rq1 := jw.newRequest(req1)
 	rq1.storeState(reqRunning)
 	defer rq1.storeState(reqPending)
 
-	rq2 := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	rq2 := jw.newRequest(newPendingLimitRequest("192.0.2.1:1001"))
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2 (overshoot when the victim cannot be retired)", got)
 	}
@@ -1224,7 +1224,7 @@ func TestJaws_MaxPendingRequestsPerIPConcurrentCreation(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			requests[i] = jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+			requests[i] = jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
 		}()
 	}
 	close(start)
@@ -1253,9 +1253,9 @@ func TestJaws_MaxPendingRequestsPerIPKeepsDifferentIPs(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	reqA := newPendingLimitRequest("192.0.2.1:1000")
-	rqA := jw.NewRequest(reqA)
+	rqA := jw.newRequest(reqA)
 	reqB := newPendingLimitRequest("198.51.100.1:1000")
-	rqB := jw.NewRequest(reqB)
+	rqB := jw.newRequest(reqB)
 
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2", got)
@@ -1277,7 +1277,7 @@ func TestJaws_MaxPendingRequestsPerIPIgnoresClaimedRequests(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	claimedReq := newPendingLimitRequest("192.0.2.1:1000")
-	claimedRq := jw.NewRequest(claimedReq)
+	claimedRq := jw.newRequest(claimedReq)
 	if claimed := jw.UseRequest(claimedRq.JawsKey, claimedReq); claimed != claimedRq {
 		t.Fatalf("claimed request claim = %v, want %v", claimed, claimedRq)
 	}
@@ -1286,7 +1286,7 @@ func TestJaws_MaxPendingRequestsPerIPIgnoresClaimedRequests(t *testing.T) {
 	}
 
 	pendingReq := newPendingLimitRequest("192.0.2.1:1001")
-	pendingRq := jw.NewRequest(pendingReq)
+	pendingRq := jw.newRequest(pendingReq)
 
 	total, active := jw.RequestCounts()
 	if total != 2 || active != 0 {
@@ -1315,11 +1315,11 @@ func TestJaws_MaxPendingRequestsPerIPKeepsLoopbackAddressesSeparate(t *testing.T
 	jw.MaxPendingRequestsPerIP = 1
 
 	oldReq := newPendingLimitRequest("127.0.0.1:1000")
-	oldRq := jw.NewRequest(oldReq)
+	oldRq := jw.newRequest(oldReq)
 	setPendingLimitLastWrite(t, oldRq, 3600)
 
 	newReq := newPendingLimitRequest("[::1]:1000")
-	newRq := jw.NewRequest(newReq)
+	newRq := jw.newRequest(newReq)
 
 	if got := jw.Pending(); got != 2 {
 		t.Fatalf("Pending() = %d, want 2", got)
@@ -1371,8 +1371,8 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 	jw.MaxPendingRequestsPerIP = 1
 
 	oldReq := newPendingLimitRequest("192.0.2.1:1000")
-	jw.NewRequest(oldReq)
-	jw.NewRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	jw.newRequest(oldReq)
+	jw.newRequest(newPendingLimitRequest("192.0.2.1:1001"))
 
 	loggedErr := logger.next(t)
 	if !errors.Is(loggedErr, ErrRequestCancelled) {
@@ -1496,7 +1496,7 @@ func TestJaws_MaxPendingRequestsPerIPMaintenanceRemovesPendingIndex(t *testing.T
 	defer jw.Close()
 	jw.MaxPendingRequestsPerIP = 1
 
-	rq := jw.NewRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	rq := jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
 	setPendingLimitLastWrite(t, rq, 3600)
 	jw.maintenance(time.Second)
 
@@ -1642,8 +1642,8 @@ func TestJaws_DirtyExactElementAndTag(t *testing.T) {
 	}
 	defer jw.Close()
 
-	first := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/first", nil))
-	second := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/second", nil))
+	first := jw.newRequest(httptest.NewRequest(http.MethodGet, "/first", nil))
+	second := jw.newRequest(httptest.NewRequest(http.MethodGet, "/second", nil))
 	exact := first.NewElement(&testUi{})
 	sharedSecond := second.NewElement(&testUi{})
 	shared := tag.Tag("shared")
@@ -1690,7 +1690,7 @@ func TestJaws_DirtyIgnoresIneligibleElementTargets(t *testing.T) {
 	}
 	defer other.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	deleted := rq.NewElement(&testUi{})
 	jw.Dirty(deleted)
 	jw.distributeDirt()
@@ -1701,7 +1701,7 @@ func TestJaws_DirtyIgnoresIneligibleElementTargets(t *testing.T) {
 		t.Fatalf("exact Element queued %d updates before deletion, want 1", queued)
 	}
 	rq.DeleteElement(deleted)
-	otherRq := other.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	otherRq := other.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	foreign := otherRq.NewElement(&testUi{})
 	var nilElement *Element
 
@@ -2045,7 +2045,7 @@ func TestJaws_GenerateHeadHTML_AllowsExternalManualFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	var head strings.Builder
 	if err = rq.HeadHTML(&head); err != nil {
 		t.Fatal(err)
@@ -2375,7 +2375,7 @@ func TestJaws_GenerateHeadHTMLConcurrentWithHeadHTML(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+				rq := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 				var buf bytes.Buffer
 				if err := rq.HeadHTML(&buf); err != nil {
 					t.Error(err)
@@ -2447,7 +2447,7 @@ func TestCoverage_IDAndLookupHelpers(t *testing.T) {
 	_ = jw.RemoveTemplateLookuper(tmpl)
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	if rq == nil {
 		t.Fatal("expected request")
 	}
@@ -2706,7 +2706,7 @@ func TestJaws_ServeWithTimeoutFullSubscriberChannel(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+		rq := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 		msgCh := make(chan wire.Message) // unbuffered: always full when nobody receives
 		done := make(chan struct{})
 		go func() {
@@ -2933,7 +2933,7 @@ func TestServeHTTP_ResponseHeaderValuesAreIndependent(t *testing.T) {
 
 	serveTail := func() *httptest.ResponseRecorder {
 		hr := httptest.NewRequest(http.MethodGet, "/", nil)
-		rq := jw.NewRequest(hr)
+		rq := jw.newRequest(hr)
 		req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 		req.RemoteAddr = hr.RemoteAddr
 		w := httptest.NewRecorder()
@@ -3076,7 +3076,7 @@ func TestServeHTTP_GetKey(t *testing.T) {
 	is.Equal(w.Header()["Cache-Control"], nil)
 
 	w = httptest.NewRecorder()
-	rq := jw.NewRequest(req)
+	rq := jw.newRequest(req)
 	req = httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusUpgradeRequired)
@@ -3090,7 +3090,7 @@ func TestServeHTTP_Noscript(t *testing.T) {
 	defer jw.Close()
 
 	w := httptest.NewRecorder()
-	rq := jw.NewRequest(httptest.NewRequest("", "/", nil))
+	rq := jw.newRequest(httptest.NewRequest("", "/", nil))
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString()+"/noscript", nil)
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusNoContent)
@@ -3121,7 +3121,7 @@ func TestServeHTTP_UnknownKeySuffixDoesNotClaimRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			is := newTestHelper(t)
 			hr := httptest.NewRequest(http.MethodGet, "/", nil)
-			rq := jw.NewRequest(hr)
+			rq := jw.newRequest(hr)
 			key := rq.JawsKeyString()
 
 			req := httptest.NewRequest(http.MethodGet, tt.path(key), nil)
@@ -3146,7 +3146,7 @@ func TestServeHTTP_TailScript_UnknownSuffixDoesNotDrain(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	rq.NewElement(&testUi{}).SetClass("cls")
 
 	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString()+"/unknown", nil)
@@ -3170,7 +3170,7 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	item := &testUi{}
 	e := rq.NewElement(item)
 	e.SetAttr("title", `</script><img onerror=alert(1) src=x>`)
@@ -3198,7 +3198,7 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 
 	req := httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
@@ -3228,7 +3228,7 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	stale := jw.NewRequest(hr)
+	stale := jw.newRequest(hr)
 	stale.NewElement(&testUi{}).SetClass("stale")
 	staleKey := stale.JawsKeyString()
 
@@ -3236,7 +3236,7 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	// reused, so rq is a distinct Request; the content check below guards that it
 	// carries none of the finished request's queued content.
 	jw.recycle(stale)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	rq.NewElement(&testUi{}).SetClass("fresh")
 
 	// The old key was tombstoned on completion, so the lookup finds no live Request
@@ -3269,7 +3269,7 @@ func TestServeHTTP_TailScript_IPMismatch(t *testing.T) {
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
 	hr.RemoteAddr = "203.0.113.1:1111"
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	rq.NewElement(&testUi{}).SetClass("cls")
 
 	// A fetch from a different (non-loopback) IP is rejected and must not consume the
@@ -3297,7 +3297,7 @@ func TestServeHTTP_TailScript_WriteError(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	item := &testUi{}
 	rq.NewElement(item).SetClass("cls")
 
@@ -3319,7 +3319,7 @@ func TestJaws_cancelIfCurrent_IgnoresStaleRequest(t *testing.T) {
 	go jw.Serve()
 	defer jw.Close()
 
-	stale := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	stale := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	jawsKey := stale.JawsKey
 
 	// The /jaws/.tail handler snapshots the Request before writing the response; the
@@ -3327,7 +3327,7 @@ func TestJaws_cancelIfCurrent_IgnoresStaleRequest(t *testing.T) {
 	// and create another request: cancelIfCurrent must cancel nothing, because the
 	// finished Request is no longer the registered entry for its key.
 	jw.recycle(stale)
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	jw.cancelIfCurrent(jawsKey, stale, errors.New("write failed"))
 
@@ -3524,7 +3524,7 @@ func populateBenchRequest(rq *Request, tags []any) {
 // render-state population and recycle path; it does not measure HTTP or WebSocket
 // serving.
 //
-// The impl axis selects pooled (jw.NewRequest/recycle, which allocates a fresh
+// The impl axis selects pooled (jw.newRequest/recycle, which allocates a fresh
 // Request but reuses its buffers from jw.requestBufferPool) versus unpooled (a
 // fresh &Request with freshly allocated buffers each iteration, nothing reused).
 // The mode axis runs the cycle single-goroutine (serial) or under
@@ -3552,7 +3552,7 @@ func BenchmarkRequestLifecyclePooling(b *testing.B) {
 				newRq   func(*Jaws) *Request
 				recycle func(*Jaws, *Request)
 			}{
-				{"impl=pooled", func(jw *Jaws) *Request { return jw.NewRequest(nil) }, func(jw *Jaws, rq *Request) { jw.recycle(rq) }},
+				{"impl=pooled", func(jw *Jaws) *Request { return jw.newRequest(nil) }, func(jw *Jaws, rq *Request) { jw.recycle(rq) }},
 				{"impl=unpooled", newUnpooledBenchRequest, recycleUnpooledBenchRequest},
 			} {
 				b.Run(impl.name, func(b *testing.B) {
@@ -3584,7 +3584,7 @@ func BenchmarkRequestLifecyclePooling(b *testing.B) {
 // newBenchPoolJaws returns a Jaws for the Request-pool benchmarks with the per-IP
 // pending cap disabled.
 //
-// All NewRequest(nil) calls share the zero client IP, so leaving the cap enabled
+// All newRequest(nil) calls share the zero client IP, so leaving the cap enabled
 // would let eviction and the pending-slice scan skew the pooled vs unpooled delta;
 // disabling it for both impls keeps the comparison about allocation reuse alone.
 func newBenchPoolJaws(b *testing.B) (jw *Jaws) {
@@ -3620,14 +3620,14 @@ func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
 			jw := newBenchPoolJaws(b)
 			// Grow a buffer to the high-water mark, then return it to the pool so the
 			// empty cycles below borrow (and must not rescan) its retained capacity.
-			big := jw.NewRequest(nil)
+			big := jw.newRequest(nil)
 			for i := 0; i < hw; i++ {
 				big.NewElement(benchUI{n: i})
 			}
 			jw.recycle(big)
 			b.ReportAllocs()
 			for b.Loop() {
-				rq := jw.NewRequest(nil)
+				rq := jw.newRequest(nil)
 				jw.recycle(rq)
 				runtime.KeepAlive(rq)
 			}
@@ -3636,7 +3636,7 @@ func BenchmarkRequestRecycleAfterHighWater(b *testing.B) {
 }
 
 // BenchmarkRequestClaimStartFinish measures the full lifecycle transition path —
-// NewRequest (pending) -> UseRequest (claimed) -> startServe (running) -> recycle
+// newRequest (pending) -> UseRequest (claimed) -> startServe (running) -> recycle
 // (finished) — which the create/recycle and high-water benchmarks do not exercise.
 // It isolates the claim/start CAS work so the lifecycle-state consolidation can be
 // compared before vs after; it does not run the WebSocket process loop.
@@ -3645,7 +3645,7 @@ func BenchmarkRequestClaimStartFinish(b *testing.B) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	b.ReportAllocs()
 	for b.Loop() {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if jw.UseRequest(rq.JawsKey, r) != rq {
 			b.Fatal("claim failed")
 		}
@@ -3709,7 +3709,7 @@ func BenchmarkSubscriptionChannels(b *testing.B) {
 				<-doneCh
 			}()
 
-			rq := jw.NewRequest(nil)
+			rq := jw.newRequest(nil)
 			defer jw.recycle(rq)
 			b.ReportAllocs()
 			for b.Loop() {
@@ -4201,7 +4201,7 @@ var benchSink wire.WsMsg
 // queued, then Request.sendQueue drains them through getSendMsgs into the
 // WebSocket send channel, which the benchmark then empties. It guards the per-drain
 // cost the process loop pays (twice per loop iteration) on the outbound path. rq
-// comes from jw.NewRequest(nil) for a live, never-cancelled ctx, and the channel is
+// comes from jw.newRequest(nil) for a live, never-cancelled ctx, and the channel is
 // buffered to K so sends never block.
 func BenchmarkSendQueue(b *testing.B) {
 	for _, k := range []int{8, 64, 512} {
@@ -4211,7 +4211,7 @@ func BenchmarkSendQueue(b *testing.B) {
 				b.Fatal(err)
 			}
 			b.Cleanup(func() { jw.Close() })
-			rq := jw.NewRequest(nil)
+			rq := jw.newRequest(nil)
 			msgs := make([]wire.WsMsg, k)
 			for i := range msgs {
 				msgs[i] = wire.WsMsg{Jid: 0, Data: "x"}
@@ -4317,7 +4317,7 @@ func BenchmarkRetirePendingRequests(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				for i := range requests {
-					requests[i] = jw.NewRequest(r)
+					requests[i] = jw.newRequest(r)
 				}
 				jw.mu.Lock()
 				for _, rq := range requests {

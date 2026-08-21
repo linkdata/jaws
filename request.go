@@ -454,10 +454,8 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 
 // HeadHTML writes the configured resources and Request key metadata for the page head.
 //
-// An HTTP response containing this output must include the "no-store"
-// Cache-Control directive. [github.com/linkdata/jaws/lib/ui.Handler] sets it
-// automatically. The metadata includes a one-use Request key; a copy replayed
-// from an HTTP cache cannot establish another WebSocket connection.
+// HeadHTML does not modify response headers. [Jaws.NewRequest] sets
+// "Cache-Control: no-store" when it creates the Request.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
 	rq.mu.RLock()
 	jawsKey := rq.JawsKey

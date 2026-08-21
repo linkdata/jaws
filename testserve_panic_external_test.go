@@ -30,7 +30,7 @@ func startPanickingTestServe(t *testing.T, onPanic func(recovered any)) (jw *jaw
 	go jw.Serve()
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(r)
+	rq := jw.NewRequest(httptest.NewRecorder(), r)
 	wantPanic = errors.New("update boom")
 	elem := rq.NewElement(panickingUpdater{value: wantPanic})
 	const updateTag = tag.Tag("panic-update")

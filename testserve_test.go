@@ -10,7 +10,7 @@ func TestTestServe_PanicsWhenJawsAlreadyClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	jw.Close()
 
 	defer func() {

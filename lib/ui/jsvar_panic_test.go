@@ -88,7 +88,7 @@ func TestJsVarPathSetterPanicReleasesValueLock(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("GET /jaws/", jw)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		rendered := renderedJsVar{rq: jw.NewRequest(r)}
+		rendered := renderedJsVar{rq: jw.NewRequest(w, r)}
 		rw := RequestWriter{Request: rendered.rq, Writer: w}
 		if rendered.err = rw.HeadHTML(); rendered.err == nil {
 			rendered.err = rw.JsVar("panicSafe", jsvar)

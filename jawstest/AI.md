@@ -10,10 +10,10 @@ production package do not acquire its `net/http/httptest` dependency. The
 harness reaches the loop only through the exported `jaws.Jaws.TestServe` hook;
 it is not a second implementation of request processing.
 
-Keep higher-level rendering assertions in the package under test. `Recorder` is
-only a sink for HTML the test explicitly renders; the harness never writes to
-it. `BodyString` trims that recorded body, and `BodyHTML` trusts it because the
-test itself supplied the content.
+Keep higher-level rendering assertions in the package under test. `Recorder`
+starts with `Cache-Control: no-store`; the harness writes no response body.
+Tests may render into it. `BodyString` trims the body; `BodyHTML` treats it as
+trusted test content.
 
 ## Harness lifecycle
 
