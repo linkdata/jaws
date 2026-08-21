@@ -62,6 +62,25 @@ func TestHandler_PreservesExplicitContentType(t *testing.T) {
 	}
 }
 
+func TestHandler_SetsCacheControlNoStore(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	if err = jw.AddTemplateLookuper(template.Must(template.New("page").Parse("<main>hello</main>"))); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	rr.Header().Set("Cache-Control", "public, max-age=3600")
+	Handler(jw, "page", nil).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got, want := rr.Header().Get("Cache-Control"), "no-store"; got != want {
+		t.Fatalf("Cache-Control = %q, want %q", got, want)
+	}
+}
+
 func TestHandler_RenderFailureBeforeOutputUsesTextContentType(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
@@ -78,6 +97,9 @@ func TestHandler_RenderFailureBeforeOutputUsesTextContentType(t *testing.T) {
 	}
 	if got, want := rr.Header().Get("Content-Type"), "text/plain; charset=utf-8"; got != want {
 		t.Fatalf("Content-Type = %q, want %q", got, want)
+	}
+	if got, want := rr.Header().Get("Cache-Control"), "no-store"; got != want {
+		t.Fatalf("Cache-Control = %q, want %q", got, want)
 	}
 }
 
