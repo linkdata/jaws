@@ -37,9 +37,12 @@ set or remove the managed `id` attribute and that accept only canonical positive
 - Each command in a batched frame is isolated. A failing DOM command is logged
   and later commands in the same frame still run.
 
-The reconnect path probes `/jaws/.ping` and reloads only after the navigation is
-old enough; pagehide closes the active socket and a bfcache pageshow reloads.
-Keep reconnect constants and behavior covered by the JavaScript runtime tests.
+The reconnect path observes a five-second grace period after a WebSocket
+failure. It neither shows the connection-lost indicator nor probes
+`/jaws/.ping` before that period elapses. It reloads only after the navigation
+is old enough. Pagehide invalidates active and reconnecting state, and a bfcache
+pageshow reloads. Keep reconnect constants and behavior covered by the
+JavaScript runtime tests.
 
 ## Browser helpers
 
