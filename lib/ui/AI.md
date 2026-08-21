@@ -70,9 +70,10 @@ available through `rw.NewUI(ui.NewX(...), params...)`.
 `rw.Template(outerTag, name, dot, params...)` renders a partial template inside
 a generated addressable JaWS wrapper. An empty outer tag selects `div`; choose a
 semantic wrapper such as `tr`, `td`, `li`, or `option` when DOM context requires
-it. Attributes passed in params apply to the wrapper. When dot implements
-`jaws.InitialHTMLAttrHandler`, its callback also supplies attributes separately
-for each wrapper's initial render; equal Template values may therefore render
+it. Attributes passed in params apply to the wrapper and take precedence when
+the dot callback returns an attribute with the same name. When dot implements
+`jaws.InitialHTMLAttrHandler`, its callback supplies attributes separately for
+each wrapper's initial render; equal Template values may therefore render
 different Element-specific attributes without storing them in the Template.
 The callback is not invoked during `Template.JawsUpdate`. Full page templates
 belong in `ui.Handler`; static structural inclusion should use Go's native

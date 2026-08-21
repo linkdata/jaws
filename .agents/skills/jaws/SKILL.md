@@ -168,7 +168,8 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - When a Template `Dot` implements `jaws.InitialHTMLAttrHandler`, its callback supplies
   attributes separately for each generated wrapper's initial render. It receives the
   concrete Element, so equal Template values may render different per-Element attributes
-  without putting attribute state in the Template. The callback is not invoked by
+  without putting attribute state in the Template. An unwrapped Template has no attribute
+  target and does not invoke the callback. The callback is not invoked by
   `Template.JawsUpdate`; use `Element.SetAttr` and `Element.RemoveAttr` for dynamic wrapper
   changes during updates.
 - The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
@@ -238,7 +239,8 @@ JaWS parses template params as:
 Implications:
 - Non-comparable handlers are not auto-tagged unless they implement `tag.TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
-- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper.
+- HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper
+  before Dot attributes and take precedence when a name is duplicated.
 - Attributes returned by the Dot's `jaws.InitialHTMLAttrHandler` are appended to that
   wrapper during its initial render.
 - Template bodies used with `$.Template(...)` must be partials, not full documents.

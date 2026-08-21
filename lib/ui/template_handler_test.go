@@ -250,12 +250,9 @@ func TestTemplate_RenderCombinesParamAndDotInitialHTMLAttrs(t *testing.T) {
 
 	dot := new(templateInitialAttrDot)
 	elem, got := renderUI(t, rq, NewTemplate("article", "attrtmpl", dot), template.HTMLAttr(`class="param"`))
-	if !strings.Contains(got, `class="param"`) {
-		t.Fatalf("rendered HTML is missing the parameter attribute: %q", got)
-	}
-	want := `data-element="` + elem.Jid().String() + `"`
+	want := `class="param" data-element="` + elem.Jid().String() + `"`
 	if !strings.Contains(got, want) {
-		t.Fatalf("rendered HTML is missing the Dot attribute %q: %q", want, got)
+		t.Fatalf("rendered HTML does not contain ordered attributes %q: %q", want, got)
 	}
 	if calls := dot.attrCalls(); len(calls) != 1 || calls[0] != elem.Jid() {
 		t.Fatalf("JawsInitialHTMLAttr calls = %v, want [%v]", calls, elem.Jid())
