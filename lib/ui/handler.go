@@ -89,8 +89,7 @@ func (sr *statusRecorder) WriteHeader(code int) {
 }
 
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	rq := h.NewRequest(r)
+	rq := h.NewRequest(w, r)
 	sr := &statusRecorder{ResponseWriter: w}
 	rw := RequestWriter{Request: rq, Writer: sr}
 	// Build a fresh per-request pointer so the UI is comparable as a map key
@@ -116,19 +115,15 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Handler returns an http.Handler that renders the named template.
 //
-// The returned handler can be registered directly with a router. Each request
-// results in the template being looked up through the configured template
-// lookupers and rendered with a [With] value as the template data, exposing
-// dot through its Dot field. Unless the response already has a Content-Type,
-// Handler sets it to "text/html; charset=utf-8" when rendering writes its first
-// bytes. Handler always sets Cache-Control to "no-store", replacing any value
-// already present, so an HTTP cache does not reuse responses containing the
-// one-use request key emitted by [jaws.Request.HeadHTML]. A render failure before
-// any output retains [http.Error]'s text response.
+// For each request, Handler looks up name and renders it with [With.Dot] set to
+// dot. Unless the response already has a Content-Type, Handler sets it to
+// "text/html; charset=utf-8" on the first write. Before rendering, it replaces
+// Cache-Control with "no-store". A render failure before any output uses
+// [http.Error]'s text response.
 //
-// Handler renders without a generated wrapper and does not use dot as a tag, so
-// dot may be arbitrary template data. The handler reuses dot across requests;
-// dot and its callbacks must support concurrent execution.
+// Handler renders without a generated wrapper. Dot may be arbitrary template
+// data. Handler reuses dot across requests; dot and its callbacks must support
+// concurrent execution.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }

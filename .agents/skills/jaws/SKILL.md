@@ -448,12 +448,10 @@ Guideline:
 
 ## Request/session integration rules
 
-- Ensure pages provide the configured JaWS resources and Request key metadata;
-  `HeadHTML` is the usual way to emit them.
-- Include the `no-store` Cache-Control directive on every page response containing
-  `HeadHTML` or equivalent Request-key metadata; the key is a one-use capability.
-  `ui.Handler` sets this automatically, while custom page handlers must set it
-  explicitly.
+- Call `jw.NewRequest(w, r)` before writing each page response. It replaces
+  Cache-Control with `no-store`.
+- Include the configured JaWS resources and Request key metadata; `HeadHTML`
+  emits them but does not manage response headers.
 - `TailHTML` is optional; it applies queued attr/class updates before the
   WebSocket connects and can reduce initial flicker.
 - Register the JaWS `/jaws/` route prefix correctly and pair request creation with `UseRequest` handling.

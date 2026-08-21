@@ -39,7 +39,7 @@ func TestEarlyCallbackPreservesInitialRenderIdentity(t *testing.T) {
 
 	initial := httptest.NewRequest(http.MethodGet, "/", nil)
 	initial.RemoteAddr = "192.0.2.1:1000"
-	rq := jw.NewRequest(initial)
+	rq := jw.newRequest(initial)
 	wantKey := rq.JawsKeyString()
 	if wantKey == "" {
 		t.Fatal("NewRequest returned an empty key")
@@ -80,7 +80,7 @@ func TestRequestLateCancelDoesNotReachNextConnection(t *testing.T) {
 		return r
 	}
 
-	finished := jw.NewRequest(newInitialRequest("/first"))
+	finished := jw.newRequest(newInitialRequest("/first"))
 	finishedKey := finished.JawsKey
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
@@ -95,7 +95,7 @@ func TestRequestLateCancelDoesNotReachNextConnection(t *testing.T) {
 	}
 	waitForRequestCount(t, jw, 0, time.Second)
 
-	replacement := jw.NewRequest(newInitialRequest("/second"))
+	replacement := jw.newRequest(newInitialRequest("/second"))
 	defer jw.recycle(replacement)
 	if replacement == finished {
 		t.Fatal("NewRequest reused the finished Request identity")
@@ -125,7 +125,7 @@ func TestRequestFinishDoesNotPanicOnContinuedRender(t *testing.T) {
 	}
 	defer jw.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Tag(rq.NewElement(&testUi{}), tag.Tag("live"))
 
 	// Finish the Request out from under the still-running initial renderer, as a racy
@@ -139,7 +139,7 @@ func TestRequestFinishDoesNotPanicOnContinuedRender(t *testing.T) {
 	rq.Tag(late, tag.Tag("late"))
 	rq.Dirty(tag.Tag("live"))
 
-	other := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
+	other := jw.newRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
 	defer jw.recycle(other)
 	if other == rq {
 		t.Fatal("NewRequest reused a finished Request identity")
@@ -164,7 +164,7 @@ func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
 	const n = 200
 	var wg sync.WaitGroup
 	for range n {
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
@@ -192,7 +192,7 @@ func TestFinishDoesNotResetJidCounter(t *testing.T) {
 	}
 	defer jw.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.NewElement(&testUi{})
 	last := rq.NewElement(&testUi{}).Jid()
 
@@ -217,7 +217,7 @@ func TestRecycleQueueRaceDoesNotLeak(t *testing.T) {
 
 	const n = 300
 	for range n {
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -248,7 +248,7 @@ func TestNoscriptDuringLiveRenderRecordsJavascriptDisabled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-	rq := jw.NewRequest(initial)
+	rq := jw.newRequest(initial)
 
 	w := httptest.NewRecorder()
 	probe := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/noscript", nil)
@@ -284,13 +284,13 @@ func TestRequestRecycledKeyNotReusedWhileReachable(t *testing.T) {
 	jw.kg = bufio.NewReader(bytes.NewReader(stream))
 	jw.mu.Unlock()
 
-	rq1 := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq1 := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq1.JawsKey != k {
 		t.Fatalf("rq1 key = %v, want forced %v", rq1.JawsKey, k)
 	}
 	jw.recycle(rq1)
 
-	rq2 := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq2 := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	defer jw.recycle(rq2)
 	if rq2.JawsKey == k {
 		t.Fatal("recycled key K was reassigned while the finished Request is still reachable")

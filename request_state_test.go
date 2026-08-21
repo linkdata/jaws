@@ -42,7 +42,7 @@ func TestRequestStateTransitions(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
 	t.Run("pending->claimed->running->finished", func(t *testing.T) {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if got := rq.loadState(); got != reqPending {
 			t.Fatalf("after NewRequest = %v, want pending", got)
 		}
@@ -65,7 +65,7 @@ func TestRequestStateTransitions(t *testing.T) {
 	})
 
 	t.Run("recycle_never_claimed_pending->finished", func(t *testing.T) {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if got := rq.loadState(); got != reqPending {
 			t.Fatalf("state = %v, want pending", got)
 		}
@@ -76,7 +76,7 @@ func TestRequestStateTransitions(t *testing.T) {
 	})
 
 	t.Run("retire_claimed_not_running->finished", func(t *testing.T) {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if jw.UseRequest(rq.JawsKey, r) != rq {
 			t.Fatal("claim failed")
 		}
@@ -92,7 +92,7 @@ func TestRequestStateTransitions(t *testing.T) {
 	})
 
 	t.Run("double_claim_and_double_startServe_rejected", func(t *testing.T) {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if jw.UseRequest(rq.JawsKey, r) != rq {
 			t.Fatal("first claim failed")
 		}
@@ -115,7 +115,7 @@ func TestRequestStateTransitions(t *testing.T) {
 	})
 
 	t.Run("terminal_stays_finished", func(t *testing.T) {
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		jw.recycle(rq)
 		if got := rq.loadState(); got != reqFinished {
 			t.Fatalf("state = %v, want finished", got)
@@ -178,7 +178,7 @@ func TestClaimPostCloseReturnsCauseNotAlreadyClaimed(t *testing.T) {
 	jw.Close()
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(r)
+	rq := jw.newRequest(r)
 	if got := rq.loadState(); got != reqUnclaimable {
 		t.Fatalf("post-Close state = %v, want unclaimable", got)
 	}
@@ -207,7 +207,7 @@ func TestServe_DuplicatePanicsWithoutDisturbingFirst(t *testing.T) {
 	waitForServeLoop(t, jw)
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(r)
+	rq := jw.newRequest(r)
 	if jw.UseRequest(rq.JawsKey, r) != rq {
 		t.Fatal("claim failed")
 	}
@@ -254,7 +254,7 @@ func TestServe_CloseRaceIsSafe(t *testing.T) {
 		go jw.Serve()
 		waitForServeLoop(t, jw)
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		rq := jw.NewRequest(r)
+		rq := jw.newRequest(r)
 		if jw.UseRequest(rq.JawsKey, r) != rq {
 			t.Fatal("claim failed")
 		}

@@ -76,6 +76,9 @@ func TestNewTestRequest_SuccessAndClose(t *testing.T) {
 	if tr.JawsKeyString() == "" {
 		t.Fatal("expected a non-empty jaws key from the embedded request")
 	}
+	if got := tr.Recorder.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Recorder Cache-Control = %q, want %q", got, "no-store")
+	}
 
 	// The recorder starts empty; BodyString trims surrounding whitespace.
 	if s := tr.BodyString(); s != "" {

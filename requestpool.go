@@ -26,12 +26,14 @@ import (
 // While the [Jaws] instance is open, the returned Request is pending until it is
 // claimed or retired.
 //
-// Call this as soon as you start processing an HTML request, and store the
-// returned [Request] pointer so it can be used while constructing the HTML
-// response in order to register the JaWS IDs you use in the response, and
-// use its [Request.JawsKey] when sending the JavaScript portion of the reply.
-// Do not retain the pointer beyond the initial HTTP handling and rendering; see
-// [Request].
+// NewRequest replaces w's Cache-Control header with "no-store". Call it with
+// the response writer before writing its headers or body.
+//
+// Use the returned [Request] while rendering the initial response to register
+// JaWS IDs and write [Request.HeadHTML]. Do not retain it after initial request
+// handling and rendering; see [Request].
+//
+// If r is nil, the Request has no initial request, client address, or [Session].
 //
 // [Jaws.ServeWithTimeout] periodically retires idle Requests before WebSocket
 // processing starts; [Jaws.Serve] uses [DefaultWebSocketTimeout].
@@ -52,7 +54,12 @@ import (
 //
 // It panics if the [crypto/rand.Reader] captured by [New] returns an error while
 // generating the request key. Go's default reader does not return errors.
-func (jw *Jaws) NewRequest(r *http.Request) (rq *Request) {
+func (jw *Jaws) NewRequest(w http.ResponseWriter, r *http.Request) *Request {
+	w.Header().Set("Cache-Control", headerCacheControlNoStore)
+	return jw.newRequest(r)
+}
+
+func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
 
 	func() {
@@ -234,7 +241,7 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 
 // getRequestLocked allocates a fresh Request identity for jawsKey, borrowing
 // reusable storage from jw.requestBufferPool. remoteIP is the already-resolved
-// client IP for r (see NewRequest, the sole caller), passed in to avoid recomputing
+// client IP for r (see newRequest, the sole caller), passed in to avoid recomputing
 // jw.clientIP(r). registered is false after Jaws.Close, when the canceled Request
 // is returned without being registered in jw.requests. Caller must hold jw.mu.
 func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP netip.Addr, registered bool) (rq *Request) {

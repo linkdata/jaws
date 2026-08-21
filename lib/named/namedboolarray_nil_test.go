@@ -56,7 +56,7 @@ func TestBoolArrayWriteLockedDiscardsNilElements(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(jw.Close)
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	elem := rq.NewElement(ui.NewSelect(bools))
 	var rendered strings.Builder
 	if err = elem.JawsRender(&rendered, nil); err != nil {

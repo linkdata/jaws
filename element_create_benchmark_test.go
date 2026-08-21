@@ -44,7 +44,7 @@ func BenchmarkElementCreateBatch(b *testing.B) {
 		b.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		b.Fatal("nil request")
 	}

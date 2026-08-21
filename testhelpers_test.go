@@ -187,7 +187,7 @@ type testHandler struct {
 }
 
 func (h testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_ = h.Log(h.NewRequest(r).NewElement(h.Template).JawsRender(w, nil))
+	_ = h.Log(h.NewRequest(w, r).NewElement(h.Template).JawsRender(w, nil))
 }
 
 func (jw *Jaws) Handler(outerHTMLTag, name string, dot any) http.Handler {
@@ -686,7 +686,7 @@ func newRequestHarness(jw *Jaws, r *http.Request) (rh *requestHarness) {
 	}
 	rr := httptest.NewRecorder()
 	rr.Body = &bytes.Buffer{}
-	rq := jw.NewRequest(r)
+	rq := jw.NewRequest(rr, r)
 	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
 		return nil
 	}
@@ -788,7 +788,7 @@ func TestTestServe_TimesOutWhenServeNotRunning(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer jw.Close()
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		defer func() {
 			s, ok := recover().(string)
 			if !ok || !strings.Contains(s, "timed out subscribing") {
@@ -805,7 +805,7 @@ func TestTestServe_PanicsWhenClosedAfterSubscribing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	subCh := make(chan subscription)
 	jw.subCh = subCh
 	readyCh := make(chan struct{})
@@ -833,7 +833,7 @@ func TestTestServe_TimesOutAfterSubscribing(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer jw.Close()
-		rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		subCh := make(chan subscription)
 		jw.subCh = subCh
 		readyCh := make(chan struct{})

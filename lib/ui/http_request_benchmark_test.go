@@ -68,7 +68,7 @@ func newBenchmarkStaticHTMLHandler(_ *testing.B, jw *jaws.Jaws) http.Handler {
 }
 
 func (h benchmarkStaticHTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rq := h.jw.NewRequest(r)
+	rq := h.jw.NewRequest(w, r)
 	_, _ = io.WriteString(w, "<!doctype html><html><head><title>Static</title>")
 	_ = rq.HeadHTML(w)
 	_, _ = io.WriteString(w, `</head><body><main><h1>Static HTML</h1><p>A plain page with JaWS head and tail hooks.</p></main>`)

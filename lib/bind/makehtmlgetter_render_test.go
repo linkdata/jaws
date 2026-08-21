@@ -78,7 +78,7 @@ func newMakeHTMLGetterRequest(t *testing.T, logger jaws.Logger) *jaws.Request {
 	}
 	t.Cleanup(jw.Close)
 	jw.Logger = logger
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if rq == nil {
 		t.Fatal("NewRequest returned nil")
 	}

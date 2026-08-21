@@ -76,11 +76,10 @@ the dot callback returns an attribute with the same name. When dot implements
 each wrapper's initial render; equal Template values may therefore render
 different Element-specific attributes without storing them in the Template.
 The callback is not invoked during `Template.JawsUpdate`. Full page templates
-belong in `ui.Handler`, which marks every response `Cache-Control: no-store` so
-an HTTP cache does not reuse a one-use Request key emitted by
-`Request.HeadHTML`. Custom page handlers that emit `Request.HeadHTML` must
-include the same directive. Static structural inclusion should use Go's native
-template action:
+belong in `ui.Handler`, which sets `Cache-Control: no-store`. Custom page
+handlers must call `jw.NewRequest(w, r)` before writing output;
+`Request.HeadHTML` does not manage response headers. Static structural inclusion
+should use Go's native template action:
 
 ```gotemplate
 {{template "partial" .Dot}}

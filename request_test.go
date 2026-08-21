@@ -247,7 +247,7 @@ func TestRequest_wantMessage_RejectsFinishedRequest(t *testing.T) {
 	go jw.Serve()
 	defer jw.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	staleKey := rq.JawsKey
 	is.True(rq.wantMessage(&wire.Message{Dest: staleKey}))
 
@@ -258,7 +258,7 @@ func TestRequest_wantMessage_RejectsFinishedRequest(t *testing.T) {
 	// A later client gets a distinct Request with a distinct key. It matches only its
 	// own key, and the finished Request's key is not reassigned to it (rq is still
 	// reachable here, so its key stays reserved).
-	replacement := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
+	replacement := jw.newRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
 	defer jw.recycle(replacement)
 	is.True(replacement != rq)
 	is.True(replacement.wantMessage(&wire.Message{Dest: replacement.JawsKey}))
@@ -269,7 +269,7 @@ func TestRequest_HeadHTML(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	var sb strings.Builder
@@ -292,7 +292,7 @@ func TestRequest_HeadHTML_DebugMeta(t *testing.T) {
 	if err = jw.GenerateHeadHTML(); err != nil {
 		t.Fatal(err)
 	}
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	var sb strings.Builder
@@ -309,7 +309,7 @@ func TestRequestWriter_TailHTML(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	item := &testUi{}
 	e := rq.NewElement(item)
@@ -342,7 +342,7 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	item := &testUi{}
 	e := rq.NewElement(item)
@@ -364,7 +364,7 @@ func TestRequest_writeTailScript_QuotesAstralAndLineSeparators(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	item := &testUi{}
 	e := rq.NewElement(item)
@@ -398,7 +398,7 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	item := &testUi{}
 	e := rq.NewElement(item)
@@ -431,7 +431,7 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	item := &testUi{}
 	e := rq.NewElement(item)
@@ -462,7 +462,7 @@ func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 	e1 := rq.NewElement(&testUi{})
 	e2 := rq.NewElement(&testUi{})
@@ -502,7 +502,7 @@ func TestRequest_TailScriptConcurrentWithRecycle(t *testing.T) {
 	const n = 300
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
-		rq := jw.NewRequest(nil)
+		rq := jw.newRequest(nil)
 		e := rq.NewElement(&testUi{})
 		e.SetAttr("hidden", "yes")
 		e.SetClass("cls")
@@ -531,7 +531,7 @@ func TestRequest_wantMessageConcurrentWithRecycle(t *testing.T) {
 	const n = 300
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
-		rq := jw.NewRequest(nil)
+		rq := jw.newRequest(nil)
 		staleKey := rq.JawsKey
 		wg.Add(2)
 		go func() {
@@ -586,7 +586,7 @@ func TestRequest_SetContext_NilPanics(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	// No Logger is configured, so reportMisuse panics in both debug and production.
@@ -696,7 +696,7 @@ func TestRequest_SetContextRegistersAfterFuncOutsideLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	observed := make(chan context.Context, 1)
 	custom := &deferredAfterContext{
 		Context: rq.Context(),
@@ -750,7 +750,7 @@ func TestRequest_SetContextDelayedCallbackDoesNotCancelNextRequest(t *testing.T)
 	}
 	defer jw.Close()
 
-	first := jw.NewRequest(nil)
+	first := jw.newRequest(nil)
 	callbackCalled := make(chan struct{}, 1)
 	var callbackArmed atomic.Bool
 	first.mu.Lock()
@@ -773,7 +773,7 @@ func TestRequest_SetContextDelayedCallbackDoesNotCancelNextRequest(t *testing.T)
 	// Requests keep a stable identity and are never reused, so NewRequest returns a
 	// distinct Request. A delayed SetContext callback still bound to first must not
 	// reach this next Request's context.
-	second := jw.NewRequest(nil)
+	second := jw.newRequest(nil)
 	if second == first {
 		t.Fatal("NewRequest reused a finished Request identity")
 	}
@@ -999,7 +999,7 @@ func TestRequest_ClaimRefreshesLastWriteAndStartServeGuards(t *testing.T) {
 	}
 	defer jw.Close()
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 
 	// Simulate a page that rendered long ago (idle) before its WebSocket connects.
 	rq.lastWriteSeconds.Store(jw.runtimeSeconds.Load() - 3600)
@@ -1052,7 +1052,7 @@ func TestRequest_ClaimRejectsCanceledRequest(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest(http.MethodGet, "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	wantCause := errors.New("cancel before claim")
 	rq.Cancel(wantCause)
 
@@ -1258,7 +1258,7 @@ func TestRequest_ProducersSkipRecycled(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	jw.recycle(rq)
 	th.Equal(rq.destKey(), key.Key(0))
 
@@ -1279,7 +1279,7 @@ func TestRequest_Cancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Cancel(errors.New("abort"))
 	if rq.Context().Err() == nil {
 		t.Error("expected context to be cancelled after Cancel")
@@ -1339,7 +1339,7 @@ func TestRequest_Redirect_unsafeRefused(t *testing.T) {
 	defer jw.Close()
 	logger := &captureErrorLogger{}
 	jw.Logger = logger
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Redirect("javascript:alert(1)")
 	loggedErr := logger.next(t)
 	if !strings.Contains(loggedErr.Error(), "refusing unsafe redirect") {
@@ -1697,7 +1697,7 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			if strings.EqualFold(initialURL.Scheme, "https") {
 				initial.TLS = &tls.ConnectionState{}
 			}
-			rq := jw.NewRequest(initial)
+			rq := jw.newRequest(initial)
 			defer jw.recycle(rq)
 
 			wsReq := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString(), nil)
@@ -1724,9 +1724,9 @@ func TestRequest_validateWebSocketOrigin_NoInitialFailsClosed(t *testing.T) {
 	}
 	defer jw.Close()
 
-	// A Request can be constructed without an initial HTTP request (NewRequest(nil)).
+	// A Request can be constructed without an initial HTTP request (newRequest(nil)).
 	// Origin validation must then fail closed rather than accepting any Origin.
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	wsReq := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString(), nil)
@@ -2423,7 +2423,7 @@ func TestRequest_getSendMsgsKeepsOrderFromDeletedElement(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	childA := rq.NewElement(&testUi{})
 	childB := rq.NewElement(&testUi{})
@@ -2453,7 +2453,7 @@ func TestRequest_getSendMsgsDropsCallFromDeletedElement(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	elem := rq.NewElement(&testUi{})
 	elem.JsCall("fn", "{}")
@@ -2476,7 +2476,7 @@ func TestRequest_queueEventOverloadCancels(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	first := rq.NewElement(&testUi{})
@@ -2532,7 +2532,7 @@ func TestRequest_handleIncomingSkipsEventsWithoutTargets(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer jw.Close()
-			rq := jw.NewRequest(nil)
+			rq := jw.newRequest(nil)
 			defer jw.recycle(rq)
 
 			full := make(chan eventFnCall, 1)
@@ -2553,7 +2553,7 @@ func TestRequest_renderDebugLocked(t *testing.T) {
 	is := newTestHelper(t)
 	jw, _ := New()
 	defer jw.Close()
-	rq := jw.NewRequest(nil)
+	rq := jw.newRequest(nil)
 	defer jw.recycle(rq)
 
 	tss := &testUi{}
@@ -2591,7 +2591,7 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest("GET", "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	total, active := jw.RequestCounts()
 	if total != 1 || active != 0 {
 		t.Fatalf("RequestCounts() = %d, %d, want 1, 0", total, active)
@@ -2668,7 +2668,7 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 	defer jw.Close()
 
 	hr := httptest.NewRequest("GET", "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	if err := rq.claim(hr); err != nil {
 		t.Fatal(err)
 	}
@@ -2678,7 +2678,7 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 
 	hrA := httptest.NewRequest("GET", "/", nil)
 	hrA.RemoteAddr = "1.2.3.4:1234"
-	rqA := jw.NewRequest(hrA)
+	rqA := jw.newRequest(hrA)
 	hrB := httptest.NewRequest("GET", "/", nil)
 	hrB.RemoteAddr = "2.2.2.2:4321"
 	if err := rqA.claim(hrB); !errors.Is(err, ErrWebSocketIPMismatch) {
@@ -2688,22 +2688,22 @@ func TestCoverage_RequestMaintenanceClaimAndErrors(t *testing.T) {
 	}
 
 	nowSeconds := jw.runtimeSeconds.Load()
-	rqM := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqM := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 	rqM.lastWriteSeconds.Store(nowSeconds - 3600)
 	if expired, _ := rqM.maintenance(nowSeconds, time.Second); !expired {
 		t.Fatal("expected maintenance timeout")
 	}
-	rqR := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqR := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 	rqR.MarkWritten()
 	if expired, _ := rqR.maintenance(jw.runtimeSeconds.Load(), time.Hour); expired {
 		t.Fatal("a freshly written request must not be idle-expired")
 	}
-	rqC := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqC := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 	rqC.cancel(errors.New("cancelled"))
 	if expired, _ := rqC.maintenance(jw.runtimeSeconds.Load(), time.Hour); !expired {
 		t.Fatal("expected maintenance cancellation")
 	}
-	rqOK := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rqOK := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 	rqOK.MarkWritten()
 	if expired, _ := rqOK.maintenance(jw.runtimeSeconds.Load(), time.Hour); expired {
 		t.Fatal("expected maintenance keepalive")
@@ -2737,7 +2737,7 @@ func TestNewRequest_SeedsLastWriteFromLiveElapsed(t *testing.T) {
 	// started, so runtimeSeconds is never advanced by its maintenance loop.
 	jw.created = time.Now().Add(-time.Hour)
 
-	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rq := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 
 	// The seed must reflect true elapsed time (~3600s), not the stale zero that
 	// runtimeSeconds still holds before Serve seeds it.
@@ -2761,7 +2761,7 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	hr := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	if err := rq.claim(hr); err != nil {
 		t.Fatal(err)
 	}
@@ -2798,7 +2798,7 @@ func TestRequestRecycle_StaleElementIsInert(t *testing.T) {
 	}
 	defer jw.Close()
 
-	rq := jw.NewRequest(httptest.NewRequest("GET", "/", nil))
+	rq := jw.newRequest(httptest.NewRequest("GET", "/", nil))
 	elem := rq.NewElement(testDivWidget{inner: "x"})
 	rq.Tag(elem, tag.Tag("stale"))
 	jawsKey := rq.JawsKey
@@ -3242,7 +3242,7 @@ func newTestServerWithSession(t *testing.T, withSession bool, logger Logger, deb
 	if withSession {
 		sess = jw.NewSession(rr, hr)
 	}
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	if rq != jw.UseRequest(rq.JawsKey, hr) {
 		panic("UseRequest failed")
 	}
@@ -3356,7 +3356,7 @@ func TestWS_UpgradeRequired(t *testing.T) {
 	defer jw.Close()
 	w := httptest.NewRecorder()
 	hr := httptest.NewRequest("", "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	jw.UseRequest(rq.JawsKey, hr)
 	req := httptest.NewRequest("", "/jaws/"+rq.JawsKeyString(), nil)
 	rq.ServeHTTP(w, req)
@@ -3370,7 +3370,7 @@ func TestWS_UnclaimedRequestIsGone(t *testing.T) {
 	defer jw.Close()
 	w := httptest.NewRecorder()
 	hr := httptest.NewRequest("", "/", nil)
-	rq := jw.NewRequest(hr)
+	rq := jw.newRequest(hr)
 	defer jw.recycle(rq)
 	// UseRequest is deliberately not called, so the Request stays unclaimed and
 	// startServe() returns false; ServeHTTP must surface an explicit error
@@ -3594,7 +3594,7 @@ func TestWS_AutoSessionDoesNotCreateAfterJawsClose(t *testing.T) {
 	}
 	jw.AutoSession = true
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/jaws/", nil)
-	rq := jw.NewRequest(request)
+	rq := jw.newRequest(request)
 	if got := jw.UseRequest(rq.JawsKey, request); got != rq {
 		t.Fatalf("UseRequest() = %p, want %p", got, rq)
 	}
@@ -3928,7 +3928,7 @@ func TestWS_ConnectFnFailureDoesNotBlockOnNonReadingPeer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-	rq := jw.NewRequest(initial)
+	rq := jw.newRequest(initial)
 	if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
 		t.Fatalf("UseRequest() = %v, want %v", got, rq)
 	}
@@ -4037,7 +4037,7 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 			defer cancel()
 			initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-			rq := jw.NewRequest(initial)
+			rq := jw.newRequest(initial)
 			if got := jw.UseRequest(rq.JawsKey, initial); got != rq {
 				t.Fatalf("UseRequest() = %v, want %v", got, rq)
 			}
@@ -4789,7 +4789,7 @@ func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
 	}
 	t.Cleanup(jw.Close)
 
-	rq := jw.NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 
 	const iterations = 2000
 	var wg sync.WaitGroup

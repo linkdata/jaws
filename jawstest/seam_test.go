@@ -34,8 +34,8 @@ func TestNewTestRequest_PanicsWhenClaimFails(t *testing.T) {
 
 	orig := newRequest
 	t.Cleanup(func() { newRequest = orig })
-	newRequest = func(jw *jaws.Jaws, r *http.Request) *jaws.Request {
-		rq := orig(jw, r)
+	newRequest = func(jw *jaws.Jaws, w http.ResponseWriter, r *http.Request) *jaws.Request {
+		rq := orig(jw, w, r)
 		jw.UseRequest(rq.JawsKey, r) // claim it before NewTestRequest can
 		return rq
 	}

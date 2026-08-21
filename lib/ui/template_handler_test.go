@@ -460,7 +460,7 @@ func TestHandler_TemplateWritesKeepPendingRequestFresh(t *testing.T) {
 
 		secondReq := httptest.NewRequest(http.MethodGet, "/second", nil)
 		secondReq.RemoteAddr = req.RemoteAddr
-		_ = jw.NewRequest(secondReq)
+		_ = jw.NewRequest(httptest.NewRecorder(), secondReq)
 		gotKey := first.JawsKeyString()
 		gotInitial := first.Initial()
 
