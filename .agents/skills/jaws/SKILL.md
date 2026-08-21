@@ -165,6 +165,12 @@ These are the two usual building blocks for widget handlers passed to `$.Button`
 - `ui.Template` is for partial templates only; full document/page templates should be rendered through `ui.Handler`.
 - A nil-interface Template `Dot` is valid and contributes no tag; a typed nil follows its
   dynamic type's comparability and expansion behavior.
+- When a Template `Dot` implements `jaws.InitialHTMLAttrHandler`, its callback supplies
+  attributes separately for each generated wrapper's initial render. It receives the
+  concrete Element, so equal Template values may render different per-Element attributes
+  without putting attribute state in the Template. The callback is not invoked by
+  `Template.JawsUpdate`; use `Element.SetAttr` and `Element.RemoveAttr` for dynamic wrapper
+  changes during updates.
 - The root dot **must** be comparable at runtime and equal to itself: `ui.NewTemplate`
   returns a value, so the dot is part of the widget the container widgets use as a map key.
   A slice, map, func or NaN-bearing dot makes the widget unusable as a container child.
@@ -233,6 +239,8 @@ Implications:
 - Non-comparable handlers are not auto-tagged unless they implement `tag.TagGetter`.
 - Pass explicit tags when dirty targeting depends on them.
 - HTML attributes passed to `$.Template(...)` are applied to the generated template wrapper.
+- Attributes returned by the Dot's `jaws.InitialHTMLAttrHandler` are appended to that
+  wrapper during its initial render.
 - Template bodies used with `$.Template(...)` must be partials, not full documents.
 - For dynamic button text, avoid passing plain static strings if the value must change after render; use getter-based values so updates reflect new state.
 
