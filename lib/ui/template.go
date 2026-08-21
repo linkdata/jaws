@@ -23,10 +23,17 @@ import (
 // runtime and equal to itself, and Dot must be usable as a tag under
 // [tag.TagExpand].
 //
+// If Dot implements [jaws.InitialHTMLAttrHandler], its callback supplies wrapper
+// attributes separately for each wrapped Element's initial render. An unwrapped
+// Template has no attribute target and does not invoke the callback. The callback
+// is not invoked during [Template.JawsUpdate].
+//
 // OuterHTMLTag names the wrapper that receives the JaWS ID and render-time HTML
-// attributes. An empty field renders without a wrapper, making [Template.JawsUpdate]
-// a no-op. [NewTemplate] defaults an empty wrapper argument to "div". The named
-// template must be a partial; use [Handler] for a complete document.
+// attributes from render parameters and Dot. Render-parameter attributes take
+// precedence when Dot returns an attribute with the same name. An empty field
+// renders without a wrapper, making [Template.JawsUpdate] a no-op. [NewTemplate]
+// defaults an empty wrapper argument to "div". The named template must be a
+// partial; use [Handler] for a complete document.
 //
 // A Template owns the Elements created through its [RequestWriter]. A successful
 // update unregisters Elements from the previous execution. Elements created by a
@@ -41,7 +48,7 @@ import (
 type Template struct {
 	OuterHTMLTag string // Wrapper element; empty renders unwrapped and disables JawsUpdate.
 	Name         string // Template name to be looked up using Jaws.LookupTemplate.
-	Dot          any    // Template data exposed as With.Dot and expanded for tag registration.
+	Dot          any    // Template data, tag source, event delegate, and initial-attribute source.
 }
 
 var (
@@ -155,9 +162,10 @@ func writeTemplateWrapperStart(elem *jaws.Element, w io.Writer, outerHTMLTag str
 }
 
 func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	// Claim the state slot before anything observable happens: tag registration, handler
-	// registration and every write come after, so a contended Element fails having
-	// changed nothing rather than having half-registered itself.
+	// Claim the state slot before anything observable happens: Dot expansion, tag and
+	// handler registration, template lookup, initial-attribute callbacks, and every
+	// write come after, so a contended Element fails having changed nothing rather
+	// than having half-registered itself.
 	st := &templateState{}
 	if err = jaws.SetElementState(elem, st); err != nil {
 		return
@@ -172,6 +180,11 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 		var lookedUp *template.Template
 		if lookedUp, err = tmpl.lookup(elem); err == nil {
 			if doWrap {
+				// HTML parsing keeps the first duplicate attribute, so append Dot
+				// attributes after render-parameter attributes.
+				for _, attr := range elem.ApplyInitialHTMLAttr(tmpl.Dot) {
+					attrs = append(attrs, string(attr))
+				}
 				err = writeTemplateWrapperStart(elem, w, tmpl.OuterHTMLTag, attrs)
 			}
 			if err == nil {
@@ -283,7 +296,8 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 // dot may be a nil interface. Otherwise it must make the returned Template
 // comparable and equal to itself, and it must be usable as a tag under
 // [tag.TagExpand]. Use the returned Template as a value; taking its address is
-// unsupported.
+// unsupported. If dot implements [jaws.InitialHTMLAttrHandler], its callback
+// supplies attributes separately for each generated wrapper's initial render.
 func NewTemplate(outerHTMLTag, name string, dot any) Template {
 	if outerHTMLTag == "" {
 		outerHTMLTag = "div"
@@ -297,8 +311,11 @@ func newTemplate(outerHTMLTag, name string, dot any) Template {
 
 // Template renders the named partial template with dot exposed as [With.Dot].
 //
-// The generated outerHTMLTag wrapper owns the JaWS ID and HTML attributes in
-// params. An empty outerHTMLTag defaults to "div". See [NewTemplate].
+// The generated outerHTMLTag wrapper owns the JaWS ID, HTML attributes in params,
+// and attributes returned by dot when it implements
+// [jaws.InitialHTMLAttrHandler]. Attributes in params take precedence when dot
+// returns an attribute with the same name. An empty outerHTMLTag defaults to
+// "div". See [NewTemplate].
 func (rw RequestWriter) Template(outerHTMLTag, name string, dot any, params ...any) error {
 	return rw.NewUI(NewTemplate(outerHTMLTag, name, dot), params...)
 }

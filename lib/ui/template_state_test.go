@@ -327,8 +327,9 @@ func TestTemplate_SecondClaimRegistersNoHandler(t *testing.T) {
 
 // TestTemplate_SecondClaimOnOneElementFails covers the contention path through the
 // supported shape — one renderer delegating to two Templates — and proves the claim
-// precedes every side effect: the rejected Template writes nothing and registers no tag.
-// TestTemplate_SecondClaimRegistersNoHandler covers the handler list.
+// precedes every side effect: the rejected Template writes nothing, registers no tag
+// and invokes no initial-attribute callback. TestTemplate_SecondClaimRegistersNoHandler
+// covers the handler list.
 func TestTemplate_SecondClaimOnOneElementFails(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -341,7 +342,7 @@ func TestTemplate_SecondClaimOnOneElementFails(t *testing.T) {
 			_, rq := newStateRequest(t)
 
 			firstDot := tag.Tag("first")
-			secondDot := tag.Tag("second")
+			secondDot := new(templateInitialAttrDot)
 			ui := &contendingUI{
 				first:  NewTemplate("div", "state-plain", firstDot),
 				second: NewTemplate("div", "state-b", secondDot),
@@ -367,6 +368,9 @@ func TestTemplate_SecondClaimOnOneElementFails(t *testing.T) {
 			// The rejected Template must not have registered its Dot tag or the params tag.
 			if got := len(rq.GetElements(secondDot)); got != 0 {
 				t.Fatalf("elements tagged by the rejected Template = %d, want 0", got)
+			}
+			if calls := secondDot.attrCalls(); len(calls) != 0 {
+				t.Fatalf("rejected Template invoked JawsInitialHTMLAttr for %v", calls)
 			}
 			if got := len(rq.GetElements(tag.Tag("param"))); got != 0 {
 				t.Fatalf("elements tagged from the rejected render's params = %d, want 0", got)

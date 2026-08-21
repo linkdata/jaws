@@ -27,6 +27,25 @@ type templateDot struct {
 	menus   int
 }
 
+type templateInitialAttrDot struct {
+	mu    sync.Mutex
+	calls []jaws.Jid
+}
+
+func (d *templateInitialAttrDot) JawsInitialHTMLAttr(elem *jaws.Element) template.HTMLAttr {
+	d.mu.Lock()
+	d.calls = append(d.calls, elem.Jid())
+	d.mu.Unlock()
+	return template.HTMLAttr(`data-element="` + elem.Jid().String() + `"`)
+}
+
+func (d *templateInitialAttrDot) attrCalls() (calls []jaws.Jid) {
+	d.mu.Lock()
+	calls = append(calls, d.calls...)
+	d.mu.Unlock()
+	return
+}
+
 func (d *templateDot) JawsUpdate(elem *jaws.Element) {
 	d.updated++
 }
@@ -171,6 +190,72 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 
 	if err := rw.Template("div", "missingtemplate", nil); !errors.Is(err, ErrMissingTemplate) {
 		t.Fatalf("expected ErrMissingTemplate, got %v", err)
+	}
+}
+
+func TestNewTemplate_RendersDotInitialHTMLAttrPerElement(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	if err := jw.AddTemplateLookuper(template.Must(template.New("attrtmpl").Parse(`content`))); err != nil {
+		t.Fatal(err)
+	}
+
+	dot := new(templateInitialAttrDot)
+	first := NewTemplate("article", "attrtmpl", dot)
+	second := NewTemplate("article", "attrtmpl", dot)
+	if first != second {
+		t.Fatal("Templates rebuilt from the same definition are not equal")
+	}
+	definitions := map[Template]struct{}{first: {}}
+	if _, ok := definitions[second]; !ok {
+		t.Fatal("equal Template is not usable as a map key")
+	}
+
+	provider := &testContainer{contents: []jaws.UI{first, second}}
+	containerElem, got := renderUI(t, rq, NewContainer("section", provider))
+	children := containerElements(t, containerElem)
+	if len(children) != 2 {
+		t.Fatalf("Template children = %d, want 2", len(children))
+	}
+	if templateStateOf(children[0]) == templateStateOf(children[1]) {
+		t.Fatal("equal Templates share per-Element state")
+	}
+	for _, child := range children {
+		want := `<article id="` + child.Jid().String() + `" data-element="` + child.Jid().String() + `">content</article>`
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered HTML %q does not contain %q", got, want)
+		}
+	}
+
+	calls := dot.attrCalls()
+	if len(calls) != len(children) {
+		t.Fatalf("JawsInitialHTMLAttr calls = %v, want one per Template Element", calls)
+	}
+	for i, child := range children {
+		if calls[i] != child.Jid() {
+			t.Errorf("JawsInitialHTMLAttr call %d used Element %v, want %v", i, calls[i], child.Jid())
+		}
+	}
+
+	children[0].JawsUpdate()
+	if calls = dot.attrCalls(); len(calls) != len(children) {
+		t.Fatalf("JawsInitialHTMLAttr calls after update = %v, want initial-render calls only", calls)
+	}
+}
+
+func TestTemplate_RenderCombinesParamAndDotInitialHTMLAttrs(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	if err := jw.AddTemplateLookuper(template.Must(template.New("attrtmpl").Parse(`content`))); err != nil {
+		t.Fatal(err)
+	}
+
+	dot := new(templateInitialAttrDot)
+	elem, got := renderUI(t, rq, NewTemplate("article", "attrtmpl", dot), template.HTMLAttr(`class="param"`))
+	want := `class="param" data-element="` + elem.Jid().String() + `"`
+	if !strings.Contains(got, want) {
+		t.Fatalf("rendered HTML does not contain ordered attributes %q: %q", want, got)
+	}
+	if calls := dot.attrCalls(); len(calls) != 1 || calls[0] != elem.Jid() {
+		t.Fatalf("JawsInitialHTMLAttr calls = %v, want [%v]", calls, elem.Jid())
 	}
 }
 
@@ -412,10 +497,40 @@ func TestTemplate_UpdateLogsMissingTemplate(t *testing.T) {
 	}
 }
 
+func TestTemplate_RenderMissingTemplateSkipsDotInitialHTMLAttr(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	dot := new(templateInitialAttrDot)
+	tmpl := NewTemplate("div", "missingtemplate", dot)
+	elem := rq.NewElement(tmpl)
+
+	if err := elem.JawsRender(io.Discard, nil); !errors.Is(err, ErrMissingTemplate) {
+		t.Fatalf("render error = %v, want %v", err, ErrMissingTemplate)
+	}
+	if calls := dot.attrCalls(); len(calls) != 0 {
+		t.Fatalf("missing Template invoked JawsInitialHTMLAttr for %v", calls)
+	}
+}
+
 func TestNewTemplate_EmptyWrapperDefaultsToDiv(t *testing.T) {
 	tpl := NewTemplate("", "partial", tag.Tag("dot"))
 	if tpl.OuterHTMLTag != "div" {
 		t.Fatalf("OuterHTMLTag = %q, want %q", tpl.OuterHTMLTag, "div")
+	}
+}
+
+func TestTemplate_UnwrappedSkipsDotInitialHTMLAttr(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	if err := jw.AddTemplateLookuper(template.Must(template.New("unwrapped").Parse(`content`))); err != nil {
+		t.Fatal(err)
+	}
+
+	dot := new(templateInitialAttrDot)
+	_, got := renderUI(t, rq, Template{Name: "unwrapped", Dot: dot})
+	if got != "content" {
+		t.Fatalf("unwrapped Template rendered %q, want %q", got, "content")
+	}
+	if calls := dot.attrCalls(); len(calls) != 0 {
+		t.Fatalf("unwrapped Template invoked JawsInitialHTMLAttr for %v", calls)
 	}
 }
 
