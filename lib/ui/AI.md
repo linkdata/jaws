@@ -85,6 +85,15 @@ should use Go's native template action:
 {{template "partial" .Dot}}
 ```
 
+Immediately after creating each Request, `ui.Handler` inspects only its direct
+top-level Dot for `jaws.ConnectHandler` and installs `JawsConnect` before page
+template execution. A plain GET only installs the callback; the accepted
+WebSocket invokes it with the `jaws.ConnectFn` lifecycle. Nested Template dots
+are not inspected. A promoted method satisfies the interface through ordinary
+Go method-set rules, but Handler does not recursively inspect embedded values.
+An early connection may overlap initial rendering, so the reused Dot and its
+callback must synchronize shared state.
+
 The Template's Dot contributes both identity and tags. It must be nil or
 comparable at runtime, equal to itself, and usable under `tag.TagExpand`.
 Implementing `JawsGetTag` does not repair a non-comparable Dot because tag
@@ -158,9 +167,10 @@ Dirty only the output that actually changed.
 
 The bundled client forwards input, click, and context-menu events only while its
 WebSocket is open and does not replay earlier interaction. When early input
-matters, render controls disabled or make the region inert. Use a Request
-`ConnectFn` to update a request-local readiness value and dirty its tag or the
-exact Element whose updater removes the gate.
+matters, render controls disabled or make the region inert. A top-level
+`ui.Handler` Dot can implement `jaws.ConnectHandler` to update a readiness value
+and dirty its direct tag or the exact Element whose updater removes the gate.
+Custom page handlers can install the equivalent Request `ConnectFn` directly.
 
 Native form reset is unsupported for managed inputs and Select. A reset button
 or `form.reset()` changes browser state without the per-control events JaWS

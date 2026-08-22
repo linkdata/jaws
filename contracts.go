@@ -111,6 +111,16 @@ type Updater interface {
 	JawsUpdate(elem *Element)
 }
 
+// ConnectHandler initializes or validates a [Request] after its WebSocket is accepted.
+//
+// [github.com/linkdata/jaws/lib/ui.Handler] discovers this optional capability
+// only on its top-level page dot. JawsConnect has the lifecycle and permitted
+// operations described by [ConnectFn].
+type ConnectHandler interface {
+	// JawsConnect handles rq after its WebSocket is accepted.
+	JawsConnect(rq *Request) error
+}
+
 // ClickHandler handles click events sent from the browser.
 type ClickHandler interface {
 	// JawsClick is called for non-input-origin browser clicks.

@@ -94,10 +94,15 @@ an outer HTTP handler to load the data and invoke a newly constructed
 the page handler when initial rendering needs a Session; `AutoSession` runs at
 WebSocket upgrade and is too late for initial page state.
 
-`ui.Handler` owns `NewRequest` and exposes no Request setup hook. If a design
-depends on `SetConnectFn`, either move that lifecycle into supported HTTP/session
-setup or consciously build a custom page handler. A full-document Template is
-not a supported workaround.
+`ui.Handler` owns `NewRequest` and recognizes `jaws.ConnectHandler` only on its
+top-level Dot. It installs `JawsConnect` before page template execution; the
+plain GET does not invoke it, and nested Template dots are not inspected. Use
+this hook for connect-time transitions, synchronize it with rendering and other
+Requests, and dirty the direct dependencies changed by the transition. Other
+Request setup requires a custom page handler. A full-document Template is not a
+supported workaround. A connection identifies a JaWS-capable client, not
+affirmative human intent; use a semantic click action when that distinction
+matters.
 
 A retained Template update keeps its wrapper Element and Jid, sends new inner
 HTML, and unregisters/recreates managed descendants. It does not preserve

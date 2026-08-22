@@ -116,6 +116,16 @@ The normal page flow has two related HTTP requests:
    key, claims the pending Request through `UseRequest`, upgrades the connection,
    and begins event and DOM-update processing.
 
+When the top-level dot passed to `ui.Handler` implements `ConnectHandler`, the
+handler installs its `JawsConnect` method on the Request before page template
+execution. The page GET installs but does not invoke the callback. An accepted
+WebSocket invokes it with the `ConnectFn` lifecycle; nested `ui.Template` dots
+are not inspected. An early connection may overlap initial template execution,
+so the shared dot and application state must remain concurrency-safe. Mutate
+synchronized state and dirty its direct dependencies through the callback
+Request. This identifies a JaWS-capable connected client, not affirmative human
+intent; use a semantic click action when that distinction matters.
+
 `HeadHTML` does not manage response headers. The bundled client reloads pages
 restored from the bfcache.
 
