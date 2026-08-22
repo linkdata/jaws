@@ -92,6 +92,9 @@ func TestJawsLogReturnsBeforeLoggerAndCloseDrains(t *testing.T) {
 		if got := <-logger.started; got != wantErr {
 			t.Fatalf("Logger.Error error = %v, want %v", got, wantErr)
 		}
+		if got := jw.ErrorCount(); got != 1 {
+			t.Fatalf("ErrorCount() while Logger.Error is blocked = %d, want 1", got)
+		}
 
 		secondErr := errors.New("queued while logger blocked")
 		_ = jw.Log(secondErr)
@@ -103,6 +106,9 @@ func TestJawsLogReturnsBeforeLoggerAndCloseDrains(t *testing.T) {
 		}
 		if got := jw.Log(errors.New("after close")); got == nil {
 			t.Fatal("Log after Close returned nil")
+		}
+		if got := jw.ErrorCount(); got != 3 {
+			t.Fatalf("ErrorCount() after Close = %d, want 3", got)
 		}
 		close(logger.release)
 		synctest.Wait()
@@ -207,5 +213,8 @@ func TestJawsLogSerializesRecoversAndAllowsReentry(t *testing.T) {
 	}
 	if got := <-logger.calls; got != thirdErr {
 		t.Fatalf("third Logger.Error = %v, want %v", got, thirdErr)
+	}
+	if got := jw.ErrorCount(); got != 3 {
+		t.Fatalf("ErrorCount() = %d, want 3", got)
 	}
 }

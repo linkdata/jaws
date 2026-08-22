@@ -15,10 +15,8 @@ import (
 // Pending returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
-	defer jw.mu.RUnlock()
-	for _, pending := range jw.pending {
-		n += len(pending)
-	}
+	n = jw.pendingRequestCountLocked()
+	jw.mu.RUnlock()
 	return
 }
 
@@ -186,6 +184,9 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 }
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
+	var dirtyStorage [5]any
+	dirtyTags := dirtyStorage[:0]
+
 	jw.mu.Lock()
 	nowSeconds := jw.runtimeSeconds.Load()
 	for _, rq := range jw.requests {
@@ -202,5 +203,48 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			delete(jw.sessions, k)
 		}
 	}
+	enabled := jw.StatusMetrics.Load() & StatusMetricAll
+	sample := &jw.statusSample
+	newlyEnabled := enabled &^ sample.enabled
+	if enabled&StatusMetricActiveRequests != 0 {
+		activeRequests := jw.activeRequestCountLocked()
+		if newlyEnabled&StatusMetricActiveRequests != 0 || activeRequests != sample.activeRequests {
+			dirtyTags = append(dirtyTags, jw.ActiveRequestCountTag())
+		}
+		sample.activeRequests = activeRequests
+	}
+	if enabled&StatusMetricPendingRequests != 0 {
+		pendingRequests := jw.pendingRequestCountLocked()
+		if newlyEnabled&StatusMetricPendingRequests != 0 || pendingRequests != sample.pendingRequests {
+			dirtyTags = append(dirtyTags, jw.PendingRequestCountTag())
+		}
+		sample.pendingRequests = pendingRequests
+	}
+	if enabled&StatusMetricSessions != 0 {
+		sessions := len(jw.sessions)
+		if newlyEnabled&StatusMetricSessions != 0 || sessions != sample.sessions {
+			dirtyTags = append(dirtyTags, jw.SessionCountTag())
+		}
+		sample.sessions = sessions
+	}
+	if enabled&StatusMetricActiveSessions != 0 {
+		activeSessions := jw.activeSessionCountLocked()
+		if newlyEnabled&StatusMetricActiveSessions != 0 || activeSessions != sample.activeSessions {
+			dirtyTags = append(dirtyTags, jw.ActiveSessionCountTag())
+		}
+		sample.activeSessions = activeSessions
+	}
+	if enabled&StatusMetricErrors != 0 {
+		errorCount := jw.reportedErrors.Load()
+		if newlyEnabled&StatusMetricErrors != 0 || errorCount != sample.errors {
+			dirtyTags = append(dirtyTags, jw.ErrorCountTag())
+		}
+		sample.errors = errorCount
+	}
+	sample.enabled = enabled
 	jw.mu.Unlock()
+
+	if len(dirtyTags) > 0 {
+		jw.setDirty(dirtyTags)
+	}
 }

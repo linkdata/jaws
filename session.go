@@ -289,7 +289,9 @@ func (sess *Session) Broadcast(msg wire.Message) {
 	}
 }
 
-// SessionCount returns the number of registered sessions.
+// SessionCount returns the number of registered Sessions.
+//
+// It includes Sessions retained during their disconnect grace period.
 func (jw *Jaws) SessionCount() (n int) {
 	jw.mu.RLock()
 	n = len(jw.sessions)

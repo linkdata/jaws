@@ -81,13 +81,14 @@ type Jid = jid.Jid // convenience alias
 // WebSockets. The zero value is not ready for use; construct instances with
 // [New] to ensure the helper goroutines and static assets are prepared.
 //
-// The exported configuration fields are ordinary fields, not live synchronized
-// settings. Several are consulted on each connection or request (for example
-// MaxPendingRequestsPerIP and WebSocketPingInterval), so set them all before
-// exposing handlers, creating Requests, or starting [Jaws.Serve] /
-// [Jaws.ServeWithTimeout]; mutating one after serving has begun is an
-// unsynchronized write and is not supported. Methods document their own
-// concurrency behavior and may be called concurrently when stated.
+// Except for [Jaws.StatusMetrics], the exported configuration fields are ordinary
+// fields, not live synchronized settings. Several are consulted on each connection
+// or request (for example MaxPendingRequestsPerIP and WebSocketPingInterval), so set
+// them all before exposing handlers, creating Requests, or starting [Jaws.Serve] /
+// [Jaws.ServeWithTimeout]; mutating one after serving has begun is an unsynchronized
+// write and is not supported. StatusMetrics is atomic and may be changed while
+// serving. Methods document their own concurrency behavior and may be called
+// concurrently when stated.
 type Jaws struct {
 	// CookieName is the name used for session cookies.
 	//
@@ -117,6 +118,16 @@ type Jaws struct {
 	// function must return promptly and must not synchronously call this Jaws or
 	// one of its Requests, or wait for work that does. See [Request.SetContext].
 	BaseContext context.Context
+	// StatusMetrics selects the status metrics JaWS publishes through status tags.
+	//
+	// Each maintenance pass samples selected metrics and dirties each newly selected
+	// or changed metric's tag. Changes between samples are coalesced.
+	//
+	// Use [atomic.Uint32.Store], [atomic.Uint32.Or], or [atomic.Uint32.And] with
+	// [StatusMetricAll] or individual status metric flags. Only bits in
+	// StatusMetricAll are interpreted. The zero value disables status sampling and
+	// tag updates. Atomic operations may be used concurrently.
+	StatusMetrics atomic.Uint32
 	// WebSocketPingInterval controls read-idle keepalive pings.
 	//
 	// When a WebSocket read remains pending for this interval, JaWS pings the peer.
@@ -136,12 +147,14 @@ type Jaws struct {
 	unsubCh                 chan chan wire.Message
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
+	reportedErrors          atomic.Uint64
 	loggerQueue             *loggerQueue
 	defaultAuthOnce         sync.Once    // guards lazy creation of defaultAuthVal
 	defaultAuthVal          *DefaultAuth // shared fail-open Auth; see [Jaws.DefaultAuth]
 	requestBufferPool       sync.Pool    // reusable *requestBuffers; Requests themselves are never pooled or reused
 	serveJS                 *staticserve.StaticServe
 	serveCSS                *staticserve.StaticServe
+	statusTags              statusTags
 	mu                      deadlock.RWMutex // protects following
 	headPrefix              string
 	faviconURL              string
@@ -155,6 +168,7 @@ type Jaws struct {
 	sessions                map[key.Key]*Session
 	dirty                   map[any]int
 	dirtOrder               int
+	statusSample            statusSample
 }
 
 // New allocates a JaWS instance with the default configuration.
@@ -215,11 +229,11 @@ func New() (jw *Jaws, err error) {
 //
 // Calls to [Jaws.NewRequest] after shutdown begins return Requests with
 // already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
-// sends may be discarded after Done closes. Close stops accepting errors from
-// [Jaws.Log] and lets those already accepted drain without waiting for their
-// callbacks; later Log calls are discarded. On normal return after shutdown,
-// [Jaws.Serve] and [Jaws.ServeWithTimeout] wait for the drain. Subsequent calls
-// to Close have no effect.
+// sends may be discarded after Done closes. Close stops accepting new Logger
+// deliveries; accepted errors continue draining asynchronously, and later
+// [Jaws.Log] calls still increment [Jaws.ErrorCount]. On normal return after
+// shutdown, [Jaws.Serve] and [Jaws.ServeWithTimeout] wait for the drain.
+// Subsequent calls to Close have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()
 	select {
@@ -313,15 +327,9 @@ func (jw *Jaws) LookupTemplate(name string) *template.Template {
 // count includes Requests whose [Request.ServeHTTP] loop is running.
 func (jw *Jaws) RequestCounts() (total, active int) {
 	jw.mu.RLock()
-	defer jw.mu.RUnlock()
 	total = jw.requestCount
-	for _, rq := range jw.requests {
-		if rq != nil {
-			if rq.loadState() == reqRunning {
-				active++
-			}
-		}
-	}
+	active = jw.activeRequestCountLocked()
+	jw.mu.RUnlock()
 	return
 }
 
@@ -335,34 +343,39 @@ func (jw *Jaws) RequestCount() (n int) {
 	return
 }
 
-// Log queues an error for the [Jaws.Logger] and returns err.
+// Log reports an error and returns err.
 //
-// Delivery is asynchronous and FIFO-serialized for each Jaws instance. Logger.Error
-// runs without JaWS core locks and may re-enter the same Jaws subject to the normal
-// lifecycle rules. A panic from Logger.Error is recovered by the logging dispatcher.
+// Each non-nil err increments [Jaws.ErrorCount], including when Logger is nil or
+// shutdown has begun. Delivery to Logger is asynchronous and FIFO-serialized for
+// each Jaws instance. Logger.Error runs without JaWS core locks and may re-enter
+// the same Jaws subject to the normal lifecycle rules. A panic from Logger.Error
+// is recovered by the logging dispatcher.
 //
-// Log is safe for concurrent use, including with [Jaws.Close]. It has no effect
-// if jw is nil, err is nil, the Logger is nil, or shutdown has begun. It always
-// returns err. The queue applies no capacity backpressure, so errors accumulate
-// in memory when Logger.Error does not keep pace. Log retains err for delivery;
-// callers must not mutate state exposed by err concurrently after passing it.
+// Log is safe for concurrent use, including with [Jaws.Close]. A nil receiver or
+// nil err is not counted or delivered. Log always returns err. The queue applies
+// no capacity backpressure, so errors accumulate in memory when Logger.Error does
+// not keep pace. Log retains err for delivery; callers must not mutate state
+// exposed by err concurrently after passing it.
 func (jw *Jaws) Log(err error) error {
-	if err != nil && jw != nil && jw.Logger != nil {
-		jw.loggerQueue.enqueue(jw.Logger, err)
+	if err != nil && jw != nil {
+		jw.reportedErrors.Add(1)
+		if logger := jw.Logger; logger != nil {
+			jw.loggerQueue.enqueue(logger, err)
+		}
 	}
 	return err
 }
 
-// MustLog passes a non-nil err to [Jaws.Log], or panics if no [Jaws.Logger] is
+// MustLog passes a non-nil err to [Jaws.Log], then panics if no [Jaws.Logger] is
 // configured.
 //
-// A nil err has no effect, including on a nil receiver. With a configured
-// Logger, errors submitted after shutdown begins are discarded by Log.
+// A nil err has no effect, including on a nil receiver. For a non-nil err, Log
+// runs before the Logger check; a nil receiver or missing Logger then panics. See
+// [Jaws.Log] for counting, delivery, and shutdown behavior.
 func (jw *Jaws) MustLog(err error) {
 	if err != nil {
-		if jw != nil && jw.Logger != nil {
-			_ = jw.Log(err)
-		} else {
+		_ = jw.Log(err)
+		if jw == nil || jw.Logger == nil {
 			panic(err)
 		}
 	}

@@ -1100,10 +1100,10 @@ func (asw *autoSessionWriter) WriteHeader(statusCode int) {
 	asw.ResponseWriter.WriteHeader(statusCode)
 }
 
-// Log queues an error for the [Jaws.Logger] and returns err.
+// Log reports an error through [Jaws.Log] and returns err.
 //
-// A nil Request behaves like a nil [Jaws]: err is returned without logging. See
-// [Jaws.Log] for delivery and shutdown behavior.
+// A nil Request returns err without counting or delivery. See [Jaws.Log] for
+// counting, delivery, and shutdown behavior.
 func (rq *Request) Log(err error) error {
 	var jw *Jaws
 	if rq != nil {

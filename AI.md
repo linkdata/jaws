@@ -182,6 +182,23 @@ Elements only to their owners. Broadcasts, session reload/close helpers, and
 dirty updates share the serving loop. Start `Serve` or `ServeWithTimeout` before
 using them.
 
+### Status metrics
+
+Status-tag updates are opt-in. `Store`, `Or`, or `And` status metric flags in
+`Jaws.StatusMetrics`; its default zero value disables sampling and tag updates.
+Each status-tag accessor returns a stable, comparable tag unique to that Jaws
+instance and metric. Attach it to the Element that renders the matching count.
+
+Maintenance samples selected metrics after Request and Session cleanup. It dirties
+each tag on the first sample after selection and whenever its sampled count changes;
+intermediate changes may coalesce.
+
+Active Requests are Requests whose `ServeHTTP` loops are running, so tabs count
+separately. Active Sessions are distinct registered Sessions attached to at least
+one such Request, so several tabs sharing a Session count once. `SessionCount`
+also includes Sessions retained during disconnect grace. `ErrorCount` always
+counts non-nil reports; `StatusMetricErrors` controls only its tag updates.
+
 ### Calls before Serve
 
 The following operations are safe before the processing loop starts:
@@ -191,7 +208,8 @@ The following operations are safe before the processing loop starts:
   `RemoveTemplateLookuper`, `LookupTemplate`, `GenerateHeadHTML`, `Setup`, and
   `FaviconURL`.
 * Inspection and logging: `RequestCount`, `RequestCounts`, `Pending`,
-  `SessionCount`, `Sessions`, `Log`, and `MustLog`.
+  `SessionCount`, `ActiveSessionCount`, `Sessions`, `ErrorCount`, status-tag
+  accessors, atomic `StatusMetrics` operations, `Log`, and `MustLog`.
 * Static and ping endpoints through `ServeHTTP`: `/jaws/.ping`, the hashed
   built-in JavaScript URL, and the hashed built-in stylesheet URL.
 
