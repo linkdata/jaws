@@ -96,13 +96,16 @@ WebSocket upgrade and is too late for initial page state.
 
 `ui.Handler` owns `NewRequest` and recognizes `jaws.ConnectHandler` only on its
 top-level Dot. It installs `JawsConnect` before page template execution; the
-plain GET does not invoke it, and nested Template dots are not inspected. Use
-this hook for connect-time transitions, synchronize it with rendering and other
-Requests, and dirty the direct dependencies changed by the transition. Other
-Request setup requires a custom page handler. A full-document Template is not a
-supported workaround. A connection identifies a JaWS-capable client, not
-affirmative human intent; use a semantic click action when that distinction
-matters.
+plain GET does not invoke it, and a `ConnectHandler` found only on a nested
+Template Dot is ignored without a diagnostic. Use this hook for connect-time
+transitions. The bundled client connects after parsing the document, but a
+custom client may invoke it while rendering is still in progress, and a reused
+Dot can serve other Requests concurrently. Synchronize shared state. An exact
+Element dirty target affects its owning Request; an ordinary tag affects matching
+Elements on every live Request. Other Request setup requires a custom page
+handler. A full-document Template is not a supported workaround. A connection
+identifies a JaWS-capable client, not affirmative human intent; use a semantic
+click action when that distinction matters.
 
 A retained Template update keeps its wrapper Element and Jid, sends new inner
 HTML, and unregisters/recreates managed descendants. It does not preserve

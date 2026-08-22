@@ -88,10 +88,12 @@ should use Go's native template action:
 Immediately after creating each Request, `ui.Handler` inspects only its direct
 top-level Dot for `jaws.ConnectHandler` and installs `JawsConnect` before page
 template execution. A plain GET only installs the callback; the accepted
-WebSocket invokes it with the `jaws.ConnectFn` lifecycle. Nested Template dots
-are not inspected. A promoted method satisfies the interface through ordinary
-Go method-set rules, but Handler does not recursively inspect embedded values.
-An early connection may overlap initial rendering, so the reused Dot and its
+WebSocket invokes it with the `jaws.ConnectFn` lifecycle. A `ConnectHandler`
+found only on a nested Template Dot is ignored without a diagnostic. A promoted
+method satisfies the interface through ordinary Go method-set rules, but Handler
+does not recursively inspect embedded values. The bundled client connects after
+parsing the document. A custom client may dial after flushed response bytes
+expose the request key and overlap initial rendering, so the reused Dot and its
 callback must synchronize shared state.
 
 The Template's Dot contributes both identity and tags. It must be nil or
@@ -167,10 +169,15 @@ Dirty only the output that actually changed.
 
 The bundled client forwards input, click, and context-menu events only while its
 WebSocket is open and does not replay earlier interaction. When early input
-matters, render controls disabled or make the region inert. A top-level
-`ui.Handler` Dot can implement `jaws.ConnectHandler` to update a readiness value
-and dirty its direct tag or the exact Element whose updater removes the gate.
-Custom page handlers can install the equivalent Request `ConnectFn` directly.
+matters, render controls disabled or make the region inert. In a custom page
+handler, install a Request `ConnectFn` that updates synchronized request-local
+readiness and dirties the unique request-specific tag registered by the gate, or
+the exact Element whose updater removes it. An outer HTTP handler can
+equivalently construct a fresh `ui.Handler` and readiness-bearing Dot for each
+GET; that Dot's `jaws.ConnectHandler` is then request-local. A reused `ui.Handler`
+shares its Dot across Requests, and ordinary tag dirtying updates matching
+Elements on every live Request. Treat `ConnectHandler` on that shared Dot as a
+shared-state hook, not as a scalar request-local readiness gate.
 
 Native form reset is unsupported for managed inputs and Select. A reset button
 or `form.reset()` changes browser state without the per-control events JaWS

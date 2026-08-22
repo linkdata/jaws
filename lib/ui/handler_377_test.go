@@ -21,14 +21,14 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-const handler377TestTimeout = 5 * time.Second
+const handlerWebSocketTestTimeout = 5 * time.Second
 
-type handler377Server struct {
+type handlerWebSocketServer struct {
 	server   *httptest.Server
 	requests chan *jaws.Request
 }
 
-func newHandler377Server(t *testing.T, source string, dot any, funcs template.FuncMap) (ts *handler377Server) {
+func newHandlerWebSocketServer(t *testing.T, source string, dot any, funcs template.FuncMap) (ts *handlerWebSocketServer) {
 	t.Helper()
 
 	jw, err := jaws.New()
@@ -39,7 +39,7 @@ func newHandler377Server(t *testing.T, source string, dot any, funcs template.Fu
 
 	requests := make(chan *jaws.Request, 64)
 	templateFuncs := template.FuncMap{
-		"handler377Capture": func(with With) string {
+		"captureHandlerRequest": func(with With) string {
 			requests <- with.RequestWriter.Request
 			return ""
 		},
@@ -67,7 +67,7 @@ func newHandler377Server(t *testing.T, source string, dot any, funcs template.Fu
 	mux.Handle("GET /jaws/", jw)
 	mux.Handle("GET /", Handler(jw, "page", dot))
 	server := httptest.NewServer(mux)
-	ts = &handler377Server{server: server, requests: requests}
+	ts = &handlerWebSocketServer{server: server, requests: requests}
 	t.Cleanup(func() {
 		jw.Close()
 		server.Close()
@@ -76,7 +76,7 @@ func newHandler377Server(t *testing.T, source string, dot any, funcs template.Fu
 	return
 }
 
-func (ts *handler377Server) get(ctx context.Context) (body string, err error) {
+func (ts *handlerWebSocketServer) get(ctx context.Context) (body string, err error) {
 	var req *http.Request
 	if req, err = http.NewRequestWithContext(ctx, http.MethodGet, ts.server.URL+"/", nil); err == nil {
 		var resp *http.Response
@@ -95,7 +95,7 @@ func (ts *handler377Server) get(ctx context.Context) (body string, err error) {
 	return
 }
 
-func (ts *handler377Server) dial(ctx context.Context, rq *jaws.Request) (conn *websocket.Conn, err error) {
+func (ts *handlerWebSocketServer) dial(ctx context.Context, rq *jaws.Request) (conn *websocket.Conn, err error) {
 	header := http.Header{}
 	header.Set("Origin", ts.server.URL)
 	var resp *http.Response
@@ -117,7 +117,7 @@ func (ts *handler377Server) dial(ctx context.Context, rq *jaws.Request) (conn *w
 	return
 }
 
-func handler377Receive[T any](t *testing.T, ctx context.Context, ch <-chan T, description string) (value T) {
+func receiveHandlerWebSocketValue[T any](t *testing.T, ctx context.Context, ch <-chan T, description string) (value T) {
 	t.Helper()
 	select {
 	case value = <-ch:
@@ -127,7 +127,7 @@ func handler377Receive[T any](t *testing.T, ctx context.Context, ch <-chan T, de
 	return
 }
 
-func handler377WaitDone(t *testing.T, ctx context.Context, done <-chan struct{}, description string) {
+func waitHandlerWebSocketDone(t *testing.T, ctx context.Context, done <-chan struct{}, description string) {
 	t.Helper()
 	select {
 	case <-done:
@@ -136,7 +136,7 @@ func handler377WaitDone(t *testing.T, ctx context.Context, done <-chan struct{},
 	}
 }
 
-func handler377CloseConn(t *testing.T, conn *websocket.Conn) {
+func closeHandlerWebSocket(t *testing.T, conn *websocket.Conn) {
 	t.Helper()
 	if conn != nil {
 		if err := conn.CloseNow(); err != nil {
@@ -145,14 +145,14 @@ func handler377CloseConn(t *testing.T, conn *websocket.Conn) {
 	}
 }
 
-type handler377ConnectRecorder struct {
+type connectHandlerRecorder struct {
 	mu         sync.Mutex
 	calls      []*jaws.Request
 	connectErr error
 	called     chan *jaws.Request
 }
 
-func (rec *handler377ConnectRecorder) JawsConnect(rq *jaws.Request) (err error) {
+func (rec *connectHandlerRecorder) JawsConnect(rq *jaws.Request) (err error) {
 	rec.mu.Lock()
 	rec.calls = append(rec.calls, rq)
 	err = rec.connectErr
@@ -163,14 +163,14 @@ func (rec *handler377ConnectRecorder) JawsConnect(rq *jaws.Request) (err error) 
 	return
 }
 
-func (rec *handler377ConnectRecorder) snapshot() (calls []*jaws.Request) {
+func (rec *connectHandlerRecorder) snapshot() (calls []*jaws.Request) {
 	rec.mu.Lock()
 	calls = append(calls, rec.calls...)
 	rec.mu.Unlock()
 	return
 }
 
-type handler377OrderDot struct {
+type connectBeforeClickDot struct {
 	mu             sync.Mutex
 	order          []string
 	connectEntered chan struct{}
@@ -180,7 +180,7 @@ type handler377OrderDot struct {
 	clickOnce      sync.Once
 }
 
-func (dot *handler377OrderDot) JawsConnect(*jaws.Request) error {
+func (dot *connectBeforeClickDot) JawsConnect(*jaws.Request) error {
 	dot.mu.Lock()
 	dot.order = append(dot.order, "connect start")
 	dot.mu.Unlock()
@@ -192,7 +192,7 @@ func (dot *handler377OrderDot) JawsConnect(*jaws.Request) error {
 	return nil
 }
 
-func (dot *handler377OrderDot) JawsClick(*jaws.Element, jaws.Click) error {
+func (dot *connectBeforeClickDot) JawsClick(*jaws.Element, jaws.Click) error {
 	dot.mu.Lock()
 	dot.order = append(dot.order, "click")
 	dot.mu.Unlock()
@@ -200,16 +200,16 @@ func (dot *handler377OrderDot) JawsClick(*jaws.Element, jaws.Click) error {
 	return nil
 }
 
-func (dot *handler377OrderDot) snapshot() (order []string) {
+func (dot *connectBeforeClickDot) snapshot() (order []string) {
 	dot.mu.Lock()
 	order = append(order, dot.order...)
 	dot.mu.Unlock()
 	return
 }
 
-func TestHandler377_DotWithoutConnectHandlerUnchanged(t *testing.T) {
-	ts := newHandler377Server(t, `{{handler377Capture $}}hello {{.Dot}}`, "world", nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+func TestHandler_DotWithoutConnectHandlerUnchanged(t *testing.T) {
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}hello {{.Dot}}`, "world", nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	body, err := ts.get(ctx)
@@ -219,22 +219,22 @@ func TestHandler377_DotWithoutConnectHandlerUnchanged(t *testing.T) {
 	if body != "hello world" {
 		t.Fatalf("body = %q, want %q", body, "hello world")
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 	if rq.GetConnectFn() != nil {
 		t.Fatal("plain page dot installed a ConnectFn")
 	}
 }
 
-func TestHandler377_GETDoesNotInvokeConnectHandler(t *testing.T) {
-	dot := new(handler377ConnectRecorder)
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{$.HeadHTML}}`, dot, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+func TestHandler_GETDoesNotInvokeConnectHandler(t *testing.T) {
+	dot := new(connectHandlerRecorder)
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{$.HeadHTML}}`, dot, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	if _, err := ts.get(ctx); err != nil {
 		t.Fatal(err)
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 	if calls := dot.snapshot(); len(calls) != 0 {
 		t.Fatalf("JawsConnect calls after GET = %v, want none", calls)
 	}
@@ -243,26 +243,26 @@ func TestHandler377_GETDoesNotInvokeConnectHandler(t *testing.T) {
 	}
 }
 
-func TestHandler377_WebSocketInvokesConnectHandlerOnceForSameRequest(t *testing.T) {
-	dot := &handler377ConnectRecorder{called: make(chan *jaws.Request, 2)}
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{$.HeadHTML}}`, dot, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+func TestHandler_WebSocketInvokesConnectHandlerOnceForSameRequest(t *testing.T) {
+	dot := &connectHandlerRecorder{called: make(chan *jaws.Request, 2)}
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{$.HeadHTML}}`, dot, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	if _, err := ts.get(ctx); err != nil {
 		t.Fatal(err)
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 	rqCtx := rq.Context()
 	conn, err := ts.dial(ctx, rq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := handler377Receive(t, ctx, dot.called, "JawsConnect call"); got != rq {
+	if got := receiveHandlerWebSocketValue(t, ctx, dot.called, "JawsConnect call"); got != rq {
 		t.Fatalf("JawsConnect Request = %p, want page Request %p", got, rq)
 	}
-	handler377CloseConn(t, conn)
-	handler377WaitDone(t, ctx, rqCtx.Done(), "Request shutdown")
+	closeHandlerWebSocket(t, conn)
+	waitHandlerWebSocketDone(t, ctx, rqCtx.Done(), "Request shutdown")
 
 	calls := dot.snapshot()
 	if len(calls) != 1 || calls[0] != rq {
@@ -270,23 +270,23 @@ func TestHandler377_WebSocketInvokesConnectHandlerOnceForSameRequest(t *testing.
 	}
 }
 
-func TestHandler377_ConnectHandlerRunsBeforeBrowserMessages(t *testing.T) {
+func TestHandler_ConnectHandlerRunsBeforeBrowserMessages(t *testing.T) {
 	releaseConnect := make(chan struct{})
 	release := sync.OnceFunc(func() { close(releaseConnect) })
 	defer release()
-	dot := &handler377OrderDot{
+	dot := &connectBeforeClickDot{
 		connectEntered: make(chan struct{}),
 		releaseConnect: releaseConnect,
 		clickCalled:    make(chan struct{}),
 	}
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{$.HeadHTML}}{{$.Button "run" .Dot}}`, dot, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{$.HeadHTML}}{{$.Button "run" .Dot}}`, dot, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	if _, err := ts.get(ctx); err != nil {
 		t.Fatal(err)
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 	elems := rq.GetElements(dot)
 	if len(elems) != 1 {
 		t.Fatalf("button Elements = %d, want 1", len(elems))
@@ -295,8 +295,8 @@ func TestHandler377_ConnectHandlerRunsBeforeBrowserMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { handler377CloseConn(t, conn) }()
-	handler377WaitDone(t, ctx, dot.connectEntered, "JawsConnect entry")
+	defer func() { closeHandlerWebSocket(t, conn) }()
+	waitHandlerWebSocketDone(t, ctx, dot.connectEntered, "JawsConnect entry")
 
 	click := wire.WsMsg{Jid: elems[0].Jid(), What: what.Click, Data: "0 0 0 run"}
 	if err = conn.Write(ctx, websocket.MessageText, click.Append(nil)); err != nil {
@@ -308,7 +308,7 @@ func TestHandler377_ConnectHandlerRunsBeforeBrowserMessages(t *testing.T) {
 	default:
 	}
 	release()
-	handler377WaitDone(t, ctx, dot.clickCalled, "browser click")
+	waitHandlerWebSocketDone(t, ctx, dot.clickCalled, "browser click")
 
 	want := []string{"connect start", "connect return", "click"}
 	if got := dot.snapshot(); !slices.Equal(got, want) {
@@ -316,30 +316,30 @@ func TestHandler377_ConnectHandlerRunsBeforeBrowserMessages(t *testing.T) {
 	}
 }
 
-func TestHandler377_ConnectHandlerErrorClosesWebSocket(t *testing.T) {
+func TestHandler_ConnectHandlerErrorClosesWebSocket(t *testing.T) {
 	connectErr := errors.New("connect rejected")
-	dot := &handler377ConnectRecorder{
+	dot := &connectHandlerRecorder{
 		connectErr: connectErr,
 		called:     make(chan *jaws.Request, 2),
 	}
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{$.HeadHTML}}`, dot, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{$.HeadHTML}}`, dot, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	if _, err := ts.get(ctx); err != nil {
 		t.Fatal(err)
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 	rqCtx := rq.Context()
 	conn, err := ts.dial(ctx, rq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { handler377CloseConn(t, conn) }()
-	if got := handler377Receive(t, ctx, dot.called, "JawsConnect call"); got != rq {
+	defer func() { closeHandlerWebSocket(t, conn) }()
+	if got := receiveHandlerWebSocketValue(t, ctx, dot.called, "JawsConnect call"); got != rq {
 		t.Fatalf("JawsConnect Request = %p, want page Request %p", got, rq)
 	}
-	handler377WaitDone(t, ctx, rqCtx.Done(), "failed Request shutdown")
+	waitHandlerWebSocketDone(t, ctx, rqCtx.Done(), "failed Request shutdown")
 	if !errors.Is(context.Cause(rqCtx), connectErr) {
 		t.Fatalf("Request cause = %v, want %v", context.Cause(rqCtx), connectErr)
 	}
@@ -350,29 +350,29 @@ func TestHandler377_ConnectHandlerErrorClosesWebSocket(t *testing.T) {
 	}
 }
 
-func TestHandler377_ConnectHandlerInstalledBeforeTemplateExecution(t *testing.T) {
+func TestHandler_ConnectHandlerInstalledBeforeTemplateExecution(t *testing.T) {
 	type observation struct {
 		rq        *jaws.Request
 		installed bool
 	}
 	observed := make(chan observation, 1)
-	dot := new(handler377ConnectRecorder)
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{handler377Expose $}}`, dot, template.FuncMap{
-		"handler377Expose": func(with With) string {
+	dot := new(connectHandlerRecorder)
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{exposeHandlerRequestKey $}}`, dot, template.FuncMap{
+		"exposeHandlerRequestKey": func(with With) string {
 			rq := with.RequestWriter.Request
 			observed <- observation{rq: rq, installed: rq.GetConnectFn() != nil}
 			return rq.JawsKeyString()
 		},
 	})
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	body, err := ts.get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
-	got := handler377Receive(t, ctx, observed, "template observation")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
+	got := receiveHandlerWebSocketValue(t, ctx, observed, "template observation")
 	if got.rq != rq {
 		t.Fatalf("template Request = %p, want page Request %p", got.rq, rq)
 	}
@@ -384,19 +384,19 @@ func TestHandler377_ConnectHandlerInstalledBeforeTemplateExecution(t *testing.T)
 	}
 }
 
-func TestHandler377_NestedTemplateConnectHandlerIgnored(t *testing.T) {
-	nested := &handler377ConnectRecorder{called: make(chan *jaws.Request, 2)}
+func TestHandler_NestedTemplateConnectHandlerIgnored(t *testing.T) {
+	nested := &connectHandlerRecorder{called: make(chan *jaws.Request, 2)}
 	page := struct {
-		Nested *handler377ConnectRecorder
+		Nested *connectHandlerRecorder
 	}{Nested: nested}
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{$.HeadHTML}}{{$.Template "div" "nested" .Dot.Nested}}{{define "nested"}}nested{{end}}`, page, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{$.HeadHTML}}{{$.Template "div" "nested" .Dot.Nested}}{{define "nested"}}nested{{end}}`, page, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	if _, err := ts.get(ctx); err != nil {
 		t.Fatal(err)
 	}
-	rq := handler377Receive(t, ctx, ts.requests, "page Request")
+	rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 	rqCtx := rq.Context()
 	if rq.GetConnectFn() != nil {
 		t.Fatal("nested Template dot installed the Request ConnectFn")
@@ -405,18 +405,18 @@ func TestHandler377_NestedTemplateConnectHandlerIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler377CloseConn(t, conn)
-	handler377WaitDone(t, ctx, rqCtx.Done(), "Request shutdown")
+	closeHandlerWebSocket(t, conn)
+	waitHandlerWebSocketDone(t, ctx, rqCtx.Done(), "Request shutdown")
 	if calls := nested.snapshot(); len(calls) != 0 {
 		t.Fatalf("nested JawsConnect calls = %v, want none", calls)
 	}
 }
 
-func TestHandler377_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
+func TestHandler_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
 	const requestCount = 8
-	dot := &handler377ConnectRecorder{called: make(chan *jaws.Request, requestCount*2)}
-	ts := newHandler377Server(t, `{{handler377Capture $}}{{$.HeadHTML}}`, dot, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), handler377TestTimeout)
+	dot := &connectHandlerRecorder{called: make(chan *jaws.Request, requestCount*2)}
+	ts := newHandlerWebSocketServer(t, `{{captureHandlerRequest $}}{{$.HeadHTML}}`, dot, nil)
+	ctx, cancel := context.WithTimeout(t.Context(), handlerWebSocketTestTimeout)
 	defer cancel()
 
 	getResults := make(chan error, requestCount)
@@ -430,7 +430,7 @@ func TestHandler377_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
 	}
 	close(startGET)
 	for range requestCount {
-		if err := handler377Receive(t, ctx, getResults, "concurrent GET"); err != nil {
+		if err := receiveHandlerWebSocketValue(t, ctx, getResults, "concurrent GET"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -439,7 +439,7 @@ func TestHandler377_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
 	requestSet := make(map[*jaws.Request]struct{}, requestCount)
 	requestContexts := make([]context.Context, 0, requestCount)
 	for range requestCount {
-		rq := handler377Receive(t, ctx, ts.requests, "page Request")
+		rq := receiveHandlerWebSocketValue(t, ctx, ts.requests, "page Request")
 		if _, duplicate := requestSet[rq]; duplicate {
 			t.Fatalf("duplicate page Request %p", rq)
 		}
@@ -466,12 +466,12 @@ func TestHandler377_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
 	conns := make([]*websocket.Conn, 0, requestCount)
 	defer func() {
 		for _, conn := range conns {
-			handler377CloseConn(t, conn)
+			closeHandlerWebSocket(t, conn)
 		}
 	}()
 	var dialErr error
 	for range requestCount {
-		result := handler377Receive(t, ctx, dialResults, "concurrent WebSocket dial")
+		result := receiveHandlerWebSocketValue(t, ctx, dialResults, "concurrent WebSocket dial")
 		if result.conn != nil {
 			conns = append(conns, result.conn)
 		}
@@ -483,7 +483,7 @@ func TestHandler377_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
 
 	calledSet := make(map[*jaws.Request]struct{}, requestCount)
 	for range requestCount {
-		rq := handler377Receive(t, ctx, dot.called, "JawsConnect call")
+		rq := receiveHandlerWebSocketValue(t, ctx, dot.called, "JawsConnect call")
 		if _, ok := requestSet[rq]; !ok {
 			t.Errorf("JawsConnect received unknown Request %p", rq)
 		}
@@ -497,10 +497,10 @@ func TestHandler377_SharedHandlerSupportsConcurrentRequests(t *testing.T) {
 	}
 
 	for _, conn := range conns {
-		handler377CloseConn(t, conn)
+		closeHandlerWebSocket(t, conn)
 	}
 	conns = nil
 	for i, rqCtx := range requestContexts {
-		handler377WaitDone(t, ctx, rqCtx.Done(), fmt.Sprintf("Request %d shutdown", i))
+		waitHandlerWebSocketDone(t, ctx, rqCtx.Done(), fmt.Sprintf("Request %d shutdown", i))
 	}
 }

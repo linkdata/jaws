@@ -129,12 +129,14 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Dot may be arbitrary template data. When dot implements [jaws.ConnectHandler],
 // Handler installs its JawsConnect method on each Request before executing the
 // page template. The page GET does not invoke JawsConnect. Only the top-level
-// dot is inspected; normal method promotion applies, but fields and dots passed
-// to nested [Template] values are not inspected recursively.
+// dot's method set is inspected; normal method promotion applies. A
+// ConnectHandler on a non-promoted field or a dot passed to a nested [Template]
+// is ignored without a diagnostic.
 //
 // Handler reuses dot across requests. Dot and its callbacks must support
-// concurrent execution, including an early JawsConnect call that overlaps the
-// initial page render.
+// concurrent execution. The bundled client connects after parsing the document.
+// A custom client may dial after flushed response bytes expose the request key,
+// so JawsConnect can overlap the initial page render.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }
