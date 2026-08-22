@@ -82,6 +82,10 @@ func dialJawsRequest(t *testing.T, serverURL string, rq *Request) *websocket.Con
 }
 
 func TestJaws_StatusMetrics(t *testing.T) {
+	if got, want := StatusMetricAll, StatusMetricErrors<<1-1; got != want {
+		t.Fatalf("StatusMetricAll = %#x, want %#x", got, want)
+	}
+
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +134,8 @@ func TestJaws_StatusMetrics(t *testing.T) {
 
 	jw.StatusMetrics.Store(StatusMetricAll)
 	jw.maintenance(time.Hour)
-	requireDirtyTags(t, jw,
+	requireDirtyTags(
+		t, jw,
 		jw.ActiveRequestCountTag(),
 		jw.SessionCountTag(),
 		jw.ActiveSessionCountTag(),

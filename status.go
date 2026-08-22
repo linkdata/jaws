@@ -11,13 +11,14 @@ const (
 	StatusMetricActiveSessions
 	// StatusMetricErrors enables dirtying [Jaws.ErrorCountTag].
 	StatusMetricErrors
-	// StatusMetricAll selects every status metric.
-	StatusMetricAll = StatusMetricActiveRequests |
-		StatusMetricPendingRequests |
-		StatusMetricSessions |
-		StatusMetricActiveSessions |
-		StatusMetricErrors
 )
+
+// StatusMetricAll selects every status metric.
+const StatusMetricAll = StatusMetricActiveRequests |
+	StatusMetricPendingRequests |
+	StatusMetricSessions |
+	StatusMetricActiveSessions |
+	StatusMetricErrors
 
 // statusTag is non-zero-sized so pointers to distinct fields cannot share an
 // address. Its value is immaterial; pointer identity is the dependency key.
@@ -33,10 +34,10 @@ type statusTags struct {
 
 type statusSample struct {
 	enabled         uint32
-	activeRequests  int
-	pendingRequests int
-	sessions        int
-	activeSessions  int
+	activeRequests  uint64
+	pendingRequests uint64
+	sessions        uint64
+	activeSessions  uint64
 	errors          uint64
 }
 
@@ -72,11 +73,11 @@ func (jw *Jaws) SessionCountTag() any {
 // It counts registered Sessions attached to at least one Request whose
 // [Request.ServeHTTP] loop is running. A Session shared by several running Requests
 // counts once. A Session retained only for its disconnect grace period is inactive.
-// ActiveSessionCount is safe for concurrent use.
+// It is safe for concurrent use.
 func (jw *Jaws) ActiveSessionCount() (n int) {
 	jw.mu.RLock()
+	defer jw.mu.RUnlock()
 	n = jw.activeSessionCountLocked()
-	jw.mu.RUnlock()
 	return
 }
 
@@ -91,10 +92,12 @@ func (jw *Jaws) ActiveSessionCountTag() any {
 
 // ErrorCount returns the number of errors reported to this instance.
 //
-// Every non-nil error passed to [Jaws.Log] or [Jaws.MustLog] counts, including
-// calls through [Request.Log] and [Request.MustLog], calls without a Logger, and
-// calls after shutdown. Logger delivery, latency, and panics do not affect the
-// count. ErrorCount is safe for concurrent use. [StatusMetricErrors] controls tag
+// A non-nil error reported through this instance's [Jaws.Log] or [Jaws.MustLog]
+// increments the count, including calls through [Request.Log] or [Request.MustLog].
+// Counting continues without a Logger and after [Jaws.Done] closes; Logger
+// delivery, latency, and panics do not affect it.
+//
+// ErrorCount is safe for concurrent use. [StatusMetricErrors] controls tag
 // updates, not counting.
 func (jw *Jaws) ErrorCount() uint64 {
 	return jw.reportedErrors.Load()
@@ -107,6 +110,10 @@ func (jw *Jaws) ErrorCount() uint64 {
 // maintenance dirty it when the count changes.
 func (jw *Jaws) ErrorCountTag() any {
 	return &jw.statusTags.errors
+}
+
+func statusCount(n int) uint64 {
+	return uint64(n) // #nosec G115 -- collection-derived status counts are non-negative.
 }
 
 func (jw *Jaws) activeRequestCountLocked() (n int) {
@@ -129,7 +136,7 @@ func (jw *Jaws) activeSessionCountLocked() (n int) {
 	for _, sess := range jw.sessions {
 		sess.mu.RLock()
 		for _, rq := range sess.requests {
-			if rq.loadState() == reqRunning {
+			if rq != nil && rq.loadState() == reqRunning {
 				n++
 				break
 			}
@@ -137,4 +144,50 @@ func (jw *Jaws) activeSessionCountLocked() (n int) {
 		sess.mu.RUnlock()
 	}
 	return
+}
+
+func (jw *Jaws) statusMetricLocked(metric uint32) (tag *statusTag, value uint64, previous *uint64) {
+	switch metric {
+	case StatusMetricActiveRequests:
+		tag = &jw.statusTags.activeRequests
+		value = statusCount(jw.activeRequestCountLocked())
+		previous = &jw.statusSample.activeRequests
+	case StatusMetricPendingRequests:
+		tag = &jw.statusTags.pendingRequests
+		value = statusCount(jw.pendingRequestCountLocked())
+		previous = &jw.statusSample.pendingRequests
+	case StatusMetricSessions:
+		tag = &jw.statusTags.sessions
+		value = statusCount(len(jw.sessions))
+		previous = &jw.statusSample.sessions
+	case StatusMetricActiveSessions:
+		tag = &jw.statusTags.activeSessions
+		value = statusCount(jw.activeSessionCountLocked())
+		previous = &jw.statusSample.activeSessions
+	case StatusMetricErrors:
+		tag = &jw.statusTags.errors
+		value = jw.reportedErrors.Load()
+		previous = &jw.statusSample.errors
+	}
+	return
+}
+
+func (jw *Jaws) updateStatusLocked() {
+	enabled := jw.StatusMetrics.Load() & StatusMetricAll
+	if enabled == 0 {
+		jw.statusSample.enabled = 0
+		return
+	}
+	newlyEnabled := enabled &^ jw.statusSample.enabled
+	for metric := StatusMetricActiveRequests; metric != 0 && metric <= StatusMetricAll; metric <<= 1 {
+		if enabled&metric != 0 {
+			tag, value, previous := jw.statusMetricLocked(metric)
+			if newlyEnabled&metric != 0 || value != *previous {
+				jw.dirtOrder++
+				jw.dirty[tag] = jw.dirtOrder
+			}
+			*previous = value
+		}
+	}
+	jw.statusSample.enabled = enabled
 }
