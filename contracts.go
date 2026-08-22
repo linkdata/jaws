@@ -117,7 +117,7 @@ type Updater interface {
 // only on its top-level page dot. JawsConnect has the lifecycle and permitted
 // operations described by [ConnectFn].
 type ConnectHandler interface {
-	// JawsConnect handles rq after its WebSocket is accepted.
+	// JawsConnect initializes or validates rq.
 	JawsConnect(rq *Request) error
 }
 

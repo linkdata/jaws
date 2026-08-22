@@ -118,17 +118,18 @@ The normal page flow has two related HTTP requests:
 
 When the top-level dot passed to `ui.Handler` implements `ConnectHandler`, the
 handler installs its `JawsConnect` method on the Request before page template
-execution. The page GET installs but does not invoke the callback. An accepted
-WebSocket invokes it with the `ConnectFn` lifecycle. A `ConnectHandler` found
-only on a nested `ui.Template` dot is ignored without a diagnostic. The bundled
-client connects after parsing the document. A custom client may dial after
-flushed response bytes expose the request key and overlap initial template
-execution, so the shared dot and application state must remain concurrency-safe.
-After changing state, dirty the exact Element or dependency tag whose scope
-matches the transition. An exact Element targets its owning Request; an ordinary
-tag updates matching Elements on every live Request. A connection identifies a
-JaWS-capable client, not affirmative human intent; use a semantic click action
-when that distinction matters.
+execution. The page GET only installs the callback; an accepted WebSocket
+invokes it with the `ConnectFn` lifecycle. Only the top-level dot's method set is
+considered, including promoted methods. An implementation available only on a
+nested `ui.Template` dot is ignored without a diagnostic. The bundled client
+connects after parsing the document, while a custom client can dial once flushed
+response bytes expose the request key and overlap initial template execution.
+Because `ui.Handler` reuses the dot, its state and callbacks must be
+concurrency-safe.
+
+After changing state, use the exact-Element or dependency-tag scope described
+above. A connection identifies a JaWS-capable client, not affirmative human
+intent; use a semantic click action when that distinction matters.
 
 `HeadHTML` does not manage response headers. The bundled client reloads pages
 restored from the bfcache.
