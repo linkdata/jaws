@@ -46,6 +46,21 @@ does not contain a guide, inspect its exported docs and source instead.
 - Do not retain JaWS Requests, Elements, or UI definitions in application or
   domain state. JaWS owns that live tree.
 
+Default to definition dots that retain stable pointers to authoritative
+synchronized state. Render and update through direct binders and synchronized
+getters over that state. Do not add page-, screen-, state-, or component-shaped
+render DTOs or broad snapshots merely to make template execution atomic. JaWS
+requires race-free reads and correct dependency invalidation, not a transaction
+across an entire fragment. Do not hold an application lock across template
+execution to manufacture one. Separate reads may observe adjacent valid states;
+after mutation, dirty the relevant dependencies so the UI converges.
+
+Copying mutable collection storage under its lock so a caller can iterate after
+unlock is a synchronization boundary, not a presentation snapshot. Capture
+multiple primitives together only when one widget, attribute set, or operation
+requires an invariant; keep that capture local instead of expanding it into a
+fragment-wide render model.
+
 For a Container, a freshly returned equal child is a reconciliation key. JaWS
 reuses the existing Element and its original UI value; it does not replace
 `elem.UI()` with the newly returned equal value. An unequal child removes the
@@ -177,8 +192,9 @@ untrusted text through escaping Getter/Stringer forms or escape it explicitly.
 ## Render shape and verification
 
 - Keep HTML structure in templates and state mutations out of getter/render
-  paths. Bind a repeated state read once per template execution when a fragment
-  needs an internally consistent view.
+  paths. When one direct getter result must remain consistent within a template
+  execution, assign that value to a local template variable. This is not a
+  reason to materialize the fragment as a render DTO or broad snapshot.
 - Use direct field-backed binders and simple helpers before introducing custom
   binder, tag, or component abstractions.
 - Test behavior with real JaWS Requests and Elements.
@@ -190,6 +206,6 @@ untrusted text through escaping Getter/Stringer forms or escape it explicitly.
 - Test pure domain transitions separately from JaWS transport.
 
 Before finishing, confirm the design does not introduce an application-owned UI
-tree, a full-document Template, pointer-wrapped definition values, mutable tag
-identity, duplicate JaWS IDs, direct locked-field assignment, or broad dirtying
-that masks dependency errors.
+tree, a full-document Template, screen-shaped render state, pointer-wrapped
+definition values, mutable tag identity, duplicate JaWS IDs, direct locked-field
+assignment, or broad dirtying that masks dependency errors.
