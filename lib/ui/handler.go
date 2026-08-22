@@ -90,6 +90,9 @@ func (sr *statusRecorder) WriteHeader(code int) {
 
 func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rq := h.NewRequest(w, r)
+	if handler, ok := h.dot.(jaws.ConnectHandler); ok {
+		rq.SetConnectFn(handler.JawsConnect)
+	}
 	sr := &statusRecorder{ResponseWriter: w}
 	rw := RequestWriter{Request: rq, Writer: sr}
 	// Build a fresh per-request pointer so the UI is comparable as a map key
@@ -123,8 +126,17 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // response.
 //
 // Handler renders without a generated wrapper and does not use dot as a tag.
-// Dot may be arbitrary template data. Handler reuses dot across requests; dot
-// and its callbacks must support concurrent execution.
+// Dot may be arbitrary template data. When dot implements [jaws.ConnectHandler],
+// Handler installs its JawsConnect method on each Request before executing the
+// page template. The page GET does not invoke JawsConnect. Only the top-level
+// dot's method set is considered, including promoted methods. Implementations
+// available only through non-promoted fields or nested [Template] dots are
+// ignored without a diagnostic.
+//
+// Handler reuses dot across requests, so dot and its callbacks must support
+// concurrent execution. The bundled client connects after parsing the document,
+// while a custom client can dial once flushed response bytes expose the request
+// key and overlap the initial page render.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }

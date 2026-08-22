@@ -6,14 +6,64 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/ui"
 )
+
+const exampleConnectionsHTML = `<html>
+<head>{{$.HeadHTML}}</head>
+<body>{{$.Span .Dot.Count}}{{$.TailHTML}}</body>
+</html>`
+
+type exampleConnections struct {
+	mu    sync.RWMutex
+	count int
+}
+
+// Count returns the accepted connection count as a direct field binding.
+func (state *exampleConnections) Count() bind.Binder[int] {
+	return bind.New(&state.mu, &state.count)
+}
+
+// JawsConnect records an accepted JaWS client connection.
+func (state *exampleConnections) JawsConnect(rq *jaws.Request) error {
+	state.mu.Lock()
+	state.count++
+	state.mu.Unlock()
+	rq.Dirty(&state.count)
+	return nil
+}
+
+var _ jaws.ConnectHandler = (*exampleConnections)(nil)
+
+func ExampleHandler_connectHandler() {
+	jw, err := jaws.New()
+	if err != nil {
+		panic(err)
+	}
+	defer jw.Close()
+	jw.Logger = slog.Default()
+
+	templates := template.Must(template.New("connections").Parse(exampleConnectionsHTML))
+	if err = jw.AddTemplateLookuper(templates); err != nil {
+		panic(err)
+	}
+
+	go jw.Serve()
+	mux := http.NewServeMux()
+	mux.Handle("GET /jaws/", jw)
+	mux.Handle("GET /", ui.Handler(jw, "connections", new(exampleConnections)))
+
+	_ = mux // serve mux with an HTTP server
+}
 
 type examplePathState struct {
 	Title string   `json:"title"`

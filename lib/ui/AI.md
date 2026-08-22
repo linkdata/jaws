@@ -85,6 +85,16 @@ should use Go's native template action:
 {{template "partial" .Dot}}
 ```
 
+After creating each Request, `ui.Handler` checks the top-level Dot's method set,
+including promoted methods, for `jaws.ConnectHandler` and installs `JawsConnect`
+before page template execution. A plain GET only installs the callback; the
+accepted WebSocket invokes it with the `jaws.ConnectFn` lifecycle. An
+implementation available only on a nested Template Dot is ignored without a
+diagnostic. Handler reuses its Dot across Requests, so its state and callbacks
+must support concurrent execution. The bundled client connects after parsing
+the document, while a custom client can dial once flushed response bytes expose
+the request key and overlap initial rendering.
+
 The Template's Dot contributes both identity and tags. It must be nil or
 comparable at runtime, equal to itself, and usable under `tag.TagExpand`.
 Implementing `JawsGetTag` does not repair a non-comparable Dot because tag
@@ -158,9 +168,14 @@ Dirty only the output that actually changed.
 
 The bundled client forwards input, click, and context-menu events only while its
 WebSocket is open and does not replay earlier interaction. When early input
-matters, render controls disabled or make the region inert. Use a Request
-`ConnectFn` to update a request-local readiness value and dirty its tag or the
-exact Element whose updater removes the gate.
+matters, render controls disabled or make the region inert. In a custom page
+handler, install a Request `ConnectFn` that updates synchronized request-local
+readiness and dirties the request-specific readiness tag registered by the
+gate, or the exact Element whose updater removes it. A reused `ui.Handler`
+shares its Dot across Requests. Its `ConnectHandler` can validate the callback
+Request or update synchronized shared state, but a scalar Dot field cannot serve
+as a request-local readiness gate. Ordinary tag dirtying updates matching
+Elements on every live Request.
 
 Native form reset is unsupported for managed inputs and Select. A reset button
 or `form.reset()` changes browser state without the per-control events JaWS
