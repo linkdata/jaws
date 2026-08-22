@@ -16,9 +16,7 @@ import (
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
 	defer jw.mu.RUnlock()
-	for _, pending := range jw.pending {
-		n += len(pending)
-	}
+	n = jw.pendingRequestCountLocked()
 	return
 }
 
@@ -202,5 +200,6 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			delete(jw.sessions, k)
 		}
 	}
+	jw.updateStatusLocked()
 	jw.mu.Unlock()
 }

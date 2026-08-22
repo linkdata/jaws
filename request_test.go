@@ -1823,6 +1823,9 @@ func TestRequest_Log(t *testing.T) {
 	if loggedErr := logger.next(t); !errors.Is(loggedErr, wantErr) {
 		t.Fatalf("Request.Log() logged %v, want %v", loggedErr, wantErr)
 	}
+	if got := jw.ErrorCount(); got != 1 {
+		t.Fatalf("ErrorCount() = %d, want 1", got)
+	}
 }
 
 // TestRequest_MustLog covers the nil-receiver forwarding that exists purely for
@@ -1843,19 +1846,34 @@ func TestRequest_MustLog(t *testing.T) {
 	if loggedErr := logger.next(t); !errors.Is(loggedErr, wantErr) {
 		t.Fatalf("Request.MustLog() logged %v, want %v", loggedErr, wantErr)
 	}
+	if got := jw.ErrorCount(); got != 1 {
+		t.Fatalf("ErrorCount() = %d, want 1", got)
+	}
 
 	// A nil error is a no-op even without a Logger.
 	(*Request)(nil).MustLog(nil)
 
 	// Without a Logger it panics, including through a nil *Request.
-	func() {
-		defer func() {
-			if recover() == nil {
-				t.Error("Request.MustLog with no Logger must panic")
-			}
-		}()
-		(&Request{Jaws: &Jaws{}}).MustLog(wantErr)
-	}()
+	missingLogger := new(Jaws)
+	for _, tt := range []struct {
+		name string
+		rq   *Request
+	}{
+		{"missing Logger", &Request{Jaws: missingLogger}},
+		{"nil Request", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("MustLog must panic")
+				}
+			}()
+			tt.rq.MustLog(wantErr)
+		})
+	}
+	if got := missingLogger.ErrorCount(); got != 1 {
+		t.Errorf("ErrorCount() = %d, want 1", got)
+	}
 }
 
 func TestRequest_Dirty(t *testing.T) {

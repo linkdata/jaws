@@ -154,9 +154,14 @@ func TestMustLog_PanicsWithoutLogger(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
+	_ = jw.Log(nil)
+	jw.MustLog(nil)
 	defer func() {
 		if recover() == nil {
 			t.Error("MustLog with no Logger must panic")
+		}
+		if got := jw.ErrorCount(); got != 1 {
+			t.Errorf("ErrorCount() = %d, want 1", got)
 		}
 	}()
 	jw.MustLog(errors.New("boom"))
