@@ -152,10 +152,7 @@ func (jw *Jaws) statusTagForMetric(metric uint32) (tag *statusTag) {
 
 // markStatusDirty records coalescible changes for the next maintenance pass.
 func (jw *Jaws) markStatusDirty(metrics uint32) {
-	metrics &= StatusMetricAll
-	if metrics != 0 {
-		jw.statusDirty.Or(metrics)
-	}
+	jw.statusDirty.Or(metrics)
 }
 
 func (jw *Jaws) updateStatusLocked() {

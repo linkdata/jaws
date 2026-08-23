@@ -108,6 +108,7 @@ type Jaws struct {
 	// WebSocket upgrades are rejected. Defaults to false; enable only behind a
 	// single reverse proxy you control.
 	TrustForwardedHeaders bool
+	statusTags            statusTags
 	Logger                Logger     // Optional logger; [Jaws.Log] dispatches Error calls asynchronously and serially
 	Debug                 bool       // Enables debug HTML and reporting of otherwise-silent WebSocket transport errors. Call GenerateHeadHTML after changing it.
 	MakeAuth              MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
@@ -122,11 +123,10 @@ type Jaws struct {
 	//
 	// While [Jaws.Serve] or [Jaws.ServeWithTimeout] is running, maintenance
 	// drains coalesced status changes. It dirties a selected metric's tag when the
-	// metric is newly selected or after its count changes. On the next maintenance
-	// pass after a successful WebSocket acceptance, it also dirties the selected
-	// active-Request, pending-Request, and active-Session tags. A tag may be dirtied
-	// even when its count has returned to its prior value. Changes coalesce to one
-	// dirty mark per tag per pass.
+	// metric is newly selected or after its count changes. A successful WebSocket
+	// acceptance also dirties the selected active-Request, pending-Request, and
+	// active-Session tags. A tag may be dirtied when its count is unchanged. Changes
+	// coalesce to one dirty mark per tag per pass.
 	//
 	// Use [atomic.Uint32.Store], [atomic.Uint32.Or], or [atomic.Uint32.And] with
 	// [StatusMetricAll] or individual status metric flags. Only bits in
@@ -147,7 +147,6 @@ type Jaws struct {
 	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	created                 time.Time     // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
 	runtimeSeconds          atomic.Int32  // whole seconds since created; refreshed during request allocation and by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
-	enabledStatusMetrics    uint32        // last maintenance selection; protected by mu
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
@@ -162,8 +161,8 @@ type Jaws struct {
 	requestBufferPool       sync.Pool    // reusable *requestBuffers; Requests themselves are never pooled or reused
 	serveJS                 *staticserve.StaticServe
 	serveCSS                *staticserve.StaticServe
-	statusTags              statusTags
-	mu                      deadlock.RWMutex // protects enabledStatusMetrics and fields from headPrefix through dirtOrder
+	mu                      deadlock.RWMutex // protects following
+	enabledStatusMetrics    uint32           // last maintenance selection
 	headPrefix              string
 	faviconURL              string
 	cspHeader               string

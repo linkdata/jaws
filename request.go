@@ -305,10 +305,9 @@ func (rq *Request) claim(r *http.Request) error {
 	return ErrRequestAlreadyClaimed
 }
 
-// killSessionLocked detaches the Request from its Session, if any. wasClaimed tells
-// [Session.delRequest] whether to grant the claimed-WebSocket grace window; the
-// caller must capture it from the lifecycle state before the finish transition, since
-// the state is not consulted here. Caller must hold rq.mu.
+// killSessionLocked detaches the Request from its Session, if any. wasClaimed
+// controls whether [Session.delRequest] grants a disconnect grace window.
+// The caller must hold rq.mu and capture wasClaimed before a finish transition.
 func (rq *Request) killSessionLocked(wasClaimed bool) {
 	if rq.session != nil {
 		wasRunning := rq.loadState() == reqRunning
@@ -1263,7 +1262,8 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ws *websocket.Conn
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
-			// Record acceptance before the application callback runs.
+			// Successful acceptance is an invalidation boundary for connection-related
+			// status tags. Mark it before the application callback runs.
 			rq.Jaws.markStatusDirty(StatusMetricActiveRequests | StatusMetricPendingRequests | StatusMetricActiveSessions)
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.runWebSocket(ws, idleInterval, wsTimeout); err != nil {
