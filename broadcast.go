@@ -94,6 +94,16 @@ func (jw *Jaws) dropNonComparableTags(tags []any) []any {
 	return tags
 }
 
+func (jw *Jaws) addDirtLocked(tagValue any) {
+	jw.dirtOrder++
+	jw.dirty[tagValue] = jw.dirtOrder
+}
+
+func (jw *Jaws) clearDirtLocked() {
+	clear(jw.dirty)
+	jw.dirtOrder = 0
+}
+
 // setDirty records already-expanded selectors for the next dirty pass.
 func (jw *Jaws) setDirty(tags []any) {
 	jw.mu.Lock()
@@ -101,8 +111,7 @@ func (jw *Jaws) setDirty(tags []any) {
 	// defense-in-depth if an internal caller violates that invariant.
 	defer jw.mu.Unlock()
 	for _, tagValue := range tags {
-		jw.dirtOrder++
-		jw.dirty[tagValue] = jw.dirtOrder
+		jw.addDirtLocked(tagValue)
 	}
 }
 
@@ -156,8 +165,7 @@ func (jw *Jaws) distributeDirt() int {
 	jw.mu.Lock()
 	if len(jw.dirty) > 0 {
 		dirt = sortedDirtTags(jw.dirty)
-		clear(jw.dirty)
-		jw.dirtOrder = 0
+		jw.clearDirtLocked()
 		reqs = make([]*Request, 0, jw.requestCount)
 		for _, rq := range jw.requests {
 			if rq != nil {

@@ -195,8 +195,7 @@ func (jw *Jaws) updateStatusLocked() {
 		if enabled&metric != 0 {
 			tag, value, previous := jw.statusMetricLocked(metric)
 			if forceDirty&metric != 0 || value != *previous {
-				jw.dirtOrder++
-				jw.dirty[tag] = jw.dirtOrder
+				jw.addDirtLocked(tag)
 			}
 			*previous = value
 		}

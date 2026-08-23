@@ -56,8 +56,7 @@ func requireDirtyTags(t *testing.T, jw *Jaws, want ...any) {
 	for tagValue := range jw.dirty {
 		got[tagValue] = struct{}{}
 	}
-	clear(jw.dirty)
-	jw.dirtOrder = 0
+	jw.clearDirtLocked()
 	jw.mu.Unlock()
 	if len(got) != len(want) {
 		t.Fatalf("dirty tags = %v, want %v", got, want)

@@ -2319,12 +2319,11 @@ func TestJaws_distributeDirt_AscendingOrder(t *testing.T) {
 	jw.mu.Lock()
 	jw.requests[1] = rq
 	jw.requestCount++
-	jw.dirty[tag.Tag("fourth")] = 4
-	jw.dirty[tag.Tag("second")] = 2
-	jw.dirty[tag.Tag("fifth")] = 5
-	jw.dirty[tag.Tag("first")] = 1
-	jw.dirty[tag.Tag("third")] = 3
-	jw.dirtOrder = 5
+	jw.addDirtLocked(tag.Tag("first"))
+	jw.addDirtLocked(tag.Tag("second"))
+	jw.addDirtLocked(tag.Tag("third"))
+	jw.addDirtLocked(tag.Tag("fourth"))
+	jw.addDirtLocked(tag.Tag("fifth"))
 	jw.mu.Unlock()
 
 	if got, want := jw.distributeDirt(), 5; got != want {
