@@ -65,7 +65,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	maintenanceInterval = max(maintenanceInterval, minInterval)
 
 	subs := map[chan wire.Message]*Request{}
-	t := time.NewTicker(maintenanceInterval)
+	t := jw.newMaintenanceTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
 	jw.maintenanceInterval = maintenanceInterval

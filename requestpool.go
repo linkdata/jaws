@@ -90,6 +90,7 @@ func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 					jw.requests[jawsKey] = rq
 					jw.requestCount++
 					jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+					jw.registeredRequestGen++
 				}
 			}
 		}

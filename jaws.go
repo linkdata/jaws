@@ -120,9 +120,12 @@ type Jaws struct {
 	BaseContext context.Context
 	// StatusMetrics selects status metrics for tag updates.
 	//
-	// While [Jaws.Serve] or [Jaws.ServeWithTimeout] is running, each maintenance
-	// pass samples selected metrics and dirties each newly selected or changed
-	// metric's tag. Changes between samples are coalesced.
+	// While [Jaws.Serve] or [Jaws.ServeWithTimeout] is running, maintenance
+	// samples selected metrics. It dirties a metric's tag when the metric is newly
+	// selected or its sampled count changes. See [Jaws.ActiveRequestCountTag],
+	// [Jaws.PendingRequestCountTag], and [Jaws.ActiveSessionCountTag] for conditions
+	// that also dirty those tags at the next sample, even when the sampled count is
+	// unchanged. Other changes between samples are coalesced.
 	//
 	// Use [atomic.Uint32.Store], [atomic.Uint32.Or], or [atomic.Uint32.And] with
 	// [StatusMetricAll] or individual status metric flags. Only bits in
@@ -147,6 +150,7 @@ type Jaws struct {
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
+	newMaintenanceTicker    func(time.Duration) *time.Ticker // lifecycle-test seam read at ServeWithTimeout start
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
 	reportedErrors          atomic.Uint64
@@ -170,6 +174,8 @@ type Jaws struct {
 	sessions                map[key.Key]*Session
 	dirty                   map[any]int
 	dirtOrder               int
+	registeredRequestGen    uint64
+	acceptedWebSocketGen    uint64
 	statusSample            statusSample
 }
 
@@ -196,6 +202,7 @@ func New() (jw *Jaws, err error) {
 				bcastCh:                 make(chan wire.Message, 1),
 				subCh:                   make(chan subscription),
 				unsubCh:                 make(chan chan wire.Message),
+				newMaintenanceTicker:    time.NewTicker,
 				updateTicker:            time.NewTicker(DefaultUpdateInterval),
 				kg:                      bufio.NewReader(rand.Reader),
 				requests:                make(map[key.Key]*Request),

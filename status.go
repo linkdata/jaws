@@ -33,19 +33,22 @@ type statusTags struct {
 }
 
 type statusSample struct {
-	enabled         uint32
-	activeRequests  uint64
-	pendingRequests uint64
-	sessions        uint64
-	activeSessions  uint64
-	errors          uint64
+	enabled              uint32
+	activeRequests       uint64
+	pendingRequests      uint64
+	sessions             uint64
+	activeSessions       uint64
+	errors               uint64
+	registeredRequestGen uint64
+	acceptedWebSocketGen uint64
 }
 
 // ActiveRequestCountTag returns this instance's active-Request count tag.
 //
 // Use it with the active result from [Jaws.RequestCounts]. The tag is stable for
 // the Jaws lifetime and unique to this instance and metric. Select
-// [StatusMetricActiveRequests] to have maintenance dirty it when the count changes.
+// [StatusMetricActiveRequests] to have maintenance dirty it when its sampled
+// count changes and at the next sample after a WebSocket connection is accepted.
 func (jw *Jaws) ActiveRequestCountTag() any {
 	return &jw.statusTags.activeRequests
 }
@@ -54,7 +57,8 @@ func (jw *Jaws) ActiveRequestCountTag() any {
 //
 // Use it with [Jaws.Pending]. The tag is stable for the Jaws lifetime and unique
 // to this instance and metric. Select [StatusMetricPendingRequests] to have
-// maintenance dirty it when the count changes.
+// maintenance dirty it when its sampled count changes and at the next sample
+// after a Request is registered or a WebSocket connection is accepted.
 func (jw *Jaws) PendingRequestCountTag() any {
 	return &jw.statusTags.pendingRequests
 }
@@ -85,7 +89,8 @@ func (jw *Jaws) ActiveSessionCount() (n int) {
 //
 // Use it with [Jaws.ActiveSessionCount]. The tag is stable for the Jaws lifetime
 // and unique to this instance and metric. Select [StatusMetricActiveSessions] to
-// have maintenance dirty it when the count changes.
+// have maintenance dirty it when its sampled count changes and at the next sample
+// after a WebSocket connection is accepted.
 func (jw *Jaws) ActiveSessionCountTag() any {
 	return &jw.statusTags.activeSessions
 }
@@ -178,11 +183,18 @@ func (jw *Jaws) updateStatusLocked() {
 		jw.statusSample.enabled = 0
 		return
 	}
-	newlyEnabled := enabled &^ jw.statusSample.enabled
+	forceDirty := enabled &^ jw.statusSample.enabled
+	// Lifecycle generations detect changes that return a gauge to its previous sample.
+	if jw.registeredRequestGen != jw.statusSample.registeredRequestGen {
+		forceDirty |= StatusMetricPendingRequests
+	}
+	if jw.acceptedWebSocketGen != jw.statusSample.acceptedWebSocketGen {
+		forceDirty |= StatusMetricActiveRequests | StatusMetricPendingRequests | StatusMetricActiveSessions
+	}
 	for metric := StatusMetricActiveRequests; metric != 0 && metric <= StatusMetricAll; metric <<= 1 {
 		if enabled&metric != 0 {
 			tag, value, previous := jw.statusMetricLocked(metric)
-			if newlyEnabled&metric != 0 || value != *previous {
+			if forceDirty&metric != 0 || value != *previous {
 				jw.dirtOrder++
 				jw.dirty[tag] = jw.dirtOrder
 			}
@@ -190,4 +202,6 @@ func (jw *Jaws) updateStatusLocked() {
 		}
 	}
 	jw.statusSample.enabled = enabled
+	jw.statusSample.registeredRequestGen = jw.registeredRequestGen
+	jw.statusSample.acceptedWebSocketGen = jw.acceptedWebSocketGen
 }

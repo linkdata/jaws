@@ -2,13 +2,19 @@ package jaws
 
 import (
 	"errors"
+	"fmt"
+	"html/template"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/jaws/lib/wire"
 )
 
 func newStatusTestJaws(t *testing.T, configure func(*Jaws)) *Jaws {
@@ -17,9 +23,14 @@ func newStatusTestJaws(t *testing.T, configure func(*Jaws)) *Jaws {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// These tests drive maintenance explicitly and inspect its dirt, so prevent
-	// the independent browser-update ticker from draining that dirt.
+	// These tests drive maintenance and dirty distribution explicitly. Their real
+	// loopback WebSockets keep them outside testing/synctest.
 	jw.updateTicker.Stop()
+	jw.newMaintenanceTicker = func(time.Duration) *time.Ticker {
+		ticker := time.NewTicker(time.Hour)
+		ticker.Stop()
+		return ticker
+	}
 	configure(jw)
 	serveDone := make(chan struct{})
 	go func() {
@@ -79,6 +90,350 @@ func dialJawsRequest(t *testing.T, serverURL string, rq *Request) *websocket.Con
 		t.Fatalf("dialing %s: status=%d err=%v", requestURL, status, err)
 	}
 	return conn
+}
+
+func awaitStatusValue[T any](t *testing.T, ch <-chan T, description string) (value T) {
+	t.Helper()
+	select {
+	case value = <-ch:
+	case <-time.After(testTimeout):
+		t.Fatalf("timeout waiting for %s", description)
+	}
+	return
+}
+
+func dialConnectedStatusRequest(t *testing.T, serverURL string, rq *Request, description string) (conn *websocket.Conn) {
+	t.Helper()
+	connected := make(chan struct{})
+	rq.SetConnectFn(func(*Request) error {
+		close(connected)
+		return nil
+	})
+	conn = dialJawsRequest(t, serverURL, rq)
+	awaitStatusValue(t, connected, description)
+	return
+}
+
+func closeStatusWebSocket(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	if err := conn.CloseNow(); err != nil {
+		t.Error(err)
+	}
+}
+
+func statusGenerations(jw *Jaws) (registered, accepted uint64) {
+	jw.mu.RLock()
+	registered = jw.registeredRequestGen
+	accepted = jw.acceptedWebSocketGen
+	jw.mu.RUnlock()
+	return
+}
+
+func requireStatusGenerations(t *testing.T, jw *Jaws, registered, accepted uint64) {
+	t.Helper()
+	gotRegistered, gotAccepted := statusGenerations(jw)
+	if gotRegistered != registered || gotAccepted != accepted {
+		t.Fatalf("status generations = (%d, %d), want (%d, %d)", gotRegistered, gotAccepted, registered, accepted)
+	}
+}
+
+func renderStatusCount(t *testing.T, rq *Request, tagValue any, getter func() int) (values <-chan int) {
+	t.Helper()
+	valueCh := make(chan int, 2)
+	statusUI := &testUi{
+		renderFn: func(elem *Element, w io.Writer, _ []any) (err error) {
+			elem.Tag(tagValue)
+			value := getter()
+			valueCh <- value
+			_, err = fmt.Fprintf(w, `<span id="%s">%d</span>`, elem.Jid(), value)
+			return
+		},
+		updateFn: func(elem *Element) {
+			value := getter()
+			innerHTML := template.HTML(strconv.Itoa(value)) // #nosec G203 -- a decimal integer contains no HTML syntax.
+			elem.SetInner(innerHTML)
+			valueCh <- value
+		},
+	}
+	if err := rq.Writer(io.Discard).UI(statusUI); err != nil {
+		t.Fatal(err)
+	}
+	values = valueCh
+	return
+}
+
+func dispatchStatusDirt(t *testing.T, jw *Jaws, want int) {
+	t.Helper()
+	if got := jw.distributeDirt(); got != want {
+		t.Fatalf("distributed status tags = %d, want %d", got, want)
+	}
+	jw.Broadcast(wire.Message{What: what.Update})
+}
+
+func requireStatusCount(t *testing.T, values <-chan int, want int) {
+	t.Helper()
+	if got := awaitStatusValue(t, values, fmt.Sprintf("status count %d", want)); got != want {
+		t.Fatalf("rendered status count = %d, want %d", got, want)
+	}
+}
+
+func newStatusHTTPRequest(serverURL, path string) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, serverURL+path, nil)
+	r.RemoteAddr = "127.0.0.1:1"
+	return r
+}
+
+func TestJaws_StatusMetricGenerations(t *testing.T) {
+	jw := newStatusTestJaws(t, func(*Jaws) {})
+	server := httptest.NewServer(jw)
+	defer server.Close()
+	requireStatusGenerations(t, jw, 0, 0)
+
+	for _, path := range []string{"/jaws/.ping", "/jaws/.tail/not-a-key", jw.serveJS.Name, jw.serveCSS.Name} {
+		jw.ServeHTTP(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, path))
+		requireStatusGenerations(t, jw, 0, 0)
+	}
+
+	claimInitial := newStatusHTTPRequest(server.URL, "/claim")
+	claim := jw.NewRequest(httptest.NewRecorder(), claimInitial)
+	requireStatusGenerations(t, jw, 1, 0)
+	if got := jw.UseRequest(claim.JawsKey, claimInitial); got != claim {
+		t.Fatalf("UseRequest() = %p, want %p", got, claim)
+	}
+	requireStatusGenerations(t, jw, 1, 0)
+	claim.ServeHTTP(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/jaws/"+claim.JawsKeyString()+"/noscript"))
+	requireStatusGenerations(t, jw, 1, 0)
+
+	rejected := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/rejected"))
+	requireStatusGenerations(t, jw, 2, 0)
+	rejectedHeader := http.Header{}
+	rejectedHeader.Set("Origin", "https://evil.invalid")
+	rejectedConn, rejectedResponse, err := websocket.Dial(t.Context(), server.URL+"/jaws/"+rejected.JawsKeyString(), &websocket.DialOptions{HTTPHeader: rejectedHeader})
+	if rejectedConn != nil {
+		closeStatusWebSocket(t, rejectedConn)
+		t.Fatal("wrong-origin WebSocket was accepted")
+	}
+	if err == nil || rejectedResponse == nil || rejectedResponse.StatusCode != http.StatusForbidden {
+		t.Fatalf("wrong-origin dial response = %v, err = %v", rejectedResponse, err)
+	}
+	if rejectedResponse.Body != nil {
+		if closeErr := rejectedResponse.Body.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}
+	requireStatusGenerations(t, jw, 2, 0)
+
+	failed := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/failed"))
+	requireStatusGenerations(t, jw, 3, 0)
+	failedRequest, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/jaws/"+failed.JawsKeyString(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failedRequest.Header.Set("Connection", "Upgrade")
+	failedRequest.Header.Set("Upgrade", "websocket")
+	failedRequest.Header.Set("Origin", server.URL)
+	failedRequest.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	failedRequest.Header.Set("Sec-WebSocket-Version", "12")
+	failedResponse, err := server.Client().Do(failedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failedResponse.StatusCode != http.StatusBadRequest {
+		t.Errorf("failed-upgrade status = %d, want %d", failedResponse.StatusCode, http.StatusBadRequest)
+	}
+	if err = failedResponse.Body.Close(); err != nil {
+		t.Error(err)
+	}
+	requireStatusGenerations(t, jw, 3, 0)
+
+	connectErr := errors.New("connect rejected")
+	accepted := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/accepted"))
+	requireStatusGenerations(t, jw, 4, 0)
+	acceptedAtConnect := make(chan uint64, 1)
+	accepted.SetConnectFn(func(*Request) error {
+		_, generation := statusGenerations(jw)
+		acceptedAtConnect <- generation
+		return connectErr
+	})
+	acceptedConn := dialJawsRequest(t, server.URL, accepted)
+	if generation := awaitStatusValue(t, acceptedAtConnect, "accepted WebSocket"); generation != 1 {
+		t.Fatalf("accepted WebSocket generation in ConnectFn = %d, want 1", generation)
+	}
+	requireStatusGenerations(t, jw, 4, 1)
+	closeStatusWebSocket(t, acceptedConn)
+	waitForRequestCount(t, jw, 0, testTimeout)
+	requireStatusGenerations(t, jw, 4, 1)
+
+	jw.Close()
+	closedRequest := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/closed"))
+	if closedRequest.Context().Err() == nil {
+		t.Fatal("NewRequest after Close has a live context")
+	}
+	requireStatusGenerations(t, jw, 4, 1)
+}
+
+func TestJaws_ActiveCountTagsConvergeAfterBetweenSampleReconnect(t *testing.T) {
+	jw := newStatusTestJaws(t, func(jw *Jaws) {
+		jw.StatusMetrics.Store(StatusMetricActiveRequests | StatusMetricActiveSessions)
+	})
+	server := httptest.NewServer(jw)
+	defer server.Close()
+
+	sess := jw.NewSession(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/session"))
+	if sess == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	oldInitial := newStatusHTTPRequest(server.URL, "/old")
+	oldInitial.AddCookie(sess.Cookie())
+	old := jw.NewRequest(httptest.NewRecorder(), oldInitial)
+	oldConn := dialConnectedStatusRequest(t, server.URL, old, "old WebSocket")
+	jw.maintenance(time.Hour)
+	requireDirtyTags(t, jw, jw.ActiveRequestCountTag(), jw.ActiveSessionCountTag())
+
+	closeStatusWebSocket(t, oldConn)
+	waitForRequestCount(t, jw, 0, testTimeout)
+	if got := jw.ActiveSessionCount(); got != 0 {
+		t.Fatalf("ActiveSessionCount() = %d, want 0", got)
+	}
+
+	replacementInitial := newStatusHTTPRequest(server.URL, "/replacement")
+	replacementInitial.AddCookie(sess.Cookie())
+	replacement := jw.NewRequest(httptest.NewRecorder(), replacementInitial)
+	_, active := jw.RequestCounts()
+	if active != 0 {
+		t.Fatalf("active Request count = %d, want 0", active)
+	}
+	requestValues := renderStatusCount(t, replacement, jw.ActiveRequestCountTag(), func() int {
+		_, active := jw.RequestCounts()
+		return active
+	})
+	sessionValues := renderStatusCount(t, replacement, jw.ActiveSessionCountTag(), jw.ActiveSessionCount)
+	requireStatusCount(t, requestValues, 0)
+	requireStatusCount(t, sessionValues, 0)
+
+	replacementConn := dialConnectedStatusRequest(t, server.URL, replacement, "replacement WebSocket")
+	defer closeStatusWebSocket(t, replacementConn)
+	_, active = jw.RequestCounts()
+	if active != 1 {
+		t.Fatalf("active Request count = %d, want 1", active)
+	}
+	if got := jw.ActiveSessionCount(); got != 1 {
+		t.Fatalf("ActiveSessionCount() = %d, want 1", got)
+	}
+
+	jw.maintenance(time.Hour)
+	dispatchStatusDirt(t, jw, 2)
+	requireStatusCount(t, requestValues, 1)
+	requireStatusCount(t, sessionValues, 1)
+}
+
+func TestJaws_PendingRequestCountTagConvergesAfterBetweenSampleLifecycle(t *testing.T) {
+	jw := newStatusTestJaws(t, func(jw *Jaws) {
+		jw.StatusMetrics.Store(StatusMetricPendingRequests)
+	})
+	server := httptest.NewServer(jw)
+	defer server.Close()
+
+	observer := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/observer"))
+	observerConn := dialConnectedStatusRequest(t, server.URL, observer, "observer WebSocket")
+	defer closeStatusWebSocket(t, observerConn)
+	jw.maintenance(time.Hour)
+	requireDirtyTags(t, jw, jw.PendingRequestCountTag())
+
+	target := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/target"))
+	// A custom client may connect while the initial HTTP renderer continues. Render
+	// the status Element through that supported overlap while target is pending.
+	pendingValues := renderStatusCount(t, observer, jw.PendingRequestCountTag(), jw.Pending)
+	requireStatusCount(t, pendingValues, 1)
+
+	response, err := server.Client().Get(server.URL + "/jaws/" + target.JawsKeyString() + "/noscript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusNoContent {
+		t.Errorf("noscript status = %d, want %d", response.StatusCode, http.StatusNoContent)
+	}
+	if err = response.Body.Close(); err != nil {
+		t.Error(err)
+	}
+	if got := jw.Pending(); got != 0 {
+		t.Fatalf("Pending() = %d, want 0", got)
+	}
+
+	jw.maintenance(time.Hour)
+	dispatchStatusDirt(t, jw, 1)
+	requireStatusCount(t, pendingValues, 0)
+}
+
+func TestJaws_PendingRequestCountTagInvalidatedAfterAcceptedWebSocket(t *testing.T) {
+	jw := newStatusTestJaws(t, func(jw *Jaws) {
+		jw.StatusMetrics.Store(StatusMetricPendingRequests)
+	})
+	claimedCh := make(chan *Request, 1)
+	releaseCh := make(chan struct{})
+	var target *Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rq := jw.UseRequest(target.JawsKey, r)
+		claimedCh <- rq
+		<-releaseCh
+		if rq == nil {
+			http.NotFound(w, r)
+			return
+		}
+		rq.ServeHTTP(w, r)
+	}))
+	released := false
+	defer func() {
+		if !released {
+			close(releaseCh)
+		}
+		server.Close()
+	}()
+
+	target = jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/target"))
+	connectedCh := make(chan struct{})
+	target.SetConnectFn(func(*Request) error {
+		close(connectedCh)
+		return nil
+	})
+	type dialResult struct {
+		conn     *websocket.Conn
+		response *http.Response
+		err      error
+	}
+	dialCh := make(chan dialResult, 1)
+	go func() {
+		header := http.Header{}
+		header.Set("Origin", server.URL)
+		conn, response, err := websocket.Dial(t.Context(), server.URL+"/jaws/"+target.JawsKeyString(), &websocket.DialOptions{HTTPHeader: header})
+		dialCh <- dialResult{conn: conn, response: response, err: err}
+	}()
+
+	if claimed := awaitStatusValue(t, claimedCh, "Request claim"); claimed != target {
+		t.Fatalf("UseRequest() = %p, want %p", claimed, target)
+	}
+	if got := jw.Pending(); got != 0 {
+		t.Fatalf("Pending() after claim = %d, want 0", got)
+	}
+	jw.maintenance(time.Hour)
+	requireDirtyTags(t, jw, jw.PendingRequestCountTag())
+
+	close(releaseCh)
+	released = true
+	result := awaitStatusValue(t, dialCh, "WebSocket acceptance")
+	if result.err != nil {
+		if result.response != nil && result.response.Body != nil {
+			if closeErr := result.response.Body.Close(); closeErr != nil {
+				t.Error(closeErr)
+			}
+		}
+		t.Fatal(result.err)
+	}
+	defer closeStatusWebSocket(t, result.conn)
+	awaitStatusValue(t, connectedCh, "accepted WebSocket")
+
+	jw.maintenance(time.Hour)
+	requireDirtyTags(t, jw, jw.PendingRequestCountTag())
 }
 
 func TestJaws_StatusMetrics(t *testing.T) {

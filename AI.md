@@ -191,8 +191,11 @@ instance and metric. Attach it to the Element that renders the matching count.
 
 While `Serve` or `ServeWithTimeout` is running, maintenance samples selected
 metrics after Request and Session cleanup. It dirties each tag on the first sample
-after selection and whenever its sampled count changes; intermediate changes may
-coalesce.
+after selection and whenever its sampled count changes. The next sample after an
+accepted WebSocket connection also dirties selected active-Request, pending-Request,
+and active-Session tags; the next sample after Request registration also dirties the
+selected pending-Request tag. This applies even when the current count equals the
+previous sample. Other intermediate changes may coalesce.
 
 Active Requests are Requests whose `ServeHTTP` loops are running, so tabs count
 separately. Active Sessions are distinct registered Sessions attached to at least

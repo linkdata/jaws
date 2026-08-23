@@ -1248,6 +1248,10 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ws *websocket.Conn
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
+			// Record acceptance before the application callback runs.
+			rq.Jaws.mu.Lock()
+			rq.Jaws.acceptedWebSocketGen++
+			rq.Jaws.mu.Unlock()
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.runWebSocket(ws, idleInterval, wsTimeout); err != nil {
 				// A ConnectFn failure is terminal. Cancel before touching the socket so
