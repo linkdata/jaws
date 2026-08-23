@@ -65,7 +65,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	maintenanceInterval = max(maintenanceInterval, minInterval)
 
 	subs := map[chan wire.Message]*Request{}
-	t := time.NewTicker(maintenanceInterval)
+	t := jw.newMaintenanceTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
 	jw.maintenanceInterval = maintenanceInterval
@@ -195,9 +195,9 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
-	for k, sess := range jw.sessions {
+	for _, sess := range jw.sessions {
 		if sess.isDead() {
-			delete(jw.sessions, k)
+			jw.deleteSessionIfCurrentLocked(sess)
 		}
 	}
 	jw.updateStatusLocked()

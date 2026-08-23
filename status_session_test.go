@@ -128,7 +128,7 @@ func TestJaws_ActiveSessionCount(t *testing.T) {
 	waitTestRequestReady(t, secondTab)
 	requireSessionCounts(t, jw, 2, 1)
 	jw.maintenance(time.Hour)
-	requireDirtyTags(t, jw)
+	requireDirtyTags(t, jw, jw.ActiveSessionCountTag())
 
 	thirdTab := NewTestRequest(jw, newSessionTestRequest(secondSession, "/third-tab"))
 	if thirdTab == nil {
@@ -143,7 +143,7 @@ func TestJaws_ActiveSessionCount(t *testing.T) {
 	stopTestRequest(t, firstTab)
 	requireSessionCounts(t, jw, 2, 2)
 	jw.maintenance(time.Hour)
-	requireDirtyTags(t, jw)
+	requireDirtyTags(t, jw, jw.ActiveSessionCountTag())
 
 	stopTestRequest(t, secondTab)
 	requireSessionCounts(t, jw, 2, 1)

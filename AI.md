@@ -184,15 +184,10 @@ using them.
 
 ### Status metrics
 
-Status-tag updates are opt-in. `Store`, `Or`, or `And` status metric flags in
-`Jaws.StatusMetrics`; its default zero value disables sampling and tag updates.
-Each status-tag accessor returns a stable, comparable tag unique to that Jaws
-instance and metric. Attach it to the Element that renders the matching count.
-
-While `Serve` or `ServeWithTimeout` is running, maintenance samples selected
-metrics after Request and Session cleanup. It dirties each tag on the first sample
-after selection and whenever its sampled count changes; intermediate changes may
-coalesce.
+Status-tag updates are opt-in through `Jaws.StatusMetrics`, which defines their
+selection and delivery timing. Each status-tag accessor returns a stable,
+comparable tag unique to that Jaws instance and metric. Attach it to the Element
+that renders the matching count.
 
 Active Requests are Requests whose `ServeHTTP` loops are running, so tabs count
 separately. Active Sessions are distinct registered Sessions attached to at least

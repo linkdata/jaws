@@ -181,6 +181,9 @@ func (rq *Request) finishLocked() {
 	}
 	rq.killSessionLocked(prev.claimed())
 	rq.storeState(reqFinished)
+	if prev == reqRunning {
+		rq.Jaws.markStatusDirty(StatusMetricActiveRequests)
+	}
 }
 
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
@@ -302,14 +305,17 @@ func (rq *Request) claim(r *http.Request) error {
 	return ErrRequestAlreadyClaimed
 }
 
-// killSessionLocked detaches the Request from its Session, if any. wasClaimed tells
-// [Session.delRequest] whether to grant the claimed-WebSocket grace window; the
-// caller must capture it from the lifecycle state before the finish transition, since
-// the state is not consulted here. Caller must hold rq.mu.
+// killSessionLocked detaches the Request from its Session, if any. wasClaimed
+// controls whether [Session.delRequest] grants a disconnect grace window.
+// The caller must hold rq.mu and capture wasClaimed before a finish transition.
 func (rq *Request) killSessionLocked(wasClaimed bool) {
 	if rq.session != nil {
+		wasRunning := rq.loadState() == reqRunning
 		rq.session.delRequest(rq, wasClaimed)
 		rq.session = nil
+		if wasRunning {
+			rq.Jaws.markStatusDirty(StatusMetricActiveSessions)
+		}
 	}
 }
 
@@ -373,7 +379,7 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 		if sess = jw.newSessionLocked(remoteIP, secure); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
-			jw.sessions[sess.sessionID] = sess
+			jw.registerSessionLocked(sess, true)
 		}
 	}
 	return
@@ -1137,13 +1143,21 @@ func (rq *Request) startServe() (ok bool) {
 		return false
 	default:
 	}
+	metrics := StatusMetricActiveRequests
 	rq.mu.RLock()
 	registered := rq.Jaws.requests[rq.JawsKey] == rq
 	contextLive := rq.ctx != nil && rq.ctx.Err() == nil
+	if rq.session != nil {
+		metrics |= StatusMetricActiveSessions
+	}
 	rq.mu.RUnlock()
 	// casState(reqClaimed, reqRunning) atomically requires the Request to be claimed
 	// (not already running, retired, or unclaimed) and transitions it to running.
-	return registered && contextLive && rq.casState(reqClaimed, reqRunning)
+	ok = registered && contextLive && rq.casState(reqClaimed, reqRunning)
+	if ok {
+		rq.Jaws.markStatusDirty(metrics)
+	}
+	return
 }
 
 func (rq *Request) stopServe() {
@@ -1248,6 +1262,9 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ws *websocket.Conn
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
+			// Successful acceptance is an invalidation boundary for connection-related
+			// status tags. Mark it before the application callback runs.
+			rq.Jaws.markStatusDirty(StatusMetricActiveRequests | StatusMetricPendingRequests | StatusMetricActiveSessions)
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.runWebSocket(ws, idleInterval, wsTimeout); err != nil {
 				// A ConnectFn failure is terminal. Cancel before touching the socket so

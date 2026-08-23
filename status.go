@@ -32,20 +32,12 @@ type statusTags struct {
 	errors          statusTag
 }
 
-type statusSample struct {
-	enabled         uint32
-	activeRequests  uint64
-	pendingRequests uint64
-	sessions        uint64
-	activeSessions  uint64
-	errors          uint64
-}
-
 // ActiveRequestCountTag returns this instance's active-Request count tag.
 //
 // Use it with the active result from [Jaws.RequestCounts]. The tag is stable for
 // the Jaws lifetime and unique to this instance and metric. Select
-// [StatusMetricActiveRequests] to have maintenance dirty it when the count changes.
+// [StatusMetricActiveRequests] to have maintenance dirty it; [Jaws.StatusMetrics]
+// defines when.
 func (jw *Jaws) ActiveRequestCountTag() any {
 	return &jw.statusTags.activeRequests
 }
@@ -54,7 +46,7 @@ func (jw *Jaws) ActiveRequestCountTag() any {
 //
 // Use it with [Jaws.Pending]. The tag is stable for the Jaws lifetime and unique
 // to this instance and metric. Select [StatusMetricPendingRequests] to have
-// maintenance dirty it when the count changes.
+// maintenance dirty it; [Jaws.StatusMetrics] defines when.
 func (jw *Jaws) PendingRequestCountTag() any {
 	return &jw.statusTags.pendingRequests
 }
@@ -63,7 +55,7 @@ func (jw *Jaws) PendingRequestCountTag() any {
 //
 // Use it with [Jaws.SessionCount]. The tag is stable for the Jaws lifetime and
 // unique to this instance and metric. Select [StatusMetricSessions] to have
-// maintenance dirty it when the count changes.
+// maintenance dirty it; [Jaws.StatusMetrics] defines when.
 func (jw *Jaws) SessionCountTag() any {
 	return &jw.statusTags.sessions
 }
@@ -85,7 +77,7 @@ func (jw *Jaws) ActiveSessionCount() (n int) {
 //
 // Use it with [Jaws.ActiveSessionCount]. The tag is stable for the Jaws lifetime
 // and unique to this instance and metric. Select [StatusMetricActiveSessions] to
-// have maintenance dirty it when the count changes.
+// have maintenance dirty it; [Jaws.StatusMetrics] defines when.
 func (jw *Jaws) ActiveSessionCountTag() any {
 	return &jw.statusTags.activeSessions
 }
@@ -107,13 +99,9 @@ func (jw *Jaws) ErrorCount() uint64 {
 //
 // Use it with [Jaws.ErrorCount]. The tag is stable for the Jaws lifetime and
 // unique to this instance and metric. Select [StatusMetricErrors] to have
-// maintenance dirty it when the count changes.
+// maintenance dirty it; [Jaws.StatusMetrics] defines when.
 func (jw *Jaws) ErrorCountTag() any {
 	return &jw.statusTags.errors
-}
-
-func statusCount(n int) uint64 {
-	return uint64(n) // #nosec G115 -- collection-derived status counts are non-negative.
 }
 
 func (jw *Jaws) activeRequestCountLocked() (n int) {
@@ -146,48 +134,34 @@ func (jw *Jaws) activeSessionCountLocked() (n int) {
 	return
 }
 
-func (jw *Jaws) statusMetricLocked(metric uint32) (tag *statusTag, value uint64, previous *uint64) {
+func (jw *Jaws) statusTagForMetric(metric uint32) (tag *statusTag) {
 	switch metric {
 	case StatusMetricActiveRequests:
 		tag = &jw.statusTags.activeRequests
-		value = statusCount(jw.activeRequestCountLocked())
-		previous = &jw.statusSample.activeRequests
 	case StatusMetricPendingRequests:
 		tag = &jw.statusTags.pendingRequests
-		value = statusCount(jw.pendingRequestCountLocked())
-		previous = &jw.statusSample.pendingRequests
 	case StatusMetricSessions:
 		tag = &jw.statusTags.sessions
-		value = statusCount(len(jw.sessions))
-		previous = &jw.statusSample.sessions
 	case StatusMetricActiveSessions:
 		tag = &jw.statusTags.activeSessions
-		value = statusCount(jw.activeSessionCountLocked())
-		previous = &jw.statusSample.activeSessions
 	case StatusMetricErrors:
 		tag = &jw.statusTags.errors
-		value = jw.reportedErrors.Load()
-		previous = &jw.statusSample.errors
 	}
 	return
 }
 
+// markStatusDirty records coalescible changes for the next maintenance pass.
+func (jw *Jaws) markStatusDirty(metrics uint32) {
+	jw.statusDirty.Or(metrics)
+}
+
 func (jw *Jaws) updateStatusLocked() {
 	enabled := jw.StatusMetrics.Load() & StatusMetricAll
-	if enabled == 0 {
-		jw.statusSample.enabled = 0
-		return
-	}
-	newlyEnabled := enabled &^ jw.statusSample.enabled
+	dirty := enabled & (jw.statusDirty.Swap(0) | (enabled &^ jw.enabledStatusMetrics))
 	for metric := StatusMetricActiveRequests; metric != 0 && metric <= StatusMetricAll; metric <<= 1 {
-		if enabled&metric != 0 {
-			tag, value, previous := jw.statusMetricLocked(metric)
-			if newlyEnabled&metric != 0 || value != *previous {
-				jw.dirtOrder++
-				jw.dirty[tag] = jw.dirtOrder
-			}
-			*previous = value
+		if dirty&metric != 0 {
+			jw.addDirtLocked(jw.statusTagForMetric(metric))
 		}
 	}
-	jw.statusSample.enabled = enabled
+	jw.enabledStatusMetrics = enabled
 }

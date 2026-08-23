@@ -120,15 +120,17 @@ type Jaws struct {
 	BaseContext context.Context
 	// StatusMetrics selects status metrics for tag updates.
 	//
-	// While [Jaws.Serve] or [Jaws.ServeWithTimeout] is running, each maintenance
-	// pass samples selected metrics and dirties each newly selected or changed
-	// metric's tag. Changes between samples are coalesced.
+	// While [Jaws.Serve] or [Jaws.ServeWithTimeout] is running, maintenance
+	// drains coalesced status changes. It dirties a selected metric's tag when the
+	// metric is newly selected or after its count changes. A successful WebSocket
+	// acceptance also dirties the selected active-Request, pending-Request, and
+	// active-Session tags. A tag may be dirtied when its count is unchanged. Changes
+	// coalesce to one dirty mark per tag per pass.
 	//
 	// Use [atomic.Uint32.Store], [atomic.Uint32.Or], or [atomic.Uint32.And] with
 	// [StatusMetricAll] or individual status metric flags. Only bits in
-	// StatusMetricAll are interpreted. The zero value disables status sampling and
-	// tag updates. Atomic operations may be used concurrently, including before
-	// serving.
+	// StatusMetricAll are interpreted. The zero value disables status tag updates.
+	// Atomic operations may be used concurrently, including before serving.
 	StatusMetrics atomic.Uint32
 	// WebSocketPingInterval controls read-idle keepalive pings.
 	//
@@ -147,8 +149,10 @@ type Jaws struct {
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
+	newMaintenanceTicker    func(time.Duration) *time.Ticker
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
+	statusDirty             atomic.Uint32
 	reportedErrors          atomic.Uint64
 	loggerQueue             *loggerQueue
 	defaultAuthOnce         sync.Once    // guards lazy creation of defaultAuthVal
@@ -158,6 +162,7 @@ type Jaws struct {
 	serveCSS                *staticserve.StaticServe
 	statusTags              statusTags
 	mu                      deadlock.RWMutex // protects following
+	enabledStatusMetrics    uint32           // last maintenance selection
 	headPrefix              string
 	faviconURL              string
 	cspHeader               string
@@ -170,7 +175,6 @@ type Jaws struct {
 	sessions                map[key.Key]*Session
 	dirty                   map[any]int
 	dirtOrder               int
-	statusSample            statusSample
 }
 
 // New allocates a JaWS instance with the default configuration.
@@ -196,6 +200,7 @@ func New() (jw *Jaws, err error) {
 				bcastCh:                 make(chan wire.Message, 1),
 				subCh:                   make(chan subscription),
 				unsubCh:                 make(chan chan wire.Message),
+				newMaintenanceTicker:    time.NewTicker,
 				updateTicker:            time.NewTicker(DefaultUpdateInterval),
 				kg:                      bufio.NewReader(rand.Reader),
 				requests:                make(map[key.Key]*Request),
@@ -362,6 +367,7 @@ func (jw *Jaws) RequestCount() (n int) {
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil {
 		jw.reportedErrors.Add(1)
+		jw.markStatusDirty(StatusMetricErrors)
 		if logger := jw.Logger; logger != nil {
 			jw.loggerQueue.enqueue(logger, err)
 		}

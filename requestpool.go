@@ -90,6 +90,7 @@ func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 					jw.requests[jawsKey] = rq
 					jw.requestCount++
 					jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+					jw.markStatusDirty(StatusMetricPendingRequests)
 				}
 			}
 		}
@@ -192,6 +193,7 @@ func (jw *Jaws) removePendingRequestLocked(rq *Request) {
 		} else {
 			jw.pending[rq.remoteIP] = pending
 		}
+		jw.markStatusDirty(StatusMetricPendingRequests)
 	}
 }
 

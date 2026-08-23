@@ -24,7 +24,7 @@ func TestJaws_ErrorCountConcurrentReports(t *testing.T) {
 	jw.StatusMetrics.Store(StatusMetricErrors)
 	jw.maintenance(time.Hour)
 	if got := jw.distributeDirt(); got != 1 {
-		t.Fatalf("initial sample distributed %d selectors, want 1", got)
+		t.Fatalf("initial selection distributed %d selectors, want 1", got)
 	}
 	requireUpdateList(t, first, firstElem)
 	requireUpdateList(t, second, secondElem)
