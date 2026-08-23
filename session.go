@@ -425,7 +425,7 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 		defer jw.mu.Unlock()
 		sess = jw.newSessionLocked(remoteIP, secure)
 		if sess != nil {
-			jw.sessions[sess.sessionID] = sess
+			jw.registerSessionLocked(sess, false)
 		}
 	}()
 	if sess != nil {
@@ -460,6 +460,17 @@ func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Sessio
 	return
 }
 
+// registerSessionLocked publishes sess. Active reports whether sess is already
+// attached to a running Request. The caller must hold jw.mu.
+func (jw *Jaws) registerSessionLocked(sess *Session, active bool) {
+	jw.sessions[sess.sessionID] = sess
+	metrics := StatusMetricSessions
+	if active {
+		metrics |= StatusMetricActiveSessions
+	}
+	jw.markStatusDirty(metrics)
+}
+
 // closeSessionsLocked invalidates and releases every registered Session.
 // The caller must hold jw.mu after detaching all current Requests.
 func (jw *Jaws) closeSessionsLocked() {
@@ -478,10 +489,17 @@ func (jw *Jaws) closeSessionsLocked() {
 // later Session that received the same numeric ID.
 func (jw *Jaws) deleteSessionIfCurrent(sess *Session) {
 	jw.mu.Lock()
+	jw.deleteSessionIfCurrentLocked(sess)
+	jw.mu.Unlock()
+}
+
+// deleteSessionIfCurrentLocked unregisters sess and records the affected status
+// metrics while sess still owns its ID. The caller must hold jw.mu.
+func (jw *Jaws) deleteSessionIfCurrentLocked(sess *Session) {
 	if jw.sessions[sess.sessionID] == sess {
 		delete(jw.sessions, sess.sessionID)
+		jw.markStatusDirty(StatusMetricSessions | StatusMetricActiveSessions)
 	}
-	jw.mu.Unlock()
 }
 
 type sessioner struct {

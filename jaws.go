@@ -121,17 +121,17 @@ type Jaws struct {
 	// StatusMetrics selects status metrics for tag updates.
 	//
 	// While [Jaws.Serve] or [Jaws.ServeWithTimeout] is running, maintenance
-	// samples selected metrics. It dirties a metric's tag when the metric is newly
-	// selected or its sampled count changes. See [Jaws.ActiveRequestCountTag],
-	// [Jaws.PendingRequestCountTag], and [Jaws.ActiveSessionCountTag] for conditions
-	// that also dirty those tags at the next sample, even when the sampled count is
-	// unchanged. Other changes between samples are coalesced.
+	// drains coalesced status changes. It dirties a selected metric's tag when the
+	// metric is newly selected or after its count changes. On the next maintenance
+	// pass after a successful WebSocket acceptance, it also dirties the selected
+	// active-Request, pending-Request, and active-Session tags. A tag may be dirtied
+	// even when its count has returned to its prior value. Changes coalesce to one
+	// dirty mark per tag per pass.
 	//
 	// Use [atomic.Uint32.Store], [atomic.Uint32.Or], or [atomic.Uint32.And] with
 	// [StatusMetricAll] or individual status metric flags. Only bits in
-	// StatusMetricAll are interpreted. The zero value disables status sampling and
-	// tag updates. Atomic operations may be used concurrently, including before
-	// serving.
+	// StatusMetricAll are interpreted. The zero value disables status tag updates.
+	// Atomic operations may be used concurrently, including before serving.
 	StatusMetrics atomic.Uint32
 	// WebSocketPingInterval controls read-idle keepalive pings.
 	//
@@ -147,12 +147,14 @@ type Jaws struct {
 	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	created                 time.Time     // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
 	runtimeSeconds          atomic.Int32  // whole seconds since created; refreshed during request allocation and by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
+	enabledStatusMetrics    uint32        // last maintenance selection; protected by mu
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
-	newMaintenanceTicker    func(time.Duration) *time.Ticker // lifecycle-test seam read at ServeWithTimeout start
+	newMaintenanceTicker    func(time.Duration) *time.Ticker
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
+	statusDirty             atomic.Uint32
 	reportedErrors          atomic.Uint64
 	loggerQueue             *loggerQueue
 	defaultAuthOnce         sync.Once    // guards lazy creation of defaultAuthVal
@@ -161,7 +163,7 @@ type Jaws struct {
 	serveJS                 *staticserve.StaticServe
 	serveCSS                *staticserve.StaticServe
 	statusTags              statusTags
-	mu                      deadlock.RWMutex // protects following
+	mu                      deadlock.RWMutex // protects enabledStatusMetrics and fields from headPrefix through dirtOrder
 	headPrefix              string
 	faviconURL              string
 	cspHeader               string
@@ -174,9 +176,6 @@ type Jaws struct {
 	sessions                map[key.Key]*Session
 	dirty                   map[any]int
 	dirtOrder               int
-	registeredRequestGen    uint64
-	acceptedWebSocketGen    uint64
-	statusSample            statusSample
 }
 
 // New allocates a JaWS instance with the default configuration.
@@ -369,6 +368,7 @@ func (jw *Jaws) RequestCount() (n int) {
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil {
 		jw.reportedErrors.Add(1)
+		jw.markStatusDirty(StatusMetricErrors)
 		if logger := jw.Logger; logger != nil {
 			jw.loggerQueue.enqueue(logger, err)
 		}

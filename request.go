@@ -181,6 +181,9 @@ func (rq *Request) finishLocked() {
 	}
 	rq.killSessionLocked(prev.claimed())
 	rq.storeState(reqFinished)
+	if prev == reqRunning {
+		rq.Jaws.markStatusDirty(StatusMetricActiveRequests)
+	}
 }
 
 // JawsKeyString returns the request key in the text form used by JaWS URLs.
@@ -308,8 +311,12 @@ func (rq *Request) claim(r *http.Request) error {
 // the state is not consulted here. Caller must hold rq.mu.
 func (rq *Request) killSessionLocked(wasClaimed bool) {
 	if rq.session != nil {
+		wasRunning := rq.loadState() == reqRunning
 		rq.session.delRequest(rq, wasClaimed)
 		rq.session = nil
+		if wasRunning {
+			rq.Jaws.markStatusDirty(StatusMetricActiveSessions)
+		}
 	}
 }
 
@@ -373,7 +380,7 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 		if sess = jw.newSessionLocked(remoteIP, secure); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
-			jw.sessions[sess.sessionID] = sess
+			jw.registerSessionLocked(sess, true)
 		}
 	}
 	return
@@ -1137,13 +1144,21 @@ func (rq *Request) startServe() (ok bool) {
 		return false
 	default:
 	}
+	metrics := StatusMetricActiveRequests
 	rq.mu.RLock()
 	registered := rq.Jaws.requests[rq.JawsKey] == rq
 	contextLive := rq.ctx != nil && rq.ctx.Err() == nil
+	if rq.session != nil {
+		metrics |= StatusMetricActiveSessions
+	}
 	rq.mu.RUnlock()
 	// casState(reqClaimed, reqRunning) atomically requires the Request to be claimed
 	// (not already running, retired, or unclaimed) and transitions it to running.
-	return registered && contextLive && rq.casState(reqClaimed, reqRunning)
+	ok = registered && contextLive && rq.casState(reqClaimed, reqRunning)
+	if ok {
+		rq.Jaws.markStatusDirty(metrics)
+	}
+	return
 }
 
 func (rq *Request) stopServe() {
@@ -1249,9 +1264,7 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ws, err = websocket.Accept(acceptWriter, acceptRequest, nil)
 		if err == nil {
 			// Record acceptance before the application callback runs.
-			rq.Jaws.mu.Lock()
-			rq.Jaws.acceptedWebSocketGen++
-			rq.Jaws.mu.Unlock()
+			rq.Jaws.markStatusDirty(StatusMetricActiveRequests | StatusMetricPendingRequests | StatusMetricActiveSessions)
 			ws.SetReadLimit(webSocketReadLimit)
 			if err = rq.runWebSocket(ws, idleInterval, wsTimeout); err != nil {
 				// A ConnectFn failure is terminal. Cancel before touching the socket so

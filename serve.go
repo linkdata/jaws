@@ -195,9 +195,9 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
-	for k, sess := range jw.sessions {
+	for _, sess := range jw.sessions {
 		if sess.isDead() {
-			delete(jw.sessions, k)
+			jw.deleteSessionIfCurrentLocked(sess)
 		}
 	}
 	jw.updateStatusLocked()
