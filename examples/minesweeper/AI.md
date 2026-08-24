@@ -6,39 +6,53 @@ See the [module-wide AI guidance](../../AI.md) before changing this example.
 
 The demo is a server-driven JaWS application with no custom client-side state.
 One `game` is created in `run` and shared by all visitors, making the running
-demo intentionally collaborative. Create request- or session-owned games in
-the page handler if that product behavior changes; do not silently turn the
-existing shared game into per-user state.
+demo intentionally collaborative. For per-user state, wrap the page in an outer
+handler that loads the user's game and invokes a freshly constructed
+`ui.Handler` for that request. Put `jw.SessionMiddleware` outside that handler
+when the lookup uses a JaWS Session. Do not silently change the existing
+shared-game behavior.
 
 The board shape and cell pointers are fixed after construction. Mutable game
-and cell fields are protected by `game.mu`. Rendering takes an immutable
-`cellView` snapshot while holding the lock, releases the lock, and then derives
-trusted cell markup and queues Element presentation updates from that snapshot.
-Keep state mutations out of getter/render paths.
+and cell fields are protected by `game.mu`. Cell getters lock the game and read
+those fields directly. Do not add a detached render DTO or parallel presentation
+state: `game` remains the sole application model. `JawsInitialHTMLAttr` makes
+the initial HTML meaningful, and `JawsGetHTML` derives both cell content and
+current Element attributes from the same authoritative fields. Keep state
+mutations out of getter/render paths.
 
-`run` deliberately constructs the application inline and injects only
-`listenAndServe`. Preserve that copyable layout unless a production behavior
-requires another seam.
+`run` constructs the application inline and injects only `listenAndServe`.
+Preserve that copyable layout unless a production behavior requires another
+seam. Configure the JaWS logger before setup, start `Serve` before exposing the
+handlers, and do not add session middleware while the application has no
+session-owned state.
 
 ## Dirty targeting
 
-- A `Cell` is its own precise tag. `Cell.JawsGetTag` must return only the cell.
-- Every cell button separately registers `Cell.BoardTag`, which is `&g.cells`.
-  This lets `Dirty(cell)` update one cell and `Dirty(&g.cells)` refresh the
-  complete board.
-- Do not return the shared board tag from `Cell.JawsGetTag`. Tag expansion would
+- A `cell` is its own precise tag. `cell.JawsGetTag` must return only the cell.
+- Every cell Button separately registers `cell.BoardTag` (`&g.cells`) and
+  `cell.GameOverTag` (`&g.gameOver`). This lets `Dirty(cell)` update one cell,
+  `Dirty(&g.cells)` refresh the complete board, and `Dirty(&g.gameOver)` update
+  both status and the terminal presentation of every cell.
+- Do not return the shared board tag from `cell.JawsGetTag`. Tag expansion would
   turn every single-cell action into a full-board update.
 - Scalar status dependencies use the addresses of the exact `game` fields.
-  Mutations snapshot scalar state before changing it, then `changedTags` emits
-  only fields whose values differ afterward. HTML-inner widgets do not perform
-  application-level diffing, so broad scalar dirtying causes needless DOM work.
-- A loss, win, or reset changes many cells and uses the shared board tag. Normal
-  reveals return the individual cells reached by flood fill, and flag toggles
-  return only the affected cell plus changed scalar fields.
+  Each mutation appends a field tag exactly when it changes that field.
+  HTML-inner widgets do not perform application-level diffing, so broad scalar
+  dirtying causes needless DOM work.
+- Loss, win, and any reset that changes cell state use the shared board tag.
+  Normal reveals return the individual cells reached by flood fill, and flag
+  toggles return only the affected cell plus changed scalar fields.
 
-The committed `BenchmarkSingleCellDirtyFanout` guards the targeted-update
-design. Keep it when changing cell identity or tag registration, and verify it
-still resolves a single-cell action to one cell Element.
+Dirty tags carry dependency identities, not rendered values. `Request.Dirty`
+schedules matching Elements across live Requests, and JaWS may batch or coalesce
+those updates. Each scheduled Element re-reads the authoritative game state, so
+connected browsers eventually converge on the latest state. Mutations must not
+push a second representation of the game into UI objects.
+
+`TestSingleCellDirtyStaysScopedToOneCell` guards the targeted-update invariant.
+The committed `BenchmarkSingleCellDirtyFanout` measures tag expansion and
+cell-Element lookup cost while intentionally excluding the separate Stats
+update. Keep both when changing cell identity or tag registration.
 
 ## Domain behavior
 
@@ -49,9 +63,11 @@ mine count to at least one and below the cell count. The game ends when a mine
 is revealed or every safe cell has been revealed; both terminal states reveal
 the mines and refresh the board.
 
-The static `template.HTML` fragments in `cellView.HTML` contain only fixed
-markup plus an integer adjacency count. Do not interpolate user-controlled
-content into those trusted fragments.
+Click reveals a cell. Context-menu and Shift-click events toggle its flag, so
+the same semantic Button supports ordinary and modifier-assisted activation.
+
+The trusted HTML returned by `cell.htmlLocked` consists only of fixed markup and
+an integer adjacency count. Do not interpolate user-controlled content into it.
 
 ## Testing responsibilities
 
@@ -59,6 +75,8 @@ content into those trusted fragments.
   placement, adjacency, flood fill, flags, win/loss, reset, and no-op guards.
 - Keep UI integration tests on real JaWS Elements for tag registration, event
   dispatch, queued class/attribute updates, and exact dirty fanout.
+- Use at least two live Requests to verify collaborative narrow updates and
+  board-wide refreshes.
 - Keep the HTTP wiring test for templates, static assets, middleware, and route
   setup without binding a real port.
 - Run `go test -race ./examples/minesweeper` and a plain

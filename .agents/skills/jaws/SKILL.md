@@ -7,8 +7,9 @@ metadata:
 
 # JaWS application design
 
-Build the smallest direct projection of synchronized server state. JaWS is an
-immediate-mode, server-driven UI framework, not MVC.
+Build the UI directly from synchronized server state. JaWS is an immediate-mode,
+server-driven UI framework, not MVC. Authoritative server state is the only
+application state model; this is a design requirement, not a preference.
 
 ## Match the application version first
 
@@ -46,20 +47,35 @@ does not contain a guide, inspect its exported docs and source instead.
 - Do not retain JaWS Requests, Elements, or UI definitions in application or
   domain state. JaWS owns that live tree.
 
-Default to definition dots that retain stable pointers to authoritative
-synchronized state. Render and update through direct binders and synchronized
-getters over that state. Do not add page-, screen-, state-, or component-shaped
-render DTOs or broad snapshots merely to make template execution atomic. JaWS
-requires race-free reads and correct dependency invalidation, not a transaction
-across an entire fragment. Do not hold an application lock across template
-execution to manufacture one. Separate reads may observe adjacent valid states;
-after mutation, dirty the relevant dependencies so the UI converges.
+Definition dots should retain stable pointers to authoritative synchronized
+state. Render and update through direct binders and synchronized getters over
+that state.
+
+Application code MUST NOT create a second representation of application state
+for rendering. Page, screen, state, component, view-model, or DTO structs that
+copy authoritative fields for templates, getters, attributes, or updates are
+forbidden. Renaming such a copy does not make it acceptable. If a proposed type
+exists only to carry render data copied from domain state, stop and redesign the
+UI to read the authoritative state directly.
+
+Application code MUST NOT use broad snapshots to manufacture fragment-wide
+atomic rendering. JaWS requires race-free reads and correct dependency
+invalidation, not a transaction across an entire fragment. Do not hold an
+application lock across template execution to manufacture one. Separate reads
+may observe adjacent valid states; dirty dispatch is the consistency mechanism
+that makes matching Elements converge on current authoritative state.
+
+When mutation code owns the writes, it MUST return or dirty the exact dependency
+tags whose rendered output may change. It MUST NOT snapshot application state
+only to diff it afterward and discover which ordinary mutation tags to dirty.
+Derive that tag set directly from the mutation semantics.
 
 Copying mutable collection storage under its lock so a caller can iterate after
 unlock is a synchronization boundary, not a presentation snapshot. Capture
 multiple primitives together only when one widget, attribute set, or operation
-requires an invariant; keep that capture local instead of expanding it into a
-fragment-wide render model.
+requires an invariant. Such a capture MUST remain local to that operation; it
+must not become a retained render object, template Dot, or fragment-wide state
+model.
 
 For a Container, a freshly returned equal child is a reconciliation key. JaWS
 reuses the existing Element and its original UI value; it does not replace
@@ -202,6 +218,11 @@ untrusted values with `htmlio.Attr` and a trusted name; convert the result to
 
 ## Render shape and verification
 
+- Before implementing, identify the authoritative state, its synchronization,
+  the direct binders/getters that read it, and the precise dependencies whose
+  rendered output each mutation can change. If the plan includes a
+  render-specific copy of domain fields or a snapshot/diff layer for ordinary
+  dirty tracking, stop and redesign it first.
 - Keep HTML structure in templates and state mutations out of getter/render
   paths. When one direct getter result must remain consistent within a template
   execution, assign that value to a local template variable. This is not a
@@ -216,7 +237,9 @@ untrusted values with `htmlio.Attr` and a trusted name; convert the result to
   connect, and disconnect behavior.
 - Test pure domain transitions separately from JaWS transport.
 
-Before finishing, confirm the design does not introduce an application-owned UI
-tree, a full-document Template, screen-shaped render state, pointer-wrapped
+The following are completion blockers. Do not finish while the design contains
+an application-owned UI tree, a full-document Template, any render DTO or
+retained presentation snapshot, screen-shaped render state, pointer-wrapped
 definition values, mutable tag identity, duplicate JaWS IDs, direct locked-field
-assignment, or broad dirtying that masks dependency errors.
+assignment, snapshot/diff dirty tracking for mutation-owned writes, or broad
+dirtying that masks dependency errors. Refactor the violation before continuing.
