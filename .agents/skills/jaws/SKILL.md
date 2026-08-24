@@ -89,6 +89,23 @@ equality or be read indirectly from synchronized mutable state.
 
 ## Choose the smallest rendering primitive
 
+- When an authoritative source implements the getter and event interfaces for a
+  standard widget, pass that source directly as the widget's primary argument,
+  for example `{{$.Button .Action}}`. When the read is naturally a functor,
+  adapt it with `bind.HTMLGetterFunc`; for text, use `bind.StringGetterFunc` and
+  let the widget's `bind.MakeHTMLGetter` conversion escape it. A bound value can
+  customize markup with `Binder.GetHTML` while remaining a standard
+  `HTMLGetter`.
+- An application UI may overload a standard widget's render or update behavior,
+  but this is discouraged when a standard getter, binder, semantic `ui.Object`,
+  or render parameter expresses the same control. Keep the overload only when it
+  adds behavior the standard composition cannot provide, and document that
+  behavior.
+- HTML-inner getters run during initial rendering and dirty updates. If a getter
+  queues wrapper attributes, `TailHTML` may repeat attributes already emitted
+  inline. Treat an overload that suppresses that payload as a performance change:
+  retain a benchmark and weigh the measured result against the simpler standard
+  composition.
 - **Full HTML document:** use `ui.Handler`. It creates the JaWS Request, applies
   `no-store`, renders without a generated wrapper, and treats the page Dot as
   arbitrary template data rather than a tag or equality key. The page

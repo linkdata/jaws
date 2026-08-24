@@ -28,7 +28,7 @@
 					{{range .Board}}
 					<tr>
 						{{range .}}
-						<td>{{$.NewUI .Button .BoardTag .GameOverTag `class="cell"`}}</td>
+						<td>{{$.Button . .BoardTag .GameOverTag `class="cell"`}}</td>
 						{{end}}
 					</tr>
 					{{end}}

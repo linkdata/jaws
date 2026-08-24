@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"io"
 	"strconv"
 
 	"github.com/linkdata/jaws"
@@ -82,23 +81,14 @@ func (c *cell) initialAttrsLocked() (attrs template.HTMLAttr) {
 	return
 }
 
-// cellButton keeps the standard Button render path and specializes only its
-// update. A new definition is constructed by [cell.Button] for each template
-// execution; the shared pointer is the authoritative cell, not copied UI state.
-type cellButton struct {
-	source *cell
-}
-
-var _ jaws.UI = cellButton{}
-
-// Button returns a fresh semantic Button definition for the cell.
-func (c *cell) Button() cellButton {
-	return cellButton{source: c}
-}
-
-// JawsRender delegates initial rendering to the standard JaWS Button.
-func (button cellButton) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return ui.NewButton(button.source).JawsRender(elem, w, params)
+func setCellAttributes(elem *jaws.Element, state, label string, disabled bool) {
+	elem.SetAttr("data-state", state)
+	elem.SetAttr("aria-label", label)
+	if disabled {
+		elem.SetAttr("disabled", "disabled")
+	} else {
+		elem.RemoveAttr("disabled")
+	}
 }
 
 // JawsGetTag returns the precise dependency tag for this cell.
@@ -126,34 +116,18 @@ func (c *cell) JawsInitialHTMLAttr(_ *jaws.Element) template.HTMLAttr {
 	return c.initialAttrsLocked()
 }
 
-// JawsGetHTML returns the cell's current trusted inner markup.
-func (c *cell) JawsGetHTML(_ *jaws.Element) template.HTML {
-	c.game.mu.Lock()
-	defer c.game.mu.Unlock()
-
-	// Initial attributes and content are separate direct reads. A mutation
-	// between them dirties a registered dependency, so the Button reads it again.
-	return c.htmlLocked()
-}
-
-// JawsUpdate synchronizes one live Button with its authoritative cell.
-func (button cellButton) JawsUpdate(elem *jaws.Element) {
-	c := button.source
+// JawsGetHTML returns the cell's current markup and queues its Button attributes.
+func (c *cell) JawsGetHTML(elem *jaws.Element) template.HTML {
 	c.game.mu.Lock()
 	inner := c.htmlLocked()
 	state, label, disabled := c.attributesLocked()
 	c.game.mu.Unlock()
 
-	// JaWS queue locks and application locks are both leaves. Capture only this
-	// control's presentation before entering the framework.
-	elem.SetAttr("data-state", state)
-	elem.SetAttr("aria-label", label)
-	if disabled {
-		elem.SetAttr("disabled", "disabled")
-	} else {
-		elem.RemoveAttr("disabled")
-	}
-	elem.SetInner(inner)
+	// Initial attributes and content are separate synchronized reads. Queueing
+	// the current attributes here lets TailHTML reconcile the initial Button;
+	// dirty updates use this same direct read of the authoritative cell.
+	setCellAttributes(elem, state, label, disabled)
+	return inner
 }
 
 // JawsClick handles a reveal or Shift-click flag attempt.

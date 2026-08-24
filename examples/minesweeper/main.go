@@ -24,6 +24,8 @@ func run(listenAndServe func(addr string, handler http.Handler) error) (err erro
 
 	var jw *jaws.Jaws
 	if jw, err = jaws.New(); err == nil {
+		// A long-running server reports update-time failures instead of panicking.
+		// Direct UI tests leave Logger nil so framework contracts still fail fast.
 		jw.Logger = slog.Default()
 		defer jw.Close()
 

@@ -15,15 +15,20 @@ shared-game behavior.
 The board shape and cell pointers are fixed after construction. Mutable game
 and cell fields are protected by `game.mu`. Cell getters lock the game and read
 those fields directly. Do not add a detached render DTO or parallel presentation
-state: `game` remains the sole application model. `cell.Button` constructs a
-fresh semantic definition around the standard `ui.Button` for each template
-execution. Initial attributes are emitted inline; its specialized `JawsUpdate`
-reads only that Button's current primitive values under the game lock, unlocks,
-and then queues Element changes. Keep state mutations out of getter/render paths.
+state: `game` remains the sole application model. Pass each cell directly to the
+standard `ui.Button` as its HTML getter. Overloading the standard widget is
+allowed, but it is unnecessary here because the getter and initial-attribute
+interfaces already express the control. `JawsInitialHTMLAttr` emits meaningful
+initial attributes, and `JawsGetHTML` reads the current primitive values under
+the game lock, unlocks, and then queues Element changes. Keep state mutations
+out of getter/render paths.
 
 `run` constructs the application inline and injects only `listenAndServe`.
 Preserve that copyable layout unless a production behavior requires another
-seam. Configure the JaWS logger before setup, start `Serve` before exposing the
+seam. The long-running server must configure the JaWS logger before setup so
+update-time failures are reported instead of panicking. Tests that construct
+JaWS directly deliberately leave it nil so illegal tags and other
+framework-contract violations fail fast. Start `Serve` before exposing the
 handlers, and do not add session middleware while the application has no
 session-owned state.
 
@@ -51,8 +56,12 @@ connected browsers eventually converge on the latest state. Mutations must not
 push a second representation of the game into UI objects.
 
 The template owns the static `cell` class. Dynamic styling uses one
-`data-state` attribute, so updates preserve caller-supplied classes and initial
-rendering does not queue redundant class or attribute fixups for `TailHTML`.
+`data-state` attribute, so updates preserve caller-supplied classes. The standard
+Button calls its HTML getter during initial rendering as well as dirty updates;
+the resulting `TailHTML` attribute fixups reconcile the independently read
+initial attributes and content. A Button overload can suppress that payload, but
+this example favors the simpler standard composition. Treat such an overload as
+a performance change and retain a benchmark for the measured tradeoff.
 
 `TestSingleCellDirtyStaysScopedToOneCell` guards the targeted-update invariant.
 The committed `BenchmarkSingleCellDirtyFanout` measures tag expansion and
@@ -79,8 +88,8 @@ an integer adjacency count. Do not interpolate user-controlled content into it.
 - Keep pure domain tests for construction bounds, first-click safety, mine
   placement, adjacency, flood fill, flags, win/loss, reset, and no-op guards.
 - Keep UI integration tests on real JaWS Elements for tag registration, event
-  dispatch, queued attribute updates, empty initial TailHTML, and exact dirty
-  fanout.
+  dispatch, queued attribute updates, initial TailHTML reconciliation, and exact
+  dirty fanout.
 - Use at least two live Requests to verify collaborative narrow updates and
   board-wide refreshes.
 - Keep the HTTP wiring test for templates, static assets, middleware, and route

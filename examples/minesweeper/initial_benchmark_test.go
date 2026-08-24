@@ -24,7 +24,7 @@ func tailEndpoint(body string) (path string, ok bool) {
 }
 
 // BenchmarkInitialPageAndTail measures the complete initial HTML response and
-// the attribute/class fixup payload fetched before the WebSocket connects.
+// the wrapper-attribute fixup payload fetched before the WebSocket connects.
 func BenchmarkInitialPageAndTail(b *testing.B) {
 	logger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -52,6 +52,15 @@ func BenchmarkInitialPageAndTail(b *testing.B) {
 			pageBytes += int64(page.Body.Len())
 			tailBytes += int64(tail.Body.Len())
 			initialPayloadSink = page.Body.Len() + tail.Body.Len()
+
+			b.StopTimer()
+			requestKey := strings.TrimPrefix(path, "/jaws/.tail/")
+			noscript := httptest.NewRecorder()
+			handler.ServeHTTP(noscript, httptest.NewRequest(http.MethodGet, "/jaws/"+requestKey+"/noscript", nil))
+			if noscript.Code != http.StatusNoContent {
+				b.Fatalf("noscript cleanup status = %d, want %d", noscript.Code, http.StatusNoContent)
+			}
+			b.StartTimer()
 		}
 		b.StopTimer()
 		return stop

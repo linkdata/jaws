@@ -115,6 +115,19 @@ func cellButtonParams(c *cell) []any {
 	return []any{c.BoardTag(), c.GameOverTag(), template.HTMLAttr(`class="cell"`)}
 }
 
+type blockingInitialCell struct {
+	*cell
+	read   chan struct{}
+	resume chan struct{}
+}
+
+func (source *blockingInitialCell) JawsInitialHTMLAttr(elem *jaws.Element) template.HTMLAttr {
+	attrs := source.cell.JawsInitialHTMLAttr(elem)
+	close(source.read)
+	<-source.resume
+	return attrs
+}
+
 func findSeedWithSkipFirst(t *testing.T, total, skipIdx int) int64 {
 	t.Helper()
 	for seed := int64(0); seed < 10_000; seed++ {
@@ -131,7 +144,7 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 
 	g := newGame(3, 3, 1)
 	cell := g.cells[0][0]
-	elem := rq.NewElement(cell.Button())
+	elem := rq.NewElement(ui.NewButton(cell))
 
 	var body bytes.Buffer
 	if err := elem.JawsRender(&body, cellButtonParams(cell)); err != nil {
@@ -164,7 +177,7 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 	}
 
 	other := g.cells[0][1]
-	otherElem := rq.NewElement(other.Button())
+	otherElem := rq.NewElement(ui.NewButton(other))
 	if err := otherElem.JawsRender(&body, cellButtonParams(other)); err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +307,7 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 			cell := g.cells[0][0]
 			tt.configure(g, cell)
 
-			elem := rq.NewElement(cell.Button())
+			elem := rq.NewElement(ui.NewButton(cell))
 			var body strings.Builder
 			if err := elem.JawsRender(&body, cellButtonParams(cell)); err != nil {
 				t.Fatal(err)
@@ -315,20 +328,21 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 				t.Errorf("initial Button disabled = %v, want %v", got, tt.wantDisabled)
 			}
 
-			if got := drainWire(t, rq, "initial "+tt.name); len(got) != 0 {
-				t.Fatalf("initial render queued redundant updates: %+v", got)
-			}
-			elem.JawsUpdate()
 			j := elem.Jid()
-			want := []wire.WsMsg{
+			wantAttrs := []wire.WsMsg{
 				{Data: "data-state\n" + tt.wantState, Jid: j, What: what.SAttr},
 				{Data: "aria-label\n" + tt.wantLabel, Jid: j, What: what.SAttr},
 			}
 			if tt.wantDisabled {
-				want = append(want, wire.WsMsg{Data: "disabled\ndisabled", Jid: j, What: what.SAttr})
+				wantAttrs = append(wantAttrs, wire.WsMsg{Data: "disabled\ndisabled", Jid: j, What: what.SAttr})
 			} else {
-				want = append(want, wire.WsMsg{Data: "disabled", Jid: j, What: what.RAttr})
+				wantAttrs = append(wantAttrs, wire.WsMsg{Data: "disabled", Jid: j, What: what.RAttr})
 			}
+			if got := drainWire(t, rq, "initial "+tt.name); !reflect.DeepEqual(got, wantAttrs) {
+				t.Fatalf("initial Button fixups mismatch:\n got %+v\nwant %+v", got, wantAttrs)
+			}
+			elem.JawsUpdate()
+			want := append([]wire.WsMsg(nil), wantAttrs...)
 			want = append(want, wire.WsMsg{Data: tt.wantHTML, Jid: j, What: what.Inner})
 
 			got := drainWire(t, rq, "update "+tt.name)
@@ -339,11 +353,71 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 	}
 }
 
+func TestCellInitialReadsConvergeThroughTailAttributes(t *testing.T) {
+	_, rq := newExampleRequest(t)
+	g := newGame(2, 2, 1)
+	cell := g.cells[0][0]
+	source := &blockingInitialCell{
+		cell:   cell,
+		read:   make(chan struct{}),
+		resume: make(chan struct{}),
+	}
+	elem := rq.NewElement(ui.NewButton(source))
+
+	var body strings.Builder
+	rendered := make(chan error, 1)
+	go func() {
+		rendered <- elem.JawsRender(&body, cellButtonParams(cell))
+	}()
+
+	select {
+	case <-source.read:
+	case <-t.Context().Done():
+		close(source.resume)
+		t.Fatal(t.Context().Err())
+	}
+	tags := g.toggleFlag(cell)
+	close(source.resume)
+	if len(tags) == 0 {
+		t.Fatal("toggleFlag() returned no dirty tags")
+	}
+	select {
+	case err := <-rendered:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-t.Context().Done():
+		t.Fatal(t.Context().Err())
+	}
+
+	for _, fragment := range []string{
+		`data-state="hidden"`,
+		`aria-label="Row 1, column 1: hidden"`,
+		string(flagHTML),
+	} {
+		if !strings.Contains(body.String(), fragment) {
+			t.Errorf("initial Button %q does not contain %q", body.String(), fragment)
+		}
+	}
+
+	// The mutation lands after the initial attributes but before ApplyParams
+	// registers the shared tags. The standard Button's getter still queues the
+	// current wrapper state for TailHTML without retaining a presentation model.
+	want := []wire.WsMsg{
+		{Data: "data-state\nflagged", Jid: elem.Jid(), What: what.SAttr},
+		{Data: "aria-label\nRow 1, column 1: flagged", Jid: elem.Jid(), What: what.SAttr},
+		{Data: "disabled", Jid: elem.Jid(), What: what.RAttr},
+	}
+	if got := drainWire(t, rq, "initial read convergence"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("initial Button fixups mismatch:\n got %+v\nwant %+v", got, want)
+	}
+}
+
 func TestCellButtonUpdatePreservesTemplateClasses(t *testing.T) {
 	_, rq := newExampleRequest(t)
 	g := newGame(2, 2, 1)
 	cell := g.cells[0][0]
-	elem := rq.NewElement(cell.Button())
+	elem := rq.NewElement(ui.NewButton(cell))
 	params := []any{cell.BoardTag(), cell.GameOverTag(), template.HTMLAttr(`class="cell custom"`)}
 	var body strings.Builder
 	if err := elem.JawsRender(&body, params); err != nil {
@@ -352,8 +426,13 @@ func TestCellButtonUpdatePreservesTemplateClasses(t *testing.T) {
 	if !strings.Contains(body.String(), `class="cell custom"`) {
 		t.Fatalf("initial Button did not retain template classes: %q", body.String())
 	}
-	if got := drainWire(t, rq, "initial custom class"); len(got) != 0 {
-		t.Fatalf("initial render queued redundant updates: %+v", got)
+	wantInitial := []wire.WsMsg{
+		{Data: "data-state\nhidden", Jid: elem.Jid(), What: what.SAttr},
+		{Data: "aria-label\nRow 1, column 1: hidden", Jid: elem.Jid(), What: what.SAttr},
+		{Data: "disabled", Jid: elem.Jid(), What: what.RAttr},
+	}
+	if got := drainWire(t, rq, "initial custom class"); !reflect.DeepEqual(got, wantInitial) {
+		t.Fatalf("initial Button fixups mismatch:\n got %+v\nwant %+v", got, wantInitial)
 	}
 
 	if tags := g.toggleFlag(cell); len(tags) == 0 {
@@ -389,11 +468,11 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		clients := make([]rendered, 0, 2)
 		for _, rq := range []*jawstest.TestRequest{first, second} {
 			var body strings.Builder
-			targetElem := rq.NewElement(target.Button())
+			targetElem := rq.NewElement(ui.NewButton(target))
 			if err := targetElem.JawsRender(&body, cellButtonParams(target)); err != nil {
 				t.Fatal(err)
 			}
-			otherElem := rq.NewElement(other.Button())
+			otherElem := rq.NewElement(ui.NewButton(other))
 			if err := otherElem.JawsRender(&body, cellButtonParams(other)); err != nil {
 				t.Fatal(err)
 			}
@@ -500,7 +579,8 @@ func assertCellUpdates(t *testing.T, messages []wire.WsMsg, elem *jaws.Element, 
 	if disabled {
 		disabledUpdate = wire.WsMsg{Data: "disabled\ndisabled", What: what.SAttr}
 	}
-	assertElementMessages(t, messages, elem,
+	assertElementMessages(
+		t, messages, elem,
 		wire.WsMsg{Data: "data-state\n" + state, What: what.SAttr},
 		wire.WsMsg{Data: "aria-label\n" + label, What: what.SAttr},
 		disabledUpdate,
@@ -1041,8 +1121,18 @@ func TestRunServesApplication(t *testing.T) {
 			if tail.Code != http.StatusOK {
 				t.Errorf("initial TailHTML status = %d, want %d", tail.Code, http.StatusOK)
 			}
-			if tail.Body.Len() != 0 {
-				t.Errorf("initial TailHTML queued redundant DOM fixups: %q", tail.Body.String())
+			tailScript := tail.Body.String()
+			for operation, want := range map[string]int{
+				`setAttribute("data-state","hidden")`: 100,
+				`setAttribute("aria-label",`:          100,
+				`removeAttribute("disabled")`:         100,
+			} {
+				if got := strings.Count(tailScript, operation); got != want {
+					t.Errorf("initial TailHTML contains %d %s operations, want %d", got, operation, want)
+				}
+			}
+			if strings.Contains(tailScript, `setAttribute("class",`) {
+				t.Error("initial TailHTML replaces the template-owned class")
 			}
 		}
 
