@@ -102,7 +102,7 @@ var ErrWebsocketOriginMissing = errors.New("websocket request missing Origin hea
 
 // ErrWebsocketOriginWrongScheme is returned when a WebSocket Origin scheme is
 // unsupported or does not match the initial request's security.
-var ErrWebsocketOriginWrongScheme = errors.New("websocket Origin not http or https")
+var ErrWebsocketOriginWrongScheme = errors.New("websocket Origin scheme mismatch")
 
 // ErrWebsocketOriginWrongHost is returned when a WebSocket Origin host does not match the initial request host.
 var ErrWebsocketOriginWrongHost = errors.New("websocket Origin host mismatch")
