@@ -567,14 +567,6 @@ func (elem *Element) ApplyInitialHTMLAttr(getter any) (attrs []template.HTMLAttr
 	return
 }
 
-// ErrElementStateClaimed is returned by [SetElementState] when the [Element] already
-// has widget state, including state of the same type.
-var ErrElementStateClaimed = errors.New("jaws: element state already claimed")
-
-// ErrElementStateNil is returned by [SetElementState] when the state to store is a nil
-// interface, which cannot be distinguished from an unclaimed slot.
-var ErrElementStateNil = errors.New("jaws: element state must not be nil")
-
 // ElementState returns the widget state stored for elem, or nil if none was claimed.
 //
 // The state belongs to the [Element], not to the widget value that claimed it.

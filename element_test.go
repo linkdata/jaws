@@ -1457,6 +1457,9 @@ func (benchCreateUI) JawsUpdate(elem *Element) {}
 // BenchmarkElementCreateBatch creates and renders a fixed batch of Elements per iteration,
 // then deletes them with the timer stopped.
 //
+// It guards the per-Element cost of the widget state slot, including for Elements
+// whose UI never uses that slot.
+//
 // Batching is deliberate: b.StopTimer and b.StartTimer each call runtime.ReadMemStats, so
 // toggling around a single sub-microsecond creation would leave the timed section tiny,
 // calibration would pick an enormous iteration count, and the excluded setup would run

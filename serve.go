@@ -20,6 +20,9 @@ import (
 	"github.com/linkdata/staticserve"
 )
 
+// The processing-loop subsystem distributes broadcasts to subscribed Requests
+// and drives periodic maintenance.
+
 // Pending returns the number of requests waiting for their WebSocket callbacks.
 func (jw *Jaws) Pending() (n int) {
 	jw.mu.RLock()
@@ -277,6 +280,9 @@ func forwardedClientIP(h http.Header) (netip.Addr, bool) {
 	}
 	return netip.Addr{}, false
 }
+
+// The setup subsystem turns resource extras into handler registrations and head
+// HTML URLs.
 
 // HandleFunc matches the signature of [http.ServeMux.Handle].
 type HandleFunc = func(pattern string, handler http.Handler)
