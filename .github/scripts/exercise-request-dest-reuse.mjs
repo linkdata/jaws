@@ -8,8 +8,8 @@
 // pooled *Request.
 //
 // Usage:
-//   node scripts/exercise-request-dest-reuse.mjs
-//   ATTEMPTS=2000 PER_ATTEMPT_MS=10 ALERTS=256 node scripts/exercise-request-dest-reuse.mjs
+//   node .github/scripts/exercise-request-dest-reuse.mjs
+//   ATTEMPTS=2000 PER_ATTEMPT_MS=10 ALERTS=256 node .github/scripts/exercise-request-dest-reuse.mjs
 //
 // Exit status is zero when the stress run does not observe the network-level
 // race. If it reproduces, the script prints the old and new jawsKey values and
@@ -24,7 +24,7 @@ import { Socket } from "node:net";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(scriptDir, "..");
+const repoRoot = resolve(scriptDir, "../..");
 const attempts = Number.parseInt(process.env.ATTEMPTS || "500", 10);
 const perAttemptMs = Number.parseInt(process.env.PER_ATTEMPT_MS || "40", 10);
 const alerts = Math.max(1, Number.parseInt(process.env.ALERTS || "64", 10));

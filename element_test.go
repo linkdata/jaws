@@ -2,15 +2,18 @@ package jaws
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -1324,3 +1327,283 @@ type nonReflexiveUI struct{ f float64 }
 
 func (nonReflexiveUI) JawsRender(*Element, io.Writer, []any) error { return nil }
 func (nonReflexiveUI) JawsUpdate(*Element)                         {}
+
+type testElementState struct{ name string }
+
+func TestElementState_ClaimOnce(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(&testUi{})
+	if got := ElementState(elem); got != nil {
+		t.Fatalf("unclaimed slot = %v, want nil", got)
+	}
+
+	first := &testElementState{name: "first"}
+	if err := SetElementState(elem, first); err != nil {
+		t.Fatalf("first claim: %v", err)
+	}
+	if got := ElementState(elem); got != first {
+		t.Fatalf("loaded %v, want the claimed state", got)
+	}
+
+	// A second claim fails and leaves the original in place, including one carrying the
+	// same dynamic type: same type does not mean same owner.
+	for _, state := range []any{&testElementState{name: "same type"}, "other type"} {
+		if err := SetElementState(elem, state); !errors.Is(err, ErrElementStateClaimed) {
+			t.Fatalf("second claim with %T = %v, want %v", state, err, ErrElementStateClaimed)
+		}
+	}
+	if got := ElementState(elem); got != first {
+		t.Fatalf("state after rejected claims = %v, want the original", got)
+	}
+
+	// Slots are per Element.
+	other := rq.NewElement(&testUi{})
+	if got := ElementState(other); got != nil {
+		t.Fatalf("second element's slot = %v, want nil", got)
+	}
+	if err := SetElementState(other, &testElementState{name: "second"}); err != nil {
+		t.Fatalf("claiming a different element: %v", err)
+	}
+	if ElementState(elem) != first {
+		t.Error("claiming another element disturbed the first element's state")
+	}
+}
+
+func TestElementState_NilHandling(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(&testUi{})
+
+	// A nil interface cannot be stored: it is indistinguishable from an unclaimed slot,
+	// so accepting it would report success while leaving the slot claimable.
+	if err := SetElementState(elem, nil); !errors.Is(err, ErrElementStateNil) {
+		t.Fatalf("nil claim = %v, want %v", err, ErrElementStateNil)
+	}
+	if got := ElementState(elem); got != nil {
+		t.Fatalf("slot after nil claim = %v, want still nil", got)
+	}
+
+	// A typed nil is a non-nil interface, so it does claim the slot.
+	var typedNil *testElementState
+	if err := SetElementState(elem, typedNil); err != nil {
+		t.Fatalf("typed-nil claim: %v", err)
+	}
+	if err := SetElementState(elem, &testElementState{}); !errors.Is(err, ErrElementStateClaimed) {
+		t.Fatalf("claim after typed nil = %v, want %v", err, ErrElementStateClaimed)
+	}
+
+	// The nil-argument check precedes the occupancy check, so a nil state against an
+	// occupied slot still reports ErrElementStateNil.
+	if err := SetElementState(elem, nil); !errors.Is(err, ErrElementStateNil) {
+		t.Fatalf("nil claim on occupied slot = %v, want %v", err, ErrElementStateNil)
+	}
+}
+
+func TestElementState_ConcurrentClaims(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(&testUi{})
+	const claimants = 8
+
+	var wg sync.WaitGroup
+	errs := make([]error, claimants)
+	states := make([]any, claimants)
+	start := make(chan struct{})
+	for i := range claimants {
+		states[i] = &testElementState{name: "claimant"}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs[i] = SetElementState(elem, states[i])
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	var winners int
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			winners++
+			if got := ElementState(elem); got != states[i] {
+				t.Errorf("claimant %d succeeded but the slot holds %v", i, got)
+			}
+		case !errors.Is(err, ErrElementStateClaimed):
+			t.Errorf("claimant %d = %v, want %v", i, err, ErrElementStateClaimed)
+		}
+	}
+	if winners != 1 {
+		t.Errorf("successful claims = %d, want exactly 1", winners)
+	}
+}
+
+// benchCreateUI is a stateless widget that never touches the state slot, so the
+// benchmark measures the per-Element cost rather than Template bookkeeping. It
+// supports multiple live Elements because one value backs every benchmark Element.
+type benchCreateUI struct{}
+
+func (benchCreateUI) JawsRender(elem *Element, w io.Writer, params []any) error {
+	_, err := io.WriteString(w, "<span>x</span>")
+	return err
+}
+
+func (benchCreateUI) JawsUpdate(elem *Element) {}
+
+// BenchmarkElementCreateBatch creates and renders a fixed batch of Elements per iteration,
+// then deletes them with the timer stopped.
+//
+// Batching is deliberate: b.StopTimer and b.StartTimer each call runtime.ReadMemStats, so
+// toggling around a single sub-microsecond creation would leave the timed section tiny,
+// calibration would pick an enormous iteration count, and the excluded setup would run
+// for minutes.
+// Amortising both calls over the batch keeps that honest, and deleting the batch keeps the
+// Request registry bounded instead of growing across iterations. The reported figure is per
+// batch of 64 Elements.
+//
+// [testing.B.Loop] excludes construction and the deferred Close from the measurement,
+// while the explicit timer calls exclude per-batch deletion.
+func BenchmarkElementCreateBatch(b *testing.B) {
+	b.ReportAllocs()
+	const batch = 64
+
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if rq == nil {
+		b.Fatal("nil request")
+	}
+	var ui benchCreateUI
+	elems := make([]*Element, 0, batch)
+
+	for b.Loop() {
+		elems = elems[:0]
+		for range batch {
+			elem := rq.NewElement(ui)
+			if err := elem.JawsRender(io.Discard, nil); err != nil {
+				b.Fatal(err)
+			}
+			elems = append(elems, elem)
+		}
+		b.StopTimer()
+		rq.DeleteElements(elems)
+		b.StartTimer()
+	}
+}
+
+// ifaceSliceUI is statically comparable (an interface field) but panics when compared
+// at runtime, since the interface holds a slice.
+type ifaceSliceUI struct{ v any }
+
+func (ifaceSliceUI) JawsRender(*Element, io.Writer, []any) error { return nil }
+func (ifaceSliceUI) JawsUpdate(*Element)                         {}
+
+// typedNilUI has pointer-receiver methods that tolerate a nil receiver, so a typed nil
+// (*typedNilUI)(nil) is a usable UI value that renders without dereferencing.
+type typedNilUI struct{ s string }
+
+func (u *typedNilUI) JawsRender(_ *Element, w io.Writer, _ []any) error {
+	s := "typednil"
+	if u != nil {
+		s = u.s
+	}
+	_, err := io.WriteString(w, s)
+	return err
+}
+func (*typedNilUI) JawsUpdate(*Element) {}
+
+func TestNewErrUnusableUI(t *testing.T) {
+	tests := []struct {
+		name    string
+		ui      UI
+		wantErr bool
+	}{
+		{"nil", nil, true},
+		{"nan struct", nonReflexiveUI{f: math.NaN()}, true},
+		{"map field (statically incomparable)", testUnhashableUI{m: map[string]int{"x": 1}}, true},
+		{"interface holding slice (runtime-incomparable)", ifaceSliceUI{v: []int{1}}, true},
+		{"valid pointer", &testUi{}, false},
+		{"valid struct", nonReflexiveUI{f: 1.5}, false},
+		// A typed nil is comparable and equal to itself, so it is usable; only a nil
+		// interface is rejected.
+		{"typed nil pointer", (*typedNilUI)(nil), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewErrUnusableUI(tt.ui)
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("NewErrUnusableUI = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("NewErrUnusableUI = nil, want error")
+			}
+			// The error stands in for both tag identities so callers can match either.
+			if !errors.Is(err, tag.ErrNotUsableAsTag) {
+				t.Errorf("err does not match tag.ErrNotUsableAsTag: %v", err)
+			}
+			if !errors.Is(err, tag.ErrNotComparable) {
+				t.Errorf("err does not match tag.ErrNotComparable: %v", err)
+			}
+		})
+	}
+}
+
+// TestNewElementNilUIRendersNoop verifies that NewElement(nil) does not terminate the
+// Request — a nil UI is never reconciled by a container, so it is harmless — and
+// returns an Element that renders and updates as a no-op rather than panicking on the
+// nil UI. A nil child returned from a container is instead rejected; see
+// TestContainerTerminatesOnUnusableChild.
+func TestNewElementNilUIRendersNoop(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	elem := rq.NewElement(nil)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("NewElement(nil) cancelled the Request: %v", cause)
+	}
+
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatalf("JawsRender err = %v, want nil", err)
+	}
+	if sb.Len() != 0 {
+		t.Fatalf("nil-UI render wrote %q, want empty", sb.String())
+	}
+	elem.JawsUpdate() // must not panic
+}
+
+// TestNewElementTypedNilUIDispatchesToRenderer documents that a typed nil UI (a
+// non-nil interface holding a nil pointer) is usable — comparable and equal to itself
+// — and dispatches to its Renderer rather than being treated as unusable. Tolerating
+// the nil receiver is the concrete type's responsibility; typedNilUI does so.
+func TestNewElementTypedNilUIDispatchesToRenderer(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+
+	var ui UI = (*typedNilUI)(nil)
+	if err := NewErrUnusableUI(ui); err != nil {
+		t.Fatalf("NewErrUnusableUI(typed nil) = %v, want nil (usable)", err)
+	}
+
+	elem := rq.NewElement(ui)
+	if cause := context.Cause(rq.Context()); cause != nil {
+		t.Fatalf("NewElement(typed nil) cancelled the Request: %v", cause)
+	}
+	var sb strings.Builder
+	if err := elem.JawsRender(&sb, nil); err != nil {
+		t.Fatalf("JawsRender err = %v", err)
+	}
+	if sb.String() != "typednil" {
+		t.Fatalf("render = %q, want %q", sb.String(), "typednil")
+	}
+}
