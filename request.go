@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -996,8 +997,22 @@ func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 // host equal to the initial host (case-insensitive, default port stripped). It
 // returns a specific ErrWebsocketOrigin* error on each failure mode and nil only
 // on a full match. If there is no initial request to compare against, it fails
-// closed with ErrWebsocketOriginNoInitial rather than accepting the Origin.
+// closed with ErrWebsocketOriginNoInitial rather than accepting the Origin. If
+// trusted forwarding is disabled and enabling it would make the full check pass,
+// the returned error identifies [Jaws.TrustForwardedHeaders] as the likely proxy
+// configuration issue.
 func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
+	trustForwardedHeaders := rq.Jaws.TrustForwardedHeaders
+	err = rq.validateWebSocketOriginWithTrust(r, trustForwardedHeaders)
+	if !trustForwardedHeaders && errors.Is(err, ErrWebsocketOriginWrongScheme) {
+		if rq.validateWebSocketOriginWithTrust(r, true) == nil {
+			err = fmt.Errorf("%w: forwarded headers indicate HTTPS; enable Jaws.TrustForwardedHeaders only behind a trusted reverse proxy", err)
+		}
+	}
+	return
+}
+
+func (rq *Request) validateWebSocketOriginWithTrust(r *http.Request, trustForwardedHeaders bool) (err error) {
 	err = ErrWebsocketOriginMissing
 	if origin := r.Header.Get("Origin"); origin != "" {
 		var u *url.URL
@@ -1007,7 +1022,7 @@ func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 			// silently accept any Origin.
 			err = ErrWebsocketOriginNoInitial
 			if initial := rq.Initial(); initial != nil {
-				secure := secureheaders.RequestIsSecure(initial, rq.Jaws.TrustForwardedHeaders)
+				secure := secureheaders.RequestIsSecure(initial, trustForwardedHeaders)
 				port := ""
 				uhost := u.Host
 				ihost := initial.Host

@@ -1587,6 +1587,7 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 		trustForwardedHeaders bool
 		origin                string
 		wantErr               error
+		wantTrustHint         bool
 	}{
 		{
 			name:       "same origin http accepted",
@@ -1631,6 +1632,20 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 			initialURL:     "http://example.test/page",
 			forwardedProto: "https",
 			origin:         "https://example.test",
+			wantErr:        ErrWebsocketOriginWrongScheme,
+			wantTrustHint:  true,
+		},
+		{
+			name:       "HTTPS scheme without forwarded HTTPS rejected without hint",
+			initialURL: "http://example.test/page",
+			origin:     "https://example.test",
+			wantErr:    ErrWebsocketOriginWrongScheme,
+		},
+		{
+			name:           "untrusted forwarded HTTPS with different host rejected without hint",
+			initialURL:     "http://example.test/page",
+			forwardedProto: "https",
+			origin:         "https://evil.test",
 			wantErr:        ErrWebsocketOriginWrongScheme,
 		},
 		{
@@ -1712,6 +1727,9 @@ func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.
 				}
 			} else if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("validateWebSocketOrigin() error = %v, want %v", err, tt.wantErr)
+			}
+			if got := err != nil && strings.Contains(err.Error(), "Jaws.TrustForwardedHeaders"); got != tt.wantTrustHint {
+				t.Errorf("validateWebSocketOrigin() TrustForwardedHeaders hint = %v, want %v: %v", got, tt.wantTrustHint, err)
 			}
 		})
 	}
@@ -3500,6 +3518,60 @@ func TestWS_RejectsCrossOrigin(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status %d", resp.StatusCode)
+	}
+}
+
+func TestWS_LogsTrustForwardedHeadersHint(t *testing.T) {
+	logger := &captureErrorLogger{}
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.Logger = logger
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	server := httptest.NewServer(jw)
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
+	initial.RemoteAddr = "127.0.0.1:1"
+	initial.Header.Set("X-Forwarded-Proto", "https")
+	rq := jw.NewRequest(httptest.NewRecorder(), initial)
+
+	header := http.Header{}
+	header.Set("Origin", "https://"+serverURL.Host)
+	conn, response, err := websocket.Dial(t.Context(), server.URL+"/jaws/"+rq.JawsKeyString(), &websocket.DialOptions{HTTPHeader: header})
+	if conn != nil {
+		_ = conn.CloseNow()
+		t.Fatal("expected handshake to be rejected")
+	}
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if response == nil {
+		t.Fatal("expected response")
+	}
+	if response.Body != nil {
+		_ = response.Body.Close()
+	}
+	if response.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", response.StatusCode, http.StatusForbidden)
+	}
+
+	loggedErr := logger.next(t)
+	if !errors.Is(loggedErr, ErrRequestCancelled) {
+		t.Errorf("logged error = %v, want %v", loggedErr, ErrRequestCancelled)
+	}
+	if !errors.Is(loggedErr, ErrWebsocketOriginWrongScheme) {
+		t.Errorf("logged error = %v, want %v", loggedErr, ErrWebsocketOriginWrongScheme)
+	}
+	if want := "websocket Origin scheme mismatch: forwarded headers indicate HTTPS; enable Jaws.TrustForwardedHeaders only behind a trusted reverse proxy"; !strings.Contains(loggedErr.Error(), want) {
+		t.Errorf("logged error = %q, want it to contain %q", loggedErr, want)
 	}
 }
 
