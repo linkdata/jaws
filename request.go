@@ -1004,7 +1004,7 @@ func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 func (rq *Request) validateWebSocketOrigin(r *http.Request) (err error) {
 	trustForwardedHeaders := rq.Jaws.TrustForwardedHeaders
 	err = rq.validateWebSocketOriginWithTrust(r, trustForwardedHeaders)
-	if !trustForwardedHeaders && errors.Is(err, ErrWebsocketOriginWrongScheme) {
+	if err != nil && !trustForwardedHeaders {
 		if rq.validateWebSocketOriginWithTrust(r, true) == nil {
 			err = fmt.Errorf("%w: forwarded headers indicate HTTPS; enable Jaws.TrustForwardedHeaders only behind a trusted reverse proxy", err)
 		}
