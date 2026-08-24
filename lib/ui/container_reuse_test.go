@@ -112,7 +112,7 @@ func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 	tc := &rebuildingContainer{
 		rows: []*reuseRow{{id: 1}, {id: 2}, {id: 3}},
 		build: func(row *reuseRow) jaws.UI {
-			return NewTemplate("div", "row", row)
+			return NewTemplate("div", "row", row, `class="row"`, "hidden")
 		},
 	}
 	container := NewContainer("div", tc)
@@ -120,6 +120,9 @@ func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 	var sb strings.Builder
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatal(err)
+	}
+	if got := strings.Count(sb.String(), `class="row" hidden`); got != len(tc.rows) {
+		t.Fatalf("rendered constructor attributes = %d, want %d: %q", got, len(tc.rows), sb.String())
 	}
 
 	before := childJids(t, elem)
@@ -140,6 +143,65 @@ func TestContainer_RebuiltTemplateChildrenAreReused(t *testing.T) {
 			}
 		}
 		assertNoDOMMutation(t, tr, round)
+	}
+}
+
+func TestContainer_ChangedTemplateAttrsReplaceChild(t *testing.T) {
+	tr := newReuseRequest(t)
+
+	row := &reuseRow{id: 1}
+	attr := `class="before"`
+	tc := &rebuildingContainer{
+		rows: []*reuseRow{row},
+		build: func(row *reuseRow) jaws.UI {
+			return NewTemplate("div", "row", row, attr)
+		},
+	}
+	elem := tr.NewElement(NewContainer("section", tc))
+	var output strings.Builder
+	if err := elem.JawsRender(&output, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), attr) {
+		t.Fatalf("initial render %q does not contain %q", output.String(), attr)
+	}
+	before := containerElements(t, elem)[0]
+	if messages := nestedReorderDrainWire(t, tr, "changed Template attrs initial render"); len(messages) != 0 {
+		t.Fatalf("initial render queued wire messages: %+v", messages)
+	}
+
+	attr = `class="after"`
+	elem.JawsUpdate()
+	after := containerElements(t, elem)[0]
+	if after.Jid() == before.Jid() {
+		t.Fatalf("changed constructor attributes retained child Jid %v", after.Jid())
+	}
+	if !before.Deleted() {
+		t.Fatalf("replaced child %v is still live", before.Jid())
+	}
+	if got := tr.GetElementByJid(before.Jid()); got != nil {
+		t.Fatalf("replaced child is still registered: %v", got)
+	}
+
+	var sawAppend, sawRemove, sawOrder bool
+	for _, message := range nestedReorderDrainWire(t, tr, "changed Template attrs update") {
+		switch message.What {
+		case what.Append:
+			sawAppend = true
+			if !strings.Contains(message.Data, attr) {
+				t.Errorf("Append data %q does not contain %q", message.Data, attr)
+			}
+		case what.Remove:
+			sawRemove = true
+			if message.Data != before.Jid().String() {
+				t.Errorf("Remove data = %q, want %q", message.Data, before.Jid())
+			}
+		case what.Order:
+			sawOrder = true
+		}
+	}
+	if !sawAppend || !sawRemove || !sawOrder {
+		t.Fatalf("replacement traffic: Append=%t Remove=%t Order=%t", sawAppend, sawRemove, sawOrder)
 	}
 }
 

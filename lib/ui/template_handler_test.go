@@ -32,6 +32,10 @@ type templateInitialAttrDot struct {
 	calls []jaws.Jid
 }
 
+type templateStaticInitialAttrDot struct {
+	attr template.HTMLAttr
+}
+
 func (d *templateInitialAttrDot) JawsInitialHTMLAttr(elem *jaws.Element) template.HTMLAttr {
 	d.mu.Lock()
 	d.calls = append(d.calls, elem.Jid())
@@ -44,6 +48,10 @@ func (d *templateInitialAttrDot) attrCalls() (calls []jaws.Jid) {
 	calls = append(calls, d.calls...)
 	d.mu.Unlock()
 	return
+}
+
+func (d templateStaticInitialAttrDot) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr {
+	return d.attr
 }
 
 func (d *templateDot) JawsUpdate(elem *jaws.Element) {
@@ -200,8 +208,8 @@ func TestNewTemplate_RendersDotInitialHTMLAttrPerElement(t *testing.T) {
 	}
 
 	dot := new(templateInitialAttrDot)
-	first := NewTemplate("article", "attrtmpl", dot)
-	second := NewTemplate("article", "attrtmpl", dot)
+	first := NewTemplate("article", "attrtmpl", dot, `class="card"`, "hidden")
+	second := NewTemplate("article", "attrtmpl", dot, `class="card" hidden`)
 	if first != second {
 		t.Fatal("Templates rebuilt from the same definition are not equal")
 	}
@@ -220,7 +228,7 @@ func TestNewTemplate_RendersDotInitialHTMLAttrPerElement(t *testing.T) {
 		t.Fatal("equal Templates share per-Element state")
 	}
 	for _, child := range children {
-		want := `<article id="` + child.Jid().String() + `" data-element="` + child.Jid().String() + `">content</article>`
+		want := `<article id="` + child.Jid().String() + `" class="card" hidden data-element="` + child.Jid().String() + `">content</article>`
 		if !strings.Contains(got, want) {
 			t.Errorf("rendered HTML %q does not contain %q", got, want)
 		}
@@ -242,20 +250,41 @@ func TestNewTemplate_RendersDotInitialHTMLAttrPerElement(t *testing.T) {
 	}
 }
 
-func TestTemplate_RenderCombinesParamAndDotInitialHTMLAttrs(t *testing.T) {
+func TestNewTemplate_JoinsAttrsForValueIdentity(t *testing.T) {
+	dot := tag.Tag("dot")
+	attrs := []string{`class="card"`, "hidden"}
+	fromParts := NewTemplate("article", "attrtmpl", dot, attrs...)
+	fromFragment := NewTemplate("article", "attrtmpl", dot, `class="card" hidden`)
+	attrs[0] = `class="changed"`
+	if fromParts != fromFragment {
+		t.Fatal("equivalent rendered attributes produce unequal Templates")
+	}
+	definitions := map[Template]struct{}{fromParts: {}}
+	if _, ok := definitions[fromFragment]; !ok {
+		t.Fatal("Template with constructor attributes is not usable as a map key")
+	}
+	if got := fromParts.String(); !strings.Contains(got, `class=\"card\" hidden`) {
+		t.Fatalf("Template string %q omits its constructor attributes", got)
+	}
+	if changed := NewTemplate("article", "attrtmpl", dot, `class="changed" hidden`); fromParts == changed {
+		t.Fatal("different rendered attributes produce equal Templates")
+	}
+}
+
+func TestTemplate_RenderAttributePrecedence(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	if err := jw.AddTemplateLookuper(template.Must(template.New("attrtmpl").Parse(`content`))); err != nil {
 		t.Fatal(err)
 	}
 
-	dot := new(templateInitialAttrDot)
-	elem, got := renderUI(t, rq, NewTemplate("article", "attrtmpl", dot), template.HTMLAttr(`class="param"`))
-	want := `class="param" data-element="` + elem.Jid().String() + `"`
+	dot := templateStaticInitialAttrDot{attr: `class="dot" data-dot="yes"`}
+	_, got := renderUI(t, rq,
+		NewTemplate("article", "attrtmpl", dot, `class="constructor"`, `data-constructor="yes"`),
+		template.HTMLAttr(`class="param" data-param="yes"`),
+	)
+	want := `class="param" data-param="yes" class="constructor" data-constructor="yes" class="dot" data-dot="yes"`
 	if !strings.Contains(got, want) {
 		t.Fatalf("rendered HTML does not contain ordered attributes %q: %q", want, got)
-	}
-	if calls := dot.attrCalls(); len(calls) != 1 || calls[0] != elem.Jid() {
-		t.Fatalf("JawsInitialHTMLAttr calls = %v, want [%v]", calls, elem.Jid())
 	}
 }
 

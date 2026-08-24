@@ -177,10 +177,13 @@ helpers.
 - `$.Template` owns its generated wrapper and Jid. Its partial must not emit
   `id="{{$.Jid}}"` or forward wrapper attributes onto another root.
 - HTML-inner widgets read initial attrs from their primary getter; input widgets
-  read them from their primary binding/source; Template reads them from Dot for
-  its generated wrapper.
+  read them from their primary binding/source; Template reads constructor attrs
+  and attrs from Dot for its generated wrapper.
 - Render params contribute literal attributes and register recognized handlers
   and tags. A parameter-valued `InitialHTMLAttrHandler` is not invoked.
+- `ui.NewTemplate(tag, name, dot, attrs...)` accepts trusted raw wrapper attributes,
+  which participate in Template equality. For duplicate names, precedence is render
+  params, constructor attrs, then Dot attrs.
 - Initial attrs run once for that Element. Dirty updates do not rerun them.
   Change dynamic attrs through Element update methods or replace the Element.
 - A retained Template wrapper keeps its attributes while its recreated
@@ -193,7 +196,9 @@ helpers.
   also renders a Span.
 
 Plain strings passed to HTML-producing JaWS helpers are trusted raw HTML. Route
-untrusted text through escaping Getter/Stringer forms or escape it explicitly.
+untrusted content through escaping Getter/Stringer forms. Build attributes from
+untrusted values with `htmlio.Attr` and a trusted name; convert the result to
+`string` for `NewTemplate`.
 
 ## Render shape and verification
 
