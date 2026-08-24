@@ -99,13 +99,15 @@ equality or be read indirectly from synchronized mutable state.
 - An application UI may overload a standard widget's render or update behavior,
   but this is discouraged when a standard getter, binder, semantic `ui.Object`,
   or render parameter expresses the same control. Keep the overload only when it
-  adds behavior the standard composition cannot provide, and document that
-  behavior.
-- HTML-inner getters run during initial rendering and dirty updates. If a getter
-  queues wrapper attributes, `TailHTML` may repeat attributes already emitted
-  inline. Treat an overload that suppresses that payload as a performance change:
-  retain a benchmark and weigh the measured result against the simpler standard
-  composition.
+  adds behavior the standard composition cannot provide. Embed or retain the
+  standard widget, document the exact phase behavior being replaced, and keep
+  the outer definition as the Element's single UI value for both phases.
+- By default, HTML-inner widgets call their getters during initial rendering and
+  dirty updates; a justified outer updater may replace the dirty phase. If a
+  getter queues wrapper attributes, `TailHTML` may repeat attributes already
+  emitted inline. Treat an overload that suppresses that payload as a performance
+  change: retain a benchmark and weigh the measured result against the simpler
+  standard composition.
 - **Full HTML document:** use `ui.Handler`. It creates the JaWS Request, applies
   `no-store`, renders without a generated wrapper, and treats the page Dot as
   arbitrary template data rather than a tag or equality key. The page
@@ -214,11 +216,19 @@ helpers.
   and attrs from Dot for its generated wrapper.
 - Render params contribute literal attributes and register recognized handlers
   and tags. A parameter-valued `InitialHTMLAttrHandler` is not invoked.
+- Prefer an ordinary render parameter for attributes specific to one widget use.
+  Put `InitialHTMLAttrHandler` on a shared getter only when every widget using
+  that getter should inherit those attributes.
 - `ui.NewTemplate(tag, name, dot, attrs...)` accepts trusted raw wrapper attributes,
   which participate in Template equality. For duplicate names, precedence is render
   params, constructor attrs, then Dot attrs.
 - Initial attrs run once for that Element. Dirty updates do not rerun them.
   Change dynamic attrs through Element update methods or replace the Element.
+- A `template.HTMLAttr` result is raw opening-tag syntax, not a DOM update or
+  attribute diff. By itself it identifies neither removals nor attribute
+  ownership. Never reinterpret an initial-attribute hook as an update getter; a
+  reusable dynamic-attribute contract must define ownership and diff semantics,
+  preferably through explicit structured set/remove operations.
 - A retained Template wrapper keeps its attributes while its recreated
   descendants run their own initial attrs.
 - Object attribute hooks concatenate. Binder attribute hooks run with the Binder

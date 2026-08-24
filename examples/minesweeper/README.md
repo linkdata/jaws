@@ -17,9 +17,11 @@ The example demonstrates the main JaWS application patterns together:
 
 - Template execution constructs fresh Button and Span definitions for each
   Request over the shared `*game` and `*cell` sources.
-- Each cell is passed directly to a standard JaWS Button as its HTML getter. It
-  provides content, event handlers, initial attributes, and its precise
-  dependency tag while reading the shared cell directly.
+- Each cell constructs a small specialization that embeds the standard JaWS
+  Button. The standard render path gets content, events, and the precise tag
+  directly from `*cell`. The template passes the result of
+  `cell.InitialAttrs()` as an ordinary render parameter, while the specialized
+  update handles mutable wrapper attributes together with inner HTML.
 - A separate board tag supports broad reset and terminal-state refreshes without
   widening ordinary single-cell updates.
 - Every cell also registers the shared game-over field because its label and
@@ -28,14 +30,14 @@ The example demonstrates the main JaWS application patterns together:
   widgets apply HTML escaping.
 - Getters derive output directly from synchronized game fields; there is no
   detached render DTO or application-owned presentation state.
-- Initial cell attributes render inline. The same getter queues current wrapper
-  attributes during initial rendering and live updates, so `TailHTML` reconciles
-  independent initial reads while `data-state` preserves the static class
-  supplied by the template.
+- Initial cell attributes render inline with no redundant `TailHTML` fixups.
+  Live updates use `data-state` and preserve the static class supplied by the
+  template. The template also supplies each Button's shared board and game-over
+  dependencies explicitly.
 - Mutations return only tags for dependencies they changed, and event handlers
   pass those tags to `Request.Dirty`. JaWS schedules matching Elements across
-  live Requests. Those batched Element updates re-read the shared game so every
-  connected browser eventually converges.
+  live Requests. Those batched Element updates re-read the shared game, bringing
+  every already-registered matching Element to the latest state.
 - The long-running server configures logging so update-time failures are
   reported rather than panicking; tests that construct JaWS directly omit the
   logger so framework-contract violations fail fast. The server also configures

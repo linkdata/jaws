@@ -105,9 +105,11 @@ type Updater interface {
 	// JawsUpdate is called for an [Element] that has been marked dirty to update its HTML.
 	// Do not call this yourself unless it is from within another JawsUpdate implementation.
 	// The engine does not invoke this once the [Element] is deleted (see [Element.Deleted]).
-	// A UI implementation that delegates rendering and updating must delegate both calls
-	// to the same UI widget. Rendering elem through one widget and updating it through
-	// another is unsupported.
+	//
+	// A UI may embed or retain a standard widget and override one phase while the outer
+	// value remains elem's UI. It is responsible for preserving that widget's lifecycle,
+	// ownership, and multiplicity contracts. Delegating render and update calls to two
+	// unrelated widgets is unsupported.
 	JawsUpdate(elem *Element)
 }
 
@@ -156,7 +158,15 @@ type ContextMenuHandler interface {
 
 // InitialHTMLAttrHandler provides attributes for initial [Element] rendering.
 type InitialHTMLAttrHandler interface {
-	// JawsInitialHTMLAttr returns attributes for elem's initial render, or an empty string.
+	// JawsInitialHTMLAttr returns trusted attributes for elem's opening tag.
+	//
+	// Standard renderers invoke it during initial rendering only; dirty updates do
+	// not invoke it. The result is raw trusted [html/template.HTMLAttr] syntax and
+	// must not contain unescaped untrusted data. JaWS neither parses it nor retains
+	// attribute ownership or a baseline for later updates. Dirty updates do not
+	// derive DOM changes from this result; update mutable attributes explicitly with
+	// [Element] methods such as [Element.SetAttr] and [Element.RemoveAttr], or replace
+	// the Element. An empty string contributes no attributes.
 	//
 	// Callers must not hold a lock protecting the handler or its source. The method
 	// must synchronize shared state. Its result need not share a state snapshot with

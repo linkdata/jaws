@@ -24,7 +24,7 @@ func tailEndpoint(body string) (path string, ok bool) {
 }
 
 // BenchmarkInitialPageAndTail measures the complete initial HTML response and
-// the wrapper-attribute fixup payload fetched before the WebSocket connects.
+// reports the cost of keeping mutable cell attributes out of the tail payload.
 func BenchmarkInitialPageAndTail(b *testing.B) {
 	logger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))

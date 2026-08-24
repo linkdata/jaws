@@ -34,20 +34,19 @@ func (c *cell) htmlLocked() template.HTML {
 }
 
 func (c *cell) labelLocked() string {
-	prefix := fmt.Sprintf("Row %d, column %d: ", c.row+1, c.col+1)
 	switch {
 	case c.revealed && c.mine:
-		return prefix + "mine"
+		return fmt.Sprintf("Row %d, column %d: mine", c.row+1, c.col+1)
 	case c.revealed && c.adjacent > 0:
-		return fmt.Sprintf("%srevealed with %d adjacent mines", prefix, c.adjacent)
+		return fmt.Sprintf("Row %d, column %d: revealed with %d adjacent mines", c.row+1, c.col+1, c.adjacent)
 	case c.revealed:
-		return prefix + "revealed with no adjacent mines"
+		return fmt.Sprintf("Row %d, column %d: revealed with no adjacent mines", c.row+1, c.col+1)
 	case c.flagged:
-		return prefix + "flagged"
+		return fmt.Sprintf("Row %d, column %d: flagged", c.row+1, c.col+1)
 	case c.game.gameOver:
-		return prefix + "hidden; game over"
+		return fmt.Sprintf("Row %d, column %d: hidden; game over", c.row+1, c.col+1)
 	default:
-		return prefix + "hidden"
+		return fmt.Sprintf("Row %d, column %d: hidden", c.row+1, c.col+1)
 	}
 }
 
@@ -91,6 +90,29 @@ func setCellAttributes(elem *jaws.Element, state, label string, disabled bool) {
 	}
 }
 
+// cellButton specializes only the standard Button's dirty-update phase. Initial
+// attributes passed by the template remain inline instead of being repeated in
+// TailHTML, while each dirty update reads the cell's wrapper attributes and inner
+// HTML together. The embedded Button supplies the unmodified render path,
+// including getter, tag, and event-handler registration.
+//
+// A fresh definition is constructed by [cell.Button] for every template
+// execution. It retains the authoritative cell, never copied presentation state.
+type cellButton struct {
+	ui.Button
+	source *cell
+}
+
+var _ jaws.UI = (*cellButton)(nil)
+
+// Button returns a fresh Button specialization for the cell.
+func (c *cell) Button() *cellButton {
+	return &cellButton{
+		Button: *ui.NewButton(c),
+		source: c,
+	}
+}
+
 // JawsGetTag returns the precise dependency tag for this cell.
 func (c *cell) JawsGetTag() any {
 	// Register shared dependencies separately so Dirty(c) does not expand into
@@ -108,26 +130,34 @@ func (c *cell) GameOverTag() any {
 	return &c.game.gameOver
 }
 
-// JawsInitialHTMLAttr returns the cell's initial presentation attributes.
-func (c *cell) JawsInitialHTMLAttr(_ *jaws.Element) template.HTMLAttr {
+// InitialAttrs returns the cell's current attributes for initial Button markup.
+func (c *cell) InitialAttrs() template.HTMLAttr {
 	c.game.mu.Lock()
 	defer c.game.mu.Unlock()
 
 	return c.initialAttrsLocked()
 }
 
-// JawsGetHTML returns the cell's current markup and queues its Button attributes.
-func (c *cell) JawsGetHTML(elem *jaws.Element) template.HTML {
+// JawsGetHTML returns the cell's current trusted inner markup.
+func (c *cell) JawsGetHTML(_ *jaws.Element) template.HTML {
+	c.game.mu.Lock()
+	defer c.game.mu.Unlock()
+
+	return c.htmlLocked()
+}
+
+// JawsUpdate synchronizes one live Button with its authoritative cell.
+func (button *cellButton) JawsUpdate(elem *jaws.Element) {
+	c := button.source
 	c.game.mu.Lock()
 	inner := c.htmlLocked()
 	state, label, disabled := c.attributesLocked()
 	c.game.mu.Unlock()
 
-	// Initial attributes and content are separate synchronized reads. Queueing
-	// the current attributes here lets TailHTML reconcile the initial Button;
-	// dirty updates use this same direct read of the authoritative cell.
+	// Release the application lock before entering JaWS queueing. These values
+	// are a local capture for one control update, not retained presentation state.
 	setCellAttributes(elem, state, label, disabled)
-	return inner
+	elem.SetInner(inner)
 }
 
 // JawsClick handles a reveal or Shift-click flag attempt.
