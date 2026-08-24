@@ -305,23 +305,11 @@ func (errUnusableUI) Is(target error) bool {
 	return target == tag.ErrNotUsableAsTag || target == tag.ErrNotComparable
 }
 
-// NewErrUnusableUI returns a non-nil error when ui cannot be used as a [UI] value,
-// and nil when it can.
+// NewErrUnusableUI returns an error if ui is nil, incomparable, or not equal to itself.
 //
-// A UI value is unusable when it is a nil interface, not comparable at runtime, or not
-// equal to itself as a value holding NaN is. Containers use it both as a map key and
-// to render children: a non-comparable value panics when hashed and a NaN-bearing one
-// never matches itself, while a nil interface is a legal map key but has no methods to
-// render. A typed nil — a non-nil interface holding a nil pointer whose type
-// implements [UI] — is comparable and equal to itself, so it is reported usable.
-// Usable here means only that it can key a container and be dispatched to: whether
-// its [Renderer] survives a nil receiver depends on the concrete type, and most do
-// not (see [UI]).
+// A typed nil pointer passes this check, but calling its methods may panic.
 //
-// The returned error matches both [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable]
-// under errors.Is. The container widgets use it to terminate a Request handed such a
-// child; a nil interface passed directly to [Request.NewElement] is instead tolerated
-// as a no-op Element, so this reports it unusable only for the container's benefit.
+// The returned error matches [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable].
 func NewErrUnusableUI(ui UI) error {
 	if ui == nil || tag.NewErrNotUsableAsTag(ui) != nil {
 		return errUnusableUI{t: reflect.TypeOf(ui)}

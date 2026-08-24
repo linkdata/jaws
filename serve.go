@@ -215,9 +215,8 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	jw.mu.Unlock()
 }
 
-// Client IP resolution honours trusted forwarded headers when
-// [Jaws.TrustForwardedHeaders] is set. equalIP compares addresses loopback-aware
-// for the tail-fetch and WebSocket binding checks.
+// The client-IP subsystem resolves addresses for tail-fetch and WebSocket
+// binding, honouring trusted forwarded headers when configured.
 
 // equalIP reports whether a and b identify the same client for the purpose of
 // session and request-key binding. Addresses are unmapped first so an
@@ -390,16 +389,8 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 	return
 }
 
-// The tail-script subsystem serves the one-shot /jaws/.tail/<key> response that
-// applies HTML attribute and class updates queued during initial rendering, so the
-// page reaches its correct state before the WebSocket connects without templates
-// having to pre-render those values.
-//
-// [Request.TailHTML] emits the page-side <script src="/jaws/.tail/<key>"> tag,
-// [Jaws.serveTailScript] handles the fetch, [Request.drainTailScript] builds the
-// script body from the queued messages and [Request.writeTailResponse] writes it.
-// appendJSQuote and jsInlineScriptEscaper keep interpolated values safe inside the
-// inline <script>.
+// The tail-script subsystem serves one-shot attribute and class updates queued
+// during initial rendering before the WebSocket connects.
 
 const headerContentTypeJavaScript = "text/javascript"
 
