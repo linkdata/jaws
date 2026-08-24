@@ -1,9 +1,11 @@
 package jaws
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"html/template"
@@ -4945,5 +4947,683 @@ func TestServe_MarksRequestRunningSoMaintenanceSkips(t *testing.T) {
 
 	if got := jw.RequestCount(); got != 1 {
 		t.Fatalf("running request was retired by maintenance: RequestCount() = %d, want 1", got)
+	}
+}
+
+// TestEarlyCallbackPreservesInitialRenderIdentity is the reproduction from issue
+// #195: an early /jaws/<key> callback that fails the WebSocket upgrade tears the
+// Request down — clearing its collections — but must not change the identity the
+// initial HTTP handler is still rendering with. Because Requests keep a stable
+// identity and are never reused, completion unregisters the Request and releases its
+// buffers but never zeroes or reassigns the key, so the initial renderer's pointer
+// keeps its stable, nonzero key (the Request is just unregistered).
+func TestEarlyCallbackPreservesInitialRenderIdentity(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	go jw.Serve()
+
+	initial := httptest.NewRequest(http.MethodGet, "/", nil)
+	initial.RemoteAddr = "192.0.2.1:1000"
+	rq := jw.newRequest(initial)
+	wantKey := rq.JawsKeyString()
+	if wantKey == "" {
+		t.Fatal("NewRequest returned an empty key")
+	}
+
+	var page bytes.Buffer
+	if err := rq.HeadHTML(&page); err != nil {
+		t.Fatal(err)
+	}
+
+	callback := httptest.NewRequest(http.MethodGet, "/jaws/"+wantKey, nil)
+	callback.RemoteAddr = initial.RemoteAddr
+	jw.ServeHTTP(httptest.NewRecorder(), callback)
+
+	if got := rq.JawsKeyString(); got != wantKey {
+		t.Fatalf("early callback changed the initial render's Request key: got %q, want stable %q", got, wantKey)
+	}
+}
+
+// TestRequestLateCancelDoesNotReachNextConnection proves the core identity-stability
+// guarantee: after a Request's WebSocket connects and disconnects, a later
+// NewRequest returns a distinct Request, the finished Request keeps its key, and a
+// late Cancel on the finished Request cannot cancel the later one.
+func TestRequestLateCancelDoesNotReachNextConnection(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	server := httptest.NewServer(jw)
+	defer server.Close()
+	newInitialRequest := func(path string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, server.URL+path, nil)
+		r.RemoteAddr = "127.0.0.1:12345"
+		return r
+	}
+
+	finished := jw.newRequest(newInitialRequest("/first"))
+	finishedKey := finished.JawsKey
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/jaws/"+finished.JawsKeyString(), &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": []string{server.URL}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = conn.Close(websocket.StatusNormalClosure, ""); err != nil {
+		t.Fatal(err)
+	}
+	waitForRequestCount(t, jw, 0, time.Second)
+
+	replacement := jw.newRequest(newInitialRequest("/second"))
+	defer jw.recycle(replacement)
+	if replacement == finished {
+		t.Fatal("NewRequest reused the finished Request identity")
+	}
+	if finished.JawsKey != finishedKey {
+		t.Fatalf("finished Request key = %v, want stable key %v", finished.JawsKey, finishedKey)
+	}
+	replacementCtx := replacement.Context()
+	finished.Cancel(errors.New("background operation completed after disconnect"))
+	select {
+	case <-replacementCtx.Done():
+		t.Fatalf("late Cancel reached the next Request: %v", context.Cause(replacementCtx))
+	default:
+	}
+}
+
+// TestRequestFinishDoesNotPanicOnContinuedRender exercises the racy #195 window
+// where the initial renderer keeps registering after the Request finished. This must
+// not panic and must not leak into a later, distinct Request. Registration is not a
+// full no-op: NewElement still creates an Element and advances the Jid, while Tag
+// reaches the nil-map guard in TagExpanded (the buffers were released) and is dropped
+// — neither panics, and none of it is visible to another Request.
+func TestRequestFinishDoesNotPanicOnContinuedRender(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq.Tag(rq.NewElement(&testUi{}), tag.Tag("live"))
+
+	// Finish the Request out from under the still-running initial renderer, as a racy
+	// early /jaws/<key> callback would.
+	jw.recycle(rq)
+
+	// The renderer keeps going. A fresh element created after completion is not marked
+	// deleted, so tagging it reaches the nil-map guard in TagExpanded; this must not
+	// panic.
+	late := rq.NewElement(&testUi{})
+	rq.Tag(late, tag.Tag("late"))
+	rq.Dirty(tag.Tag("live"))
+
+	other := jw.newRequest(httptest.NewRequest(http.MethodGet, "/next", nil))
+	defer jw.recycle(other)
+	if other == rq {
+		t.Fatal("NewRequest reused a finished Request identity")
+	}
+	if got := len(other.GetElements(tag.Tag("live"))) + len(other.GetElements(tag.Tag("late"))); got != 0 {
+		t.Fatalf("finished Request's elements leaked into a later Request: %d", got)
+	}
+}
+
+// TestRequestFinishConcurrentWithRenderIsRaceFree drives a live initial render
+// (NewElement, Tag and JawsRender, which reads Element.ui and handlers lock-free)
+// concurrently with completion across many Requests. Completion must not mutate the
+// render-visible Element fields or the Jid counter, so this is race-free under -race,
+// and the nil-map guard keeps a post-completion Tag from panicking.
+func TestRequestFinishConcurrentWithRenderIsRaceFree(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const n = 200
+	var wg sync.WaitGroup
+	for range n {
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for range 8 {
+				elem := rq.NewElement(&testUi{})
+				rq.Tag(elem, tag.Tag("t"))
+				_ = elem.JawsRender(io.Discard, nil)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			jw.recycle(rq)
+		}()
+	}
+	wg.Wait()
+}
+
+// TestFinishDoesNotResetJidCounter verifies teardown leaves the Jid counter intact,
+// so a renderer that keeps allocating Elements after a racy teardown cannot reuse an
+// already-streamed Jid. Restoring lastJid = 0 in teardown would fail this.
+func TestFinishDoesNotResetJidCounter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	rq.NewElement(&testUi{})
+	last := rq.NewElement(&testUi{}).Jid()
+
+	jw.recycle(rq)
+
+	if got := rq.NewElement(&testUi{}).Jid(); got <= last {
+		t.Fatalf("Jid after teardown = %v, want > %v (counter must not reset)", got, last)
+	}
+}
+
+// TestRecycleQueueRaceDoesNotLeak stresses a queue concurrent with recycle. The
+// wsQueue transfer in releaseBuffersLocked must stay under muQueue, so a late queue
+// cannot race the transfer or land its message in a buffer already returned to the
+// pool. Moving the transfer outside muQueue would trip the race detector here. Run
+// with -race.
+func TestRecycleQueueRaceDoesNotLeak(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const n = 300
+	for range n {
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			rq.queue(wire.WsMsg{Jid: 1, What: what.Inner, Data: "late"})
+		}()
+		go func() {
+			defer wg.Done()
+			jw.recycle(rq)
+		}()
+		wg.Wait()
+	}
+}
+
+// TestNoscriptDuringLiveRenderRecordsJavascriptDisabled guards against re-adding a
+// render-timing gate that would 404 the <noscript> probe while a streamed page is
+// still rendering (its initial request context still live). The probe must reach the
+// Request, return 204, and record ErrJavascriptDisabled.
+func TestNoscriptDuringLiveRenderRecordsJavascriptDisabled(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	initial := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+	rq := jw.newRequest(initial)
+
+	w := httptest.NewRecorder()
+	probe := httptest.NewRequest(http.MethodGet, "/jaws/"+rq.JawsKeyString()+"/noscript", nil)
+	probe.RemoteAddr = initial.RemoteAddr
+	jw.ServeHTTP(w, probe)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("/noscript during live render: status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrJavascriptDisabled) {
+		t.Fatalf("cancellation cause = %v, want ErrJavascriptDisabled", cause)
+	}
+}
+
+// TestRequestRecycledKeyNotReusedWhileReachable proves the recycle path reserves the
+// key with a tombstone: with the key generator forced to offer K, K, then K2, a
+// Request minted K and then recycled must not have K reassigned to the next Request
+// while the finished one is still reachable; the next Request gets K2 instead.
+func TestRequestRecycledKeyNotReusedWhileReachable(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const k = key.Key(0x1111111111111111)
+	const k2 = key.Key(0x2222222222222222)
+	var kb, k2b [8]byte
+	binary.LittleEndian.PutUint64(kb[:], uint64(k))
+	binary.LittleEndian.PutUint64(k2b[:], uint64(k2))
+	stream := append(append(append([]byte{}, kb[:]...), kb[:]...), bytes.Repeat(k2b[:], 4)...)
+	jw.mu.Lock()
+	jw.kg = bufio.NewReader(bytes.NewReader(stream))
+	jw.mu.Unlock()
+
+	rq1 := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if rq1.JawsKey != k {
+		t.Fatalf("rq1 key = %v, want forced %v", rq1.JawsKey, k)
+	}
+	jw.recycle(rq1)
+
+	rq2 := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	defer jw.recycle(rq2)
+	if rq2.JawsKey == k {
+		t.Fatal("recycled key K was reassigned while the finished Request is still reachable")
+	}
+	if rq2.JawsKey != k2 {
+		t.Fatalf("rq2 key = %v, want %v (K skipped via tombstone)", rq2.JawsKey, k2)
+	}
+	runtime.KeepAlive(rq1) // keep rq1 reachable so its tombstone is not GC-cleaned mid-test
+}
+
+func TestReqStateString(t *testing.T) {
+	for s, want := range map[reqState]string{
+		reqUnclaimable: "unclaimable",
+		reqPending:     "pending",
+		reqClaimed:     "claimed",
+		reqRunning:     "running",
+		reqFinished:    "finished",
+		reqState(99):   "reqState(99)",
+	} {
+		if got := s.String(); got != want {
+			t.Errorf("reqState(%d).String() = %q, want %q", int(s), got, want)
+		}
+	}
+}
+
+// TestRequestStateTransitions covers the lifecycle state machine: the normal
+// pending -> claimed -> running -> finished path, the direct finish paths a
+// never-claimed or claimed-but-not-running Request takes, and that duplicate
+// claim/startServe are rejected (a normal CAS failure) without moving the state.
+func TestRequestStateTransitions(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	t.Run("pending->claimed->running->finished", func(t *testing.T) {
+		rq := jw.newRequest(r)
+		if got := rq.loadState(); got != reqPending {
+			t.Fatalf("after NewRequest = %v, want pending", got)
+		}
+		if jw.UseRequest(rq.JawsKey, r) != rq {
+			t.Fatal("claim failed")
+		}
+		if got := rq.loadState(); got != reqClaimed {
+			t.Fatalf("after claim = %v, want claimed", got)
+		}
+		if !rq.startServe() {
+			t.Fatal("startServe failed")
+		}
+		if got := rq.loadState(); got != reqRunning {
+			t.Fatalf("after startServe = %v, want running", got)
+		}
+		jw.recycle(rq)
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("after recycle = %v, want finished", got)
+		}
+	})
+
+	t.Run("recycle_never_claimed_pending->finished", func(t *testing.T) {
+		rq := jw.newRequest(r)
+		if got := rq.loadState(); got != reqPending {
+			t.Fatalf("state = %v, want pending", got)
+		}
+		jw.recycle(rq)
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("after recycle = %v, want finished", got)
+		}
+	})
+
+	t.Run("retire_claimed_not_running->finished", func(t *testing.T) {
+		rq := jw.newRequest(r)
+		if jw.UseRequest(rq.JawsKey, r) != rq {
+			t.Fatal("claim failed")
+		}
+		if got := rq.loadState(); got != reqClaimed {
+			t.Fatalf("state = %v, want claimed", got)
+		}
+		jw.mu.Lock()
+		jw.retireNonRunningRequestLocked(rq)
+		jw.mu.Unlock()
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("after retire = %v, want finished", got)
+		}
+	})
+
+	t.Run("double_claim_and_double_startServe_rejected", func(t *testing.T) {
+		rq := jw.newRequest(r)
+		if jw.UseRequest(rq.JawsKey, r) != rq {
+			t.Fatal("first claim failed")
+		}
+		if jw.UseRequest(rq.JawsKey, r) != nil {
+			t.Fatal("second claim should fail")
+		}
+		if got := rq.loadState(); got != reqClaimed {
+			t.Fatalf("after double claim = %v, want claimed", got)
+		}
+		if !rq.startServe() {
+			t.Fatal("first startServe failed")
+		}
+		if rq.startServe() {
+			t.Fatal("second startServe should fail")
+		}
+		if got := rq.loadState(); got != reqRunning {
+			t.Fatalf("after double startServe = %v, want running", got)
+		}
+		jw.recycle(rq)
+	})
+
+	t.Run("terminal_stays_finished", func(t *testing.T) {
+		rq := jw.newRequest(r)
+		jw.recycle(rq)
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("state = %v, want finished", got)
+		}
+		// A finished Request is not claimable, not startable, and a second recycle is
+		// a no-op (the map-identity guard fails), so it never resurrects.
+		if jw.UseRequest(rq.JawsKey, r) != nil {
+			t.Fatal("finished Request must not be claimable")
+		}
+		if rq.startServe() {
+			t.Fatal("finished Request must not start serving")
+		}
+		jw.recycle(rq)
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("after double recycle = %v, want finished", got)
+		}
+	})
+}
+
+// TestFinishLockedTerminalStatePanicsInDebug verifies the debug-only invariant
+// assertion in finishLocked: calling it on a terminal (non-live) state panics in
+// debug/race builds, catching a double-finish or terminal-state resurrection. The
+// assertion is compiled out in release builds, so this only exercises the panic
+// when deadlock.Debug is set (the module's tests always run with -race).
+func TestFinishLockedTerminalStatePanicsInDebug(t *testing.T) {
+	if !deadlock.Debug {
+		t.Skip("finishLocked assertion is only active when deadlock.Debug is set (run with -race)")
+	}
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	rq := &Request{Jaws: jw}
+	rq.storeState(reqFinished)
+
+	defer func() {
+		if recover() == nil {
+			t.Error("finishLocked on a terminal state did not panic")
+		}
+	}()
+	// finishLocked requires both jw.mu and rq.mu (jw.mu is acquired first, matching the
+	// production lock order in recycleLockedWithCause/retireNonRunningRequestCoreLocked).
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	rq.finishLocked()
+}
+
+// TestClaimPostCloseReturnsCauseNotAlreadyClaimed covers the claim fast path for a
+// terminal (reqUnclaimable) Request: it must return the cancellation cause, as an
+// unclaimed canceled Request always has, not ErrRequestAlreadyClaimed.
+func TestClaimPostCloseReturnsCauseNotAlreadyClaimed(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.Close()
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.newRequest(r)
+	if got := rq.loadState(); got != reqUnclaimable {
+		t.Fatalf("post-Close state = %v, want unclaimable", got)
+	}
+	err = rq.claim(r)
+	if err == nil {
+		t.Fatal("post-Close claim should fail")
+	}
+	if errors.Is(err, ErrRequestAlreadyClaimed) {
+		t.Fatalf("post-Close claim = %v, want the cancellation cause, not ErrRequestAlreadyClaimed", err)
+	}
+	if rq.loadState().claimed() {
+		t.Fatal("post-Close Request must not be marked claimed")
+	}
+}
+
+// TestServe_DuplicatePanicsWithoutDisturbingFirst verifies the checked transition:
+// a second TestServe on an already-running Request panics (failed reqClaimed ->
+// reqRunning) and must not recycle the Request or stop the first serve.
+func TestServe_DuplicatePanicsWithoutDisturbingFirst(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	rq := jw.newRequest(r)
+	if jw.UseRequest(rq.JawsKey, r) != rq {
+		t.Fatal("claim failed")
+	}
+
+	inCh, _, _, readyCh, doneCh := jw.TestServe(rq, func(recovered any) {
+		if recovered != nil {
+			panic(recovered)
+		}
+	})
+	<-readyCh
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("duplicate TestServe did not panic")
+			}
+		}()
+		jw.TestServe(rq, func(any) {})
+	}()
+
+	// The first serve must be undisturbed: still running, stoppable via its own inCh.
+	select {
+	case <-doneCh:
+		t.Fatal("first TestServe stopped after the duplicate")
+	default:
+	}
+	close(inCh)
+	<-doneCh
+}
+
+// TestServe_CloseRaceIsSafe races Jaws.Close against TestServe. Exactly one outcome
+// is legal: TestServe won and served cleanly, or Close won and TestServe refused via
+// one of its "jaws: TestServe" setup-failure panics (the subscription timed out
+// against the stopped Serve loop, or the checked reqClaimed->reqRunning transition
+// failed). Any other panic — a terminal->running resurrection, a nil dereference, a
+// double-finish assertion — is a bug. Whichever side wins, the Request must end
+// reqFinished and must never be resurrected from a terminal state. Run with -race.
+func TestServe_CloseRaceIsSafe(t *testing.T) {
+	for i := range 50 {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go jw.Serve()
+		waitForServeLoop(t, jw)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		rq := jw.newRequest(r)
+		if jw.UseRequest(rq.JawsKey, r) != rq {
+			t.Fatal("claim failed")
+		}
+
+		// gotPanic is the synchronous setup panic (Close won before serving started);
+		// asyncPanic is anything TestServe's process/recycle goroutine recovers, handed
+		// back via onPanic before doneCh closes. Both are written only by the TestServe
+		// goroutine (asyncPanic under the onPanic->close(doneCh)->{<-doneCh} edge), and
+		// the WaitGroup's Done->Wait edge publishes them to the assertions below, so the
+		// reads are race-free.
+		var (
+			wg         sync.WaitGroup
+			gotPanic   any
+			asyncPanic any
+			served     bool
+		)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			jw.Close()
+		}()
+		go func() {
+			defer wg.Done()
+			defer func() { gotPanic = recover() }()
+			inCh, _, _, readyCh, doneCh := jw.TestServe(rq, func(recovered any) { asyncPanic = recovered })
+			<-readyCh
+			close(inCh)
+			<-doneCh
+			served = true
+		}()
+		wg.Wait()
+
+		// A panic escaping the process/recycle goroutine is delivered here via onPanic
+		// instead of being discarded: a terminal->running resurrection reaching recycle
+		// would trip finishLocked's assertion, which the final reqFinished check below
+		// cannot see (recycle still ends the request finished).
+		if asyncPanic != nil {
+			t.Fatalf("iteration %d: TestServe process/recycle goroutine panicked: %#v", i, asyncPanic)
+		}
+		if gotPanic != nil {
+			if msg, ok := gotPanic.(string); !ok || !strings.HasPrefix(msg, "jaws: TestServe") {
+				t.Fatalf("iteration %d: unexpected panic %#v", i, gotPanic)
+			}
+			if served {
+				t.Fatalf("iteration %d: TestServe both served and panicked", i)
+			}
+		}
+		if got := rq.loadState(); got != reqFinished {
+			t.Fatalf("iteration %d: final state = %v, want finished", i, got)
+		}
+	}
+}
+
+func TestNewRequest_SetsCacheControlBeforeHeadHTML(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+
+	w := httptest.NewRecorder()
+	w.Header().Add("Cache-Control", "public")
+	w.Header().Add("Cache-Control", "max-age=3600")
+	rq := jw.NewRequest(w, nil)
+	if _, err := w.Write([]byte("<!doctype html>")); err != nil {
+		t.Fatal(err)
+	}
+	if err := rq.HeadHTML(w); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Result().Header.Values("Cache-Control"); len(got) != 1 || got[0] != "no-store" {
+		t.Fatalf("Cache-Control = %q, want [%q]", got, "no-store")
+	}
+}
+
+func Test_defaultAuth(t *testing.T) {
+	a := DefaultAuth{}
+	if a.Data() != nil {
+		t.Fatal()
+	}
+	if a.Email() != "" {
+		t.Fatal()
+	}
+	if a.IsAdmin() != true {
+		t.Fatal()
+	}
+}
+
+func TestJaws_DefaultAuthReturnsSharedInstance(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	// A shared instance keeps the embedded sync.Once effective across renders so
+	// the fail-open warning is logged once per Jaws, not once per template render.
+	a := jw.DefaultAuth()
+	if a == nil {
+		t.Fatal("DefaultAuth returned nil")
+	}
+	if jw.DefaultAuth() != a {
+		t.Fatal("DefaultAuth must return the same shared instance")
+	}
+}
+
+type reentrantDefaultAuthLogger struct {
+	jw        *Jaws
+	warnCalls int
+	reentered bool
+}
+
+func (*reentrantDefaultAuthLogger) Info(string, ...any)  {}
+func (*reentrantDefaultAuthLogger) Error(string, ...any) {}
+
+func (logger *reentrantDefaultAuthLogger) Warn(string, ...any) {
+	logger.warnCalls++
+	logger.reentered = logger.jw.DefaultAuth().IsAdmin()
+}
+
+func TestDefaultAuth_IsAdminLoggerCanReenter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	logger := &reentrantDefaultAuthLogger{jw: jw}
+	jw.Logger = logger
+
+	done := make(chan bool, 1)
+	go func() {
+		done <- jw.DefaultAuth().IsAdmin()
+	}()
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case isAdmin := <-done:
+		if !isAdmin {
+			t.Error("DefaultAuth.IsAdmin returned false")
+		}
+	case <-timer.C:
+		t.Fatal("DefaultAuth.IsAdmin deadlocked when Logger.Warn re-entered it")
+	case <-t.Context().Done():
+		t.Fatalf("test context ended while Logger.Warn re-entered DefaultAuth.IsAdmin: %v", t.Context().Err())
+	}
+	if logger.warnCalls != 1 {
+		t.Errorf("Logger.Warn calls = %d, want 1", logger.warnCalls)
+	}
+	if !logger.reentered {
+		t.Error("Logger.Warn re-entry returned false")
 	}
 }

@@ -6,13 +6,290 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"math"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 )
+
+func TestParseClickData(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      string
+		want    Click
+		wantRem string
+		wantOK  bool
+	}{
+		{
+			name:   "without modifiers",
+			in:     "10 20 0 save",
+			want:   Click{Name: "save", X: 10, Y: 20},
+			wantOK: true,
+		},
+		{
+			name:   "fractional coordinates",
+			in:     "10.25 20.5 0 save",
+			want:   Click{Name: "save", X: 10.25, Y: 20.5},
+			wantOK: true,
+		},
+		{
+			name:    "with modifiers and route",
+			in:      "10 20 5 save\tJid.1\tJid.2",
+			want:    Click{Name: "save", X: 10, Y: 20, Shift: true, Alt: true},
+			wantRem: "Jid.1\tJid.2",
+			wantOK:  true,
+		},
+		{
+			name:    "route without modifiers",
+			in:      "10 20 0 save\tJid.1",
+			want:    Click{Name: "save", X: 10, Y: 20},
+			wantRem: "Jid.1",
+			wantOK:  true,
+		},
+		{
+			name:    "one modifier and route",
+			in:      "10 20 2 save\tJid.1",
+			want:    Click{Name: "save", X: 10, Y: 20, Control: true},
+			wantRem: "Jid.1",
+			wantOK:  true,
+		},
+		{
+			name:   "name with spaces",
+			in:     "10 20 2 save button",
+			want:   Click{Name: "save button", X: 10, Y: 20, Control: true},
+			wantOK: true,
+		},
+		{
+			name:   "name with many tokens collapses whitespace",
+			in:     "1 2 0    a   b     c d",
+			want:   Click{Name: "a b c d", X: 1, Y: 2},
+			wantOK: true,
+		},
+		{
+			name:   "invalid x",
+			in:     "bad 20 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "invalid y",
+			in:     "10 bad 0 save",
+			wantOK: false,
+		},
+		{
+			name:   "invalid keystate",
+			in:     "10 20 bad save",
+			wantOK: false,
+		},
+		{
+			name:   "unknown keystate bit",
+			in:     "10 20 8 save",
+			wantOK: false,
+		},
+		{
+			name:   "negative keystate",
+			in:     "10 20 -1 save",
+			wantOK: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, rem, ok := parseClickData(tt.in)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if got != tt.want {
+				t.Fatalf("click = %+v, want %+v", got, tt.want)
+			}
+			if rem != tt.wantRem {
+				t.Fatalf("after = %q, want %q", rem, tt.wantRem)
+			}
+		})
+	}
+}
+
+func TestParseClickDataAcceptsNonFinite(t *testing.T) {
+	// runAtof no longer rejects non-finite coordinates; the event dispatch terminates
+	// the Request instead (see TestCallEventHandlerTerminatesOnNonFiniteClick).
+	tests := []struct {
+		name  string
+		in    string
+		check func(Click) bool
+	}{
+		{"nan x", "NaN 20 0 save", func(c Click) bool { return math.IsNaN(c.X) && c.Y == 20 }},
+		{"infinite x", "+Inf 20 0 save", func(c Click) bool { return math.IsInf(c.X, 1) && c.Y == 20 }},
+		{"nan y", "10 NaN 0 save", func(c Click) bool { return c.X == 10 && math.IsNaN(c.Y) }},
+		{"infinite y", "10 -Inf 0 save", func(c Click) bool { return c.X == 10 && math.IsInf(c.Y, -1) }},
+		{"overflow x", "1e999 20 0 save", func(c Click) bool { return math.IsInf(c.X, 1) && c.Y == 20 }},
+		{"overflow y", "10 -1e999 0 save", func(c Click) bool { return c.X == 10 && math.IsInf(c.Y, -1) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clk, _, ok := parseClickData(tt.in)
+			if !ok {
+				t.Fatalf("ok = false, want true")
+			}
+			if !tt.check(clk) {
+				t.Fatalf("unexpected click %+v", clk)
+			}
+		})
+	}
+}
+
+func TestFinite(t *testing.T) {
+	tests := []struct {
+		f    float64
+		want bool
+	}{
+		{0, true},
+		{-1.5, true},
+		{math.MaxFloat64, true},
+		{math.NaN(), false},
+		{math.Inf(1), false},
+		{math.Inf(-1), false},
+	}
+	for _, tt := range tests {
+		if got := finite(tt.f); got != tt.want {
+			t.Errorf("finite(%v) = %v, want %v", tt.f, got, tt.want)
+		}
+	}
+}
+
+func TestClickString(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		clk  Click
+		want string
+	}{
+		{
+			name: "canonical",
+			clk:  Click{Name: "x", X: 1.25, Y: 2.5, Shift: true, Control: true, Alt: true},
+			want: "1.25 2.5 7 x",
+		},
+		{
+			name: "name whitespace",
+			clk:  Click{Name: " \tsave\n all\r ", X: 1.25, Y: 2.5},
+			want: "1.25 2.5 0 save all",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := tt.clk.String()
+			if got := encoded; got != tt.want {
+				t.Fatalf("String() = %q, want %q", got, tt.want)
+			}
+			got, after, ok := parseClickData(encoded)
+			if !ok {
+				t.Fatalf("parseClickData(String()) failed for %q", encoded)
+			}
+			if after != "" {
+				t.Fatalf("trailing data = %q, want none", after)
+			}
+			if want := strings.Join(strings.Fields(tt.clk.Name), " "); got.Name != want {
+				t.Fatalf("parsed name = %q, want %q", got.Name, want)
+			}
+		})
+	}
+}
+
+func Fuzz_parseClickData(f *testing.F) {
+	f.Add("1 2 0 name")
+	f.Add("1 2 5 name")
+	f.Add("1 2 5 name\tJid.1\tJid.2")
+	f.Add("1 2 0 name\tJid.1")
+	f.Add("bad 2 0 name")
+	f.Fuzz(func(t *testing.T, in string) {
+		clk, after, ok := parseClickData(in)
+		if !ok {
+			return
+		}
+		// parseClickData accepts non-finite coordinates (the event dispatch terminates
+		// the Request on them); Click.String round-trips only finite values, since
+		// NaN != NaN defeats the equality check below.
+		if !finite(clk.X) || !finite(clk.Y) {
+			return
+		}
+
+		encoded := clk.String()
+		clk2, after2, ok := parseClickData(encoded)
+		if !ok {
+			t.Fatalf("parseClickData(Click.String()) failed: click=%+v encoded=%q", clk, encoded)
+		}
+		if clk2 != clk || after2 != "" {
+			t.Fatalf("parseClickData(Click.String()) mismatch: click=%+v got=%+v after=%q", clk, clk2, after2)
+		}
+
+		roundtripInput := encoded
+		if after != "" {
+			roundtripInput += "\t" + after
+		}
+		clk3, after3, ok := parseClickData(roundtripInput)
+		if !ok {
+			t.Fatalf("parseClickData(roundtrip input) failed: input=%q", roundtripInput)
+		}
+		if clk3 != clk || after3 != after {
+			t.Fatalf("roundtrip mismatch: click=%+v/%+v after=%q/%q", clk, clk3, after, after3)
+		}
+	})
+}
+
+func BenchmarkParseClickData(b *testing.B) {
+	// Name accumulation must remain linear in the frame size, and the single-token
+	// click (by far the most common) must stay allocation-free. Cover one, two, and
+	// many name tokens; the long name is bounded in production by the WebSocket read
+	// limit.
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"OneToken", "10 20 0 save"},
+		{"TwoTokens", "10 20 0 save button"},
+		{"LongName", "0 0 0 " + strings.Repeat("a ", 8000)},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, _, ok := parseClickData(tc.value); !ok {
+					b.Fatal("expected ok")
+				}
+			}
+		})
+	}
+}
+
+func Fuzz_clickStringRoundTrip(f *testing.F) {
+	f.Add("name", int32(1), int32(2), true, false, true)
+	f.Add("button", int32(-1), int32(999), false, false, false)
+	f.Add("save\tall", int32(0), int32(0), false, false, false)
+	f.Fuzz(func(t *testing.T, name string, x int32, y int32, shift, control, alt bool) {
+		clk := Click{
+			Name:    name,
+			X:       float64(x),
+			Y:       float64(y),
+			Shift:   shift,
+			Control: control,
+			Alt:     alt,
+		}
+		got, after, ok := parseClickData(clk.String())
+		if !ok {
+			t.Fatalf("parseClickData(String()) failed: click=%+v", clk)
+		}
+		if after != "" {
+			t.Fatalf("expected no trailing data, got %q", after)
+		}
+		want := clk
+		want.Name = strings.Join(strings.Fields(name), " ")
+		if got != want {
+			t.Fatalf("roundtrip mismatch: want=%+v got=%+v", want, got)
+		}
+	})
+}
 
 type testJawsEvent struct {
 	msgCh    chan string
@@ -831,5 +1108,101 @@ func Test_JawsInput_ExtraHandler(t *testing.T) {
 		th.Timeout()
 	case s := <-msgCh:
 		th.Equal(s, `JawsInput: "typed"`)
+	}
+}
+
+type testJawsClick struct {
+	clickCh chan string
+	*testSetter[string]
+}
+
+func (tjc *testJawsClick) JawsClick(elem *Element, click Click) (err error) {
+	if err = tjc.Err(); err == nil {
+		tjc.clickCh <- click.Name
+	}
+	return
+}
+
+var _ ClickHandler = (*testJawsClick)(nil)
+
+type testJawsContextMenu struct {
+	clickCh chan Click
+	*testSetter[Click]
+}
+
+func (tjc *testJawsContextMenu) JawsContextMenu(elem *Element, click Click) (err error) {
+	if err = tjc.Err(); err == nil {
+		tjc.clickCh <- click
+	}
+	return
+}
+
+var _ ContextMenuHandler = (*testJawsContextMenu)(nil)
+
+type testJawsInitialHTMLAttr struct{}
+
+func (testJawsInitialHTMLAttr) JawsInitialHTMLAttr(elem *Element) template.HTMLAttr {
+	return `data-test="1"`
+}
+
+var _ InitialHTMLAttrHandler = testJawsInitialHTMLAttr{}
+
+func Test_clickHandlerWrapper_Dispatch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rq := newTestRequest(t)
+		defer closeRequestInBubble(rq)
+
+		tjc := &testJawsClick{
+			clickCh:    make(chan string),
+			testSetter: newTestSetter(""),
+		}
+
+		want := `<div id="Jid.1">inner</div>`
+		if err := rq.UI(testDivWidget{inner: template.HTML("inner")}, tjc); err != nil {
+			t.Fatal(err)
+		}
+		if got := rq.BodyString(); got != want {
+			t.Errorf("Request.UI(NewDiv()) = %q, want %q", got, want)
+		}
+
+		// An Input message to a div (which has no input handler) must produce no
+		// output. synctest.Wait blocks until the process loop has fully handled the
+		// message, so the negative assertion is not vacuous: a bare default: select
+		// would short-circuit before the async process goroutine could react.
+		rq.InCh <- wire.WsMsg{Data: "text", Jid: 1, What: what.Input}
+		synctest.Wait()
+		select {
+		case s := <-rq.OutCh:
+			t.Errorf("unexpected output for Input: %q", s.Format())
+		default:
+		}
+
+		// A malformed click ("adam", missing coordinates) must be ignored before the
+		// handler is invoked.
+		rq.InCh <- wire.WsMsg{Data: "adam", Jid: 1, What: what.Click}
+		synctest.Wait()
+		select {
+		case name := <-tjc.clickCh:
+			t.Fatalf("malformed click should be ignored, got %q", name)
+		default:
+		}
+
+		// A well-formed click dispatches to the handler.
+		rq.InCh <- wire.WsMsg{Data: "1 2 0 adam", Jid: 1, What: what.Click}
+		synctest.Wait()
+		select {
+		case name := <-tjc.clickCh:
+			if name != "adam" {
+				t.Error(name)
+			}
+		default:
+			t.Fatal("expected click to dispatch to handler")
+		}
+	})
+}
+
+func Test_InitialHTMLAttrHandler_IgnoredByDispatch(t *testing.T) {
+	if err := callEventHandler(testJawsInitialHTMLAttr{}, nil, what.Input, "ignored"); err != ErrEventUnhandled {
+		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
 }

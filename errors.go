@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"github.com/linkdata/jaws/lib/key"
+	"github.com/linkdata/jaws/lib/tag"
 )
 
 // ErrServeAlreadyRunning reports an overlapping [Jaws.Serve] or
@@ -60,6 +61,14 @@ var ErrInvalidChildElement = errors.New("invalid child element")
 // [Jaws.Insert] reports this error for a negative index. Use [Jaws.Append] to
 // insert at the end.
 var ErrInvalidChildIndex = errors.New("invalid child index")
+
+// ErrElementStateClaimed is returned by [SetElementState] when the [Element] already
+// has widget state, including state of the same type.
+var ErrElementStateClaimed = errors.New("jaws: element state already claimed")
+
+// ErrElementStateNil is returned by [SetElementState] when the state to store is a nil
+// interface, which cannot be distinguished from an unclaimed slot.
+var ErrElementStateNil = errors.New("jaws: element state must not be nil")
 
 // ErrReservedAttribute indicates an attempt to set or remove a framework-owned
 // attribute through a public attribute helper.
@@ -270,3 +279,40 @@ func (errEventUnhandled) Error() string {
 // ErrEventUnhandled returned by [InputHandler.JawsInput], [ClickHandler.JawsClick]
 // or [ContextMenuHandler.JawsContextMenu] causes the next available handler to be invoked.
 var ErrEventUnhandled = errEventUnhandled{}
+
+// errUnusableUI reports that a value cannot be used as a [UI] value because it is a
+// nil interface, not comparable at runtime, or not equal to itself as a value holding
+// NaN is.
+//
+// It matches [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable] with errors.Is, but
+// carries UI-specific text: the tag package's advice to implement JawsGetTag cannot
+// make a raw UI value usable as a map[UI] key, so it must not be surfaced here.
+type errUnusableUI struct {
+	t reflect.Type // nil when the offending value was a nil UI
+}
+
+func (e errUnusableUI) Error() (s string) {
+	s = "nil"
+	if e.t != nil {
+		s = e.t.String()
+	}
+	return s + " is not usable as a jaws.UI value: it must be non-nil, comparable, and equal to itself"
+}
+
+// Is reports whether target is a tag sentinel this error stands in for, so callers
+// can match it with errors.Is.
+func (errUnusableUI) Is(target error) bool {
+	return target == tag.ErrNotUsableAsTag || target == tag.ErrNotComparable
+}
+
+// NewErrUnusableUI returns an error if ui is nil, incomparable, or not equal to itself.
+//
+// A typed nil pointer passes this check, but calling its methods may panic.
+//
+// The returned error matches [tag.ErrNotUsableAsTag] and [tag.ErrNotComparable].
+func NewErrUnusableUI(ui UI) error {
+	if ui == nil || tag.NewErrNotUsableAsTag(ui) != nil {
+		return errUnusableUI{t: reflect.TypeOf(ui)}
+	}
+	return nil
+}

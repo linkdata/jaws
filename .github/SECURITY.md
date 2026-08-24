@@ -421,12 +421,12 @@ this by blocking inline script execution.
 
 ### 9.4 Event Handler Safety
 
-- `eventhandler.go` (`CallEventHandlers`): wraps handler calls in `defer recover()`, preventing panics from crashing the server
+- `event.go` (`CallEventHandlers`): wraps handler calls in `defer recover()`, preventing panics from crashing the server
 - Event handlers receive typed Go values, not raw HTML
 
 ### 9.5 Loopback IP Equivalence
 
-- `clientip.go` (`equalIP`): treats all loopback addresses as equivalent so a reverse proxy connecting to the backend over loopback does not break session/request-key IP binding.
+- `serve.go` (`equalIP`): treats all loopback addresses as equivalent so a reverse proxy connecting to the backend over loopback does not break session/request-key IP binding.
 - Consequence: in any deployment where the backend sees only loopback peers — the common reverse-proxy topology (nginx/Caddy/load balancer → backend over `127.0.0.1`/`::1`), and shared-localhost/container/dev environments — IP binding is effectively a no-op, since every client presents the same loopback address. IP binding is defense-in-depth that supplements the single-use request key and session cookie.
 - Mitigation: set `Jaws.TrustForwardedHeaders` to bind on the proxy-supplied client IP (`X-Forwarded-For` leftmost / `X-Real-IP`) instead of the loopback transport peer. Only enable this behind a single reverse proxy you control that sets these headers.
 - Not exploitable in the demo's Azure VM deployment (direct client connections; no shared loopback).
