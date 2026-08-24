@@ -26,8 +26,8 @@
 // plain strings and [html/template.HTML] are trusted HTML. Adapters for string-valued
 // [github.com/linkdata/jaws/lib/bind.Getter] and
 // [github.com/linkdata/jaws/lib/bind.Binder] values and [fmt.Stringer] output are
-// escaped. Raw [html/template.HTMLAttr] parameters are also trusted. Escape
-// untrusted text before it reaches a trusted form.
+// escaped. Raw [html/template.HTMLAttr] parameters and [NewTemplate] attribute
+// strings are also trusted. Escape untrusted text before it reaches a trusted form.
 //
 // Browser input, click, and context-menu events are forwarded only while the
 // WebSocket is open and are not replayed. Native form reset does not update Go

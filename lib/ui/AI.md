@@ -70,14 +70,14 @@ available through `rw.NewUI(ui.NewX(...), params...)`.
 `rw.Template(outerTag, name, dot, params...)` renders a partial template inside
 a generated addressable JaWS wrapper. An empty outer tag selects `div`; choose a
 semantic wrapper such as `tr`, `td`, `li`, or `option` when DOM context requires
-it. Attributes passed in params apply to the wrapper and take precedence when
-the dot callback returns an attribute with the same name. When dot implements
-`jaws.InitialHTMLAttrHandler`, its callback supplies attributes separately for
-each wrapper's initial render; equal Template values may therefore render
-different Element-specific attributes without storing them in the Template.
-The callback is not invoked during `Template.JawsUpdate`. Full page templates
-belong in `ui.Handler`, which sets `Cache-Control: no-store`. Custom page
-handlers must call `jw.NewRequest(w, r)` before writing output;
+it. `NewTemplate(outerTag, name, dot, attrs...)` accepts trusted raw wrapper
+attribute strings. Attribute precedence is render params, constructor attributes,
+then the dot callback. Constructor attributes participate in Template equality.
+When dot implements `jaws.InitialHTMLAttrHandler`, its callback supplies
+per-Element attributes during initial render. The callback is not invoked during
+`Template.JawsUpdate`. Full page templates belong in `ui.Handler`, which sets
+`Cache-Control: no-store`. Custom page handlers must call `jw.NewRequest(w, r)`
+before writing output;
 `Request.HeadHTML` does not manage response headers. Static structural inclusion
 should use Go's native template action:
 
@@ -150,13 +150,9 @@ does not run initial-attribute hooks. Call `Element.ApplyInitialHTMLAttr`
 separately and without holding a lock that the callback might acquire. A
 `bind.Binder` acquires its own value lock before invoking its hook.
 
-A wrapped Template applies this initial-attribute hook to its Dot after claiming
-the Element state slot and resolving the named partial. The result is written
-directly to that Element's wrapper and is not retained in Template state. An
-unwrapped Template has no attribute target and does not invoke the callback.
+A Template without a wrapper does not invoke Dot's initial-attribute callback.
 Wrapper attributes persist when `Template.JawsUpdate` replaces only the inner
-HTML; dynamic wrapper changes use `Element.SetAttr` and `Element.RemoveAttr`
-during update processing.
+HTML; change them with `Element.SetAttr` and `Element.RemoveAttr`.
 
 Getter paths must not mutate domain state. They may queue wrapper changes with
 Element update methods so class/attribute changes flush with the HTML update.
