@@ -15,10 +15,11 @@ shared-game behavior.
 The board shape and cell pointers are fixed after construction. Mutable game
 and cell fields are protected by `game.mu`. Cell getters lock the game and read
 those fields directly. Do not add a detached render DTO or parallel presentation
-state: `game` remains the sole application model. `JawsInitialHTMLAttr` makes
-the initial HTML meaningful, and `JawsGetHTML` derives both cell content and
-current Element attributes from the same authoritative fields. Keep state
-mutations out of getter/render paths.
+state: `game` remains the sole application model. `cell.Button` constructs a
+fresh semantic definition around the standard `ui.Button` for each template
+execution. Initial attributes are emitted inline; its specialized `JawsUpdate`
+reads only that Button's current primitive values under the game lock, unlocks,
+and then queues Element changes. Keep state mutations out of getter/render paths.
 
 `run` constructs the application inline and injects only `listenAndServe`.
 Preserve that copyable layout unless a production behavior requires another
@@ -49,6 +50,10 @@ those updates. Each scheduled Element re-reads the authoritative game state, so
 connected browsers eventually converge on the latest state. Mutations must not
 push a second representation of the game into UI objects.
 
+The template owns the static `cell` class. Dynamic styling uses one
+`data-state` attribute, so updates preserve caller-supplied classes and initial
+rendering does not queue redundant class or attribute fixups for `TailHTML`.
+
 `TestSingleCellDirtyStaysScopedToOneCell` guards the targeted-update invariant.
 The committed `BenchmarkSingleCellDirtyFanout` measures tag expansion and
 cell-Element lookup cost while intentionally excluding the separate Stats
@@ -74,11 +79,13 @@ an integer adjacency count. Do not interpolate user-controlled content into it.
 - Keep pure domain tests for construction bounds, first-click safety, mine
   placement, adjacency, flood fill, flags, win/loss, reset, and no-op guards.
 - Keep UI integration tests on real JaWS Elements for tag registration, event
-  dispatch, queued class/attribute updates, and exact dirty fanout.
+  dispatch, queued attribute updates, empty initial TailHTML, and exact dirty
+  fanout.
 - Use at least two live Requests to verify collaborative narrow updates and
   board-wide refreshes.
 - Keep the HTTP wiring test for templates, static assets, middleware, and route
   setup without binding a real port.
 - Run `go test -race ./examples/minesweeper` and a plain
   `go test ./examples/minesweeper` from the module root. Run the benchmark with
-  `-bench=SingleCellDirtyFanout -benchmem` when changing dirty-target behavior.
+  `-bench=SingleCellDirtyFanout -benchmem` when changing dirty-target behavior,
+  and `-bench=InitialPageAndTail -benchmem` when changing initial rendering.

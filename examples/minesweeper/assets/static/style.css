@@ -72,6 +72,11 @@ h1 {
 	overflow-x: auto;
 }
 
+.board-scroll:focus-visible {
+	outline: 3px solid var(--ink);
+	outline-offset: 0.25rem;
+}
+
 .board {
 	border-collapse: collapse;
 	margin-top: 0.9rem;
@@ -108,17 +113,18 @@ h1 {
 	box-shadow: 0 0.18rem 0.45rem rgba(31, 42, 68, 0.16);
 }
 
-.cell.is-revealed {
+.cell[data-state="revealed"],
+.cell[data-state="mine"] {
 	background: #b8a57a;
 	cursor: default;
 	box-shadow: none;
 }
 
-.cell.is-hidden.is-flagged {
+.cell[data-state="flagged"] {
 	background: #e8d7b4;
 }
 
-.cell.is-revealed.is-mine {
+.cell[data-state="mine"] {
 	background: #d0745c;
 	border-color: #7a1f1f;
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/linkdata/jaws"
 	jawstag "github.com/linkdata/jaws/lib/tag"
-	"github.com/linkdata/jaws/lib/ui"
 )
 
 var dirtyFanoutSink int
@@ -31,10 +30,10 @@ func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 
 	g := newGame(10, 10, 15)
 	for _, row := range g.Board() {
-		for _, cell := range row {
-			elem := rq.NewElement(ui.NewButton(cell))
+		for _, current := range row {
+			elem := rq.NewElement(current.Button())
 			var sb strings.Builder
-			if err := elem.JawsRender(&sb, []any{cell.BoardTag(), cell.GameOverTag()}); err != nil {
+			if err := elem.JawsRender(&sb, cellButtonParams(current)); err != nil {
 				b.Fatal(err)
 			}
 		}

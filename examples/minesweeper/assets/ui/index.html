@@ -18,18 +18,17 @@
 			{{$.Button .NewGameAction `class="control"`}}
 		</div>
 
-		<div role="status" aria-live="polite" aria-atomic="true">
-			<div class="status-line">{{$.Span .Status}}</div>
-			<div class="stats-line">{{$.Span .Stats}}</div>
-		</div>
+		{{/* Keep independently dirtied text in separate live regions. */}}
+		<div class="status-line" role="status">{{$.Span .Status}}</div>
+		<div class="stats-line" role="status">{{$.Span .Stats}}</div>
 
-		<div class="board-scroll">
+		<div class="board-scroll" role="region" aria-label="Scrollable Minesweeper board" tabindex="0">
 			<table class="board" aria-label="Minesweeper board">
 				<tbody>
 					{{range .Board}}
 					<tr>
 						{{range .}}
-						<td>{{$.Button . .BoardTag .GameOverTag}}</td>
+						<td>{{$.NewUI .Button .BoardTag .GameOverTag `class="cell"`}}</td>
 						{{end}}
 					</tr>
 					{{end}}

@@ -93,16 +93,26 @@ func drainWire(t *testing.T, rq *jawstest.TestRequest, probe string) (messages [
 func assertTagSetEqual(t *testing.T, got []any, want ...any) {
 	t.Helper()
 	gotSet := make(map[any]struct{}, len(got))
-	for _, v := range got {
+	for i, v := range got {
+		if _, exists := gotSet[v]; exists {
+			t.Fatalf("got duplicate tag at index %d: %#v", i, v)
+		}
 		gotSet[v] = struct{}{}
 	}
 	wantSet := make(map[any]struct{}, len(want))
-	for _, v := range want {
+	for i, v := range want {
+		if _, exists := wantSet[v]; exists {
+			t.Fatalf("want duplicate tag at index %d: %#v", i, v)
+		}
 		wantSet[v] = struct{}{}
 	}
 	if !reflect.DeepEqual(gotSet, wantSet) {
 		t.Fatalf("tag set mismatch:\n got %#v\nwant %#v", got, want)
 	}
+}
+
+func cellButtonParams(c *cell) []any {
+	return []any{c.BoardTag(), c.GameOverTag(), template.HTMLAttr(`class="cell"`)}
 }
 
 func findSeedWithSkipFirst(t *testing.T, total, skipIdx int) int64 {
@@ -121,10 +131,10 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 
 	g := newGame(3, 3, 1)
 	cell := g.cells[0][0]
-	elem := rq.NewElement(ui.NewButton(cell))
+	elem := rq.NewElement(cell.Button())
 
 	var body bytes.Buffer
-	if err := elem.JawsRender(&body, []any{cell.BoardTag(), cell.GameOverTag()}); err != nil {
+	if err := elem.JawsRender(&body, cellButtonParams(cell)); err != nil {
 		t.Fatal(err)
 	}
 	if !elem.HasTag(cell) {
@@ -154,8 +164,8 @@ func TestCellButtonUsesCellTagsAndHandlers(t *testing.T) {
 	}
 
 	other := g.cells[0][1]
-	otherElem := rq.NewElement(ui.NewButton(other))
-	if err := otherElem.JawsRender(&body, []any{other.BoardTag(), other.GameOverTag()}); err != nil {
+	otherElem := rq.NewElement(other.Button())
+	if err := otherElem.JawsRender(&body, cellButtonParams(other)); err != nil {
 		t.Fatal(err)
 	}
 	if err := jaws.CallEventHandlers(otherElem.UI(), otherElem, what.Click, "0 0 0 reveal"); err != nil {
@@ -217,7 +227,7 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 		configure    func(*game, *cell)
 		wantHTML     string
 		wantLabel    string
-		wantClass    string
+		wantState    string
 		wantDisabled bool
 	}{
 		{
@@ -228,7 +238,7 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 			},
 			wantHTML:     `<span class="glyph glyph-mine">☠</span>`,
 			wantLabel:    "Row 1, column 1: mine",
-			wantClass:    "cell is-revealed is-mine",
+			wantState:    "mine",
 			wantDisabled: true,
 		},
 		{
@@ -239,7 +249,7 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 			},
 			wantHTML:     `<span class="cleared">3</span>`,
 			wantLabel:    "Row 1, column 1: revealed with 3 adjacent mines",
-			wantClass:    "cell is-revealed",
+			wantState:    "revealed",
 			wantDisabled: true,
 		},
 		{
@@ -249,7 +259,7 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 			},
 			wantHTML:     `<span class="cleared"></span>`,
 			wantLabel:    "Row 1, column 1: revealed with no adjacent mines",
-			wantClass:    "cell is-revealed",
+			wantState:    "revealed",
 			wantDisabled: true,
 		},
 		{
@@ -259,7 +269,7 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 			},
 			wantHTML:  `<span class="glyph glyph-flag">⚑</span>`,
 			wantLabel: "Row 1, column 1: flagged",
-			wantClass: "cell is-hidden is-flagged",
+			wantState: "flagged",
 		},
 		{
 			name: "hidden game over",
@@ -267,14 +277,14 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 				g.gameOver = true
 			},
 			wantLabel:    "Row 1, column 1: hidden; game over",
-			wantClass:    "cell is-hidden",
+			wantState:    "hidden",
 			wantDisabled: true,
 		},
 		{
 			name:      "hidden",
 			configure: func(*game, *cell) {},
 			wantLabel: "Row 1, column 1: hidden",
-			wantClass: "cell is-hidden",
+			wantState: "hidden",
 		},
 	}
 	for _, tt := range tests {
@@ -284,13 +294,14 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 			cell := g.cells[0][0]
 			tt.configure(g, cell)
 
-			elem := rq.NewElement(ui.NewButton(cell))
+			elem := rq.NewElement(cell.Button())
 			var body strings.Builder
-			if err := elem.JawsRender(&body, []any{cell.BoardTag(), cell.GameOverTag()}); err != nil {
+			if err := elem.JawsRender(&body, cellButtonParams(cell)); err != nil {
 				t.Fatal(err)
 			}
 			for _, fragment := range []string{
-				`class="` + tt.wantClass + `"`,
+				`class="cell"`,
+				`data-state="` + tt.wantState + `"`,
 				`aria-label="` + tt.wantLabel + `"`,
 			} {
 				if !strings.Contains(body.String(), fragment) {
@@ -304,11 +315,13 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 				t.Errorf("initial Button disabled = %v, want %v", got, tt.wantDisabled)
 			}
 
-			_ = drainWire(t, rq, "initial "+tt.name)
+			if got := drainWire(t, rq, "initial "+tt.name); len(got) != 0 {
+				t.Fatalf("initial render queued redundant updates: %+v", got)
+			}
 			elem.JawsUpdate()
 			j := elem.Jid()
 			want := []wire.WsMsg{
-				{Data: "class\n" + tt.wantClass, Jid: j, What: what.SAttr},
+				{Data: "data-state\n" + tt.wantState, Jid: j, What: what.SAttr},
 				{Data: "aria-label\n" + tt.wantLabel, Jid: j, What: what.SAttr},
 			}
 			if tt.wantDisabled {
@@ -326,36 +339,37 @@ func TestCellButtonRendersAndUpdatesAuthoritativeState(t *testing.T) {
 	}
 }
 
-func TestCellInitialAttributesConvergeOnCurrentState(t *testing.T) {
+func TestCellButtonUpdatePreservesTemplateClasses(t *testing.T) {
 	_, rq := newExampleRequest(t)
 	g := newGame(2, 2, 1)
 	cell := g.cells[0][0]
-	elem := rq.NewElement(ui.NewButton(cell))
-	elem.ApplyGetter(cell)
-
-	initial := string(cell.JawsInitialHTMLAttr(elem))
-	if !strings.Contains(initial, `class="cell is-hidden"`) || !strings.Contains(initial, `aria-label="Row 1, column 1: hidden"`) {
-		t.Fatalf("unexpected hidden initial attributes: %q", initial)
+	elem := rq.NewElement(cell.Button())
+	params := []any{cell.BoardTag(), cell.GameOverTag(), template.HTMLAttr(`class="cell custom"`)}
+	var body strings.Builder
+	if err := elem.JawsRender(&body, params); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body.String(), `class="cell custom"`) {
+		t.Fatalf("initial Button did not retain template classes: %q", body.String())
+	}
+	if got := drainWire(t, rq, "initial custom class"); len(got) != 0 {
+		t.Fatalf("initial render queued redundant updates: %+v", got)
 	}
 
-	// Initial attributes and inner HTML are separate JaWS callbacks. If shared
-	// state changes between them, the getter queues current attributes so TailHTML
-	// can converge the Button before the WebSocket connects.
 	if tags := g.toggleFlag(cell); len(tags) == 0 {
 		t.Fatal("toggleFlag() returned no dirty tags")
 	}
-	if got := cell.JawsGetHTML(elem); got != flagHTML {
-		t.Fatalf("JawsGetHTML() = %q, want %q", got, flagHTML)
-	}
+	elem.JawsUpdate()
 
 	j := elem.Jid()
 	want := []wire.WsMsg{
-		{Data: "class\ncell is-hidden is-flagged", Jid: j, What: what.SAttr},
+		{Data: "data-state\nflagged", Jid: j, What: what.SAttr},
 		{Data: "aria-label\nRow 1, column 1: flagged", Jid: j, What: what.SAttr},
 		{Data: "disabled", Jid: j, What: what.RAttr},
+		{Data: string(flagHTML), Jid: j, What: what.Inner},
 	}
-	if got := drainWire(t, rq, "initial convergence"); !reflect.DeepEqual(got, want) {
-		t.Fatalf("initial convergence mismatch:\n got %+v\nwant %+v", got, want)
+	if got := drainWire(t, rq, "custom class update"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Button update mismatch:\n got %+v\nwant %+v", got, want)
 	}
 }
 
@@ -375,12 +389,12 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		clients := make([]rendered, 0, 2)
 		for _, rq := range []*jawstest.TestRequest{first, second} {
 			var body strings.Builder
-			targetElem := rq.NewElement(ui.NewButton(target))
-			if err := targetElem.JawsRender(&body, []any{target.BoardTag(), target.GameOverTag()}); err != nil {
+			targetElem := rq.NewElement(target.Button())
+			if err := targetElem.JawsRender(&body, cellButtonParams(target)); err != nil {
 				t.Fatal(err)
 			}
-			otherElem := rq.NewElement(ui.NewButton(other))
-			if err := otherElem.JawsRender(&body, []any{other.BoardTag(), other.GameOverTag()}); err != nil {
+			otherElem := rq.NewElement(other.Button())
+			if err := otherElem.JawsRender(&body, cellButtonParams(other)); err != nil {
 				t.Fatal(err)
 			}
 			statsElem := rq.NewElement(ui.NewSpan(g.Stats()))
@@ -414,7 +428,7 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		for _, client := range clients {
 			messages := drainWire(t, client.request, "flag updates")
 			assertOnlyElementUpdates(t, messages, client.target, client.statistics)
-			assertCellUpdates(t, messages, client.target, "cell is-hidden is-flagged", "Row 1, column 1: flagged", flagHTML, false)
+			assertCellUpdates(t, messages, client.target, "flagged", "Row 1, column 1: flagged", flagHTML, false)
 			assertInnerUpdate(t, messages, client.statistics, "Mines: 1 | Flags: 1 | Safe cells left: 8")
 		}
 
@@ -426,8 +440,8 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		for _, client := range clients {
 			messages := drainWire(t, client.request, "reset updates")
 			assertOnlyElementUpdates(t, messages, client.target, client.other, client.statistics)
-			assertCellUpdates(t, messages, client.target, "cell is-hidden", "Row 1, column 1: hidden", "", false)
-			assertCellUpdates(t, messages, client.other, "cell is-hidden", "Row 1, column 2: hidden", "", false)
+			assertCellUpdates(t, messages, client.target, "hidden", "Row 1, column 1: hidden", "", false)
+			assertCellUpdates(t, messages, client.other, "hidden", "Row 1, column 2: hidden", "", false)
 			assertInnerUpdate(t, messages, client.statistics, "Mines: 1 | Flags: 0 | Safe cells left: 8")
 		}
 
@@ -442,8 +456,8 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		for _, client := range clients {
 			messages := drainWire(t, client.request, "concurrent updates")
 			assertOnlyElementUpdates(t, messages, client.target, client.other, client.statistics)
-			assertCellUpdates(t, messages, client.target, "cell is-hidden is-flagged", "Row 1, column 1: flagged", flagHTML, false)
-			assertCellUpdates(t, messages, client.other, "cell is-hidden is-flagged", "Row 1, column 2: flagged", flagHTML, false)
+			assertCellUpdates(t, messages, client.target, "flagged", "Row 1, column 1: flagged", flagHTML, false)
+			assertCellUpdates(t, messages, client.other, "flagged", "Row 1, column 2: flagged", flagHTML, false)
 			assertInnerUpdate(t, messages, client.statistics, "Mines: 1 | Flags: 2 | Safe cells left: 8")
 		}
 
@@ -455,8 +469,8 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		for _, client := range clients {
 			messages := drainWire(t, client.request, "game-over updates")
 			assertOnlyElementUpdates(t, messages, client.target, client.other)
-			assertCellUpdates(t, messages, client.target, "cell is-hidden is-flagged", "Row 1, column 1: flagged", flagHTML, true)
-			assertCellUpdates(t, messages, client.other, "cell is-hidden is-flagged", "Row 1, column 2: flagged", flagHTML, true)
+			assertCellUpdates(t, messages, client.target, "flagged", "Row 1, column 1: flagged", flagHTML, true)
+			assertCellUpdates(t, messages, client.other, "flagged", "Row 1, column 2: flagged", flagHTML, true)
 		}
 	})
 }
@@ -480,14 +494,14 @@ func assertOnlyElementUpdates(t *testing.T, messages []wire.WsMsg, want ...*jaws
 	}
 }
 
-func assertCellUpdates(t *testing.T, messages []wire.WsMsg, elem *jaws.Element, class, label string, inner template.HTML, disabled bool) {
+func assertCellUpdates(t *testing.T, messages []wire.WsMsg, elem *jaws.Element, state, label string, inner template.HTML, disabled bool) {
 	t.Helper()
 	disabledUpdate := wire.WsMsg{Data: "disabled", What: what.RAttr}
 	if disabled {
 		disabledUpdate = wire.WsMsg{Data: "disabled\ndisabled", What: what.SAttr}
 	}
 	assertElementMessages(t, messages, elem,
-		wire.WsMsg{Data: "class\n" + class, What: what.SAttr},
+		wire.WsMsg{Data: "data-state\n" + state, What: what.SAttr},
 		wire.WsMsg{Data: "aria-label\n" + label, What: what.SAttr},
 		disabledUpdate,
 		wire.WsMsg{Data: string(inner), What: what.Inner},
@@ -631,18 +645,16 @@ func TestGameResetReturnsOnlyChangedTags(t *testing.T) {
 		t.Fatalf("fresh reset tags = %#v, want nil", tags)
 	}
 
-	g := newGame(2, 2, 1)
-	g.started = true
-	g.gameOver = true
-	g.won = true
-	g.revealed = 2
-	g.flags = 1
-	tags := g.reset()
-	assertTagSetEqual(t, tags, &g.started, &g.gameOver, &g.won, &g.revealed, &g.flags)
-	if containsTag(tags, &g.cells) {
-		t.Fatalf("scalar-only reset dirtied the board: %#v", tags)
+	flagged := newGame(2, 2, 1)
+	flaggedCell := flagged.cells[0][0]
+	_ = flagged.toggleFlag(flaggedCell)
+	tags := flagged.reset()
+	assertTagSetEqual(t, tags, &flagged.flags, &flagged.cells)
+	if flaggedCell.flagged || flagged.flags != 0 {
+		t.Fatalf("reset() left a pre-start flag: cell=%#v flags=%d", flaggedCell, flagged.flags)
 	}
 
+	g := newGame(2, 2, 1)
 	g.started = true
 	g.gameOver = true
 	g.won = true
@@ -992,7 +1004,8 @@ func TestRunServesApplication(t *testing.T) {
 			"Minesweeper",
 			`name="jawsKey"`,
 			"/static/style.css",
-			`role="status"`,
+			`role="region" aria-label="Scrollable Minesweeper board" tabindex="0"`,
+			`class="cell" data-state="hidden"`,
 			`aria-label="Row 1, column 1: hidden"`,
 		} {
 			if !strings.Contains(body, fragment) {
@@ -1001,6 +1014,12 @@ func TestRunServesApplication(t *testing.T) {
 		}
 		if !strings.HasPrefix(body, "<!doctype html>") {
 			t.Errorf("GET / body does not start with a doctype: %q", body)
+		}
+		if got := strings.Count(body, `role="status"`); got != 2 {
+			t.Errorf("GET / has %d status regions, want 2", got)
+		}
+		if strings.Contains(body, `aria-atomic="true"`) {
+			t.Error("GET / wraps independent status updates in one atomic live region")
 		}
 		if got := page.Header().Get("Cache-Control"); got != "no-store" {
 			t.Errorf("GET / Cache-Control = %q, want no-store", got)
@@ -1013,6 +1032,18 @@ func TestRunServesApplication(t *testing.T) {
 		}
 		if cookies := page.Header().Values("Set-Cookie"); len(cookies) != 0 {
 			t.Errorf("GET / set unused session cookies: %q", cookies)
+		}
+
+		if path, ok := tailEndpoint(body); !ok {
+			t.Error("GET / body is missing the TailHTML endpoint")
+		} else {
+			tail := serve(path)
+			if tail.Code != http.StatusOK {
+				t.Errorf("initial TailHTML status = %d, want %d", tail.Code, http.StatusOK)
+			}
+			if tail.Body.Len() != 0 {
+				t.Errorf("initial TailHTML queued redundant DOM fixups: %q", tail.Body.String())
+			}
 		}
 
 		stylesheet := serve("/static/style.css")
@@ -1032,7 +1063,7 @@ func TestRunServesApplication(t *testing.T) {
 	if err := run(listen); !errors.Is(err, want) {
 		t.Fatalf("run() = %v, want %v", err, want)
 	}
-	if gotAddr != "localhost:8080" {
-		t.Errorf("listen addr = %q, want %q", gotAddr, "localhost:8080")
+	if gotAddr != ":8080" {
+		t.Errorf("listen addr = %q, want %q", gotAddr, ":8080")
 	}
 }

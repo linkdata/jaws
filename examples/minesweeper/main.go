@@ -20,7 +20,7 @@ var assetsFS embed.FS
 // The listener is injected so tests can exercise the complete HTTP handler
 // without opening a network port.
 func run(listenAndServe func(addr string, handler http.Handler) error) (err error) {
-	const addr = "localhost:8080"
+	const addr = ":8080"
 
 	var jw *jaws.Jaws
 	if jw, err = jaws.New(); err == nil {
@@ -45,7 +45,7 @@ func run(listenAndServe func(addr string, handler http.Handler) error) (err erro
 						mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 						mux.Handle("GET /", page)
 
-						slog.Info("Minesweeper is listening", "url", "http://"+addr)
+						slog.Info("Minesweeper is listening", "url", "http://localhost:8080")
 						err = listenAndServe(addr, mux)
 					}
 				}

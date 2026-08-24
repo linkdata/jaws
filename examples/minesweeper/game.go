@@ -82,14 +82,9 @@ func (g *game) reset() (tags []any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	boardChanged := false
-	for _, row := range g.cells {
-		for _, cell := range row {
-			if cell.mine || cell.revealed || cell.flagged || cell.adjacent != 0 {
-				boardChanged = true
-			}
-		}
-	}
+	// A started game has placed mines. Before the first reveal, a nonzero flag
+	// count is the only way any cell can differ from its reset state.
+	boardChanged := g.started || g.flags != 0
 	if g.started {
 		tags = append(tags, &g.started)
 	}
@@ -114,8 +109,8 @@ func (g *game) reset() (tags []any) {
 
 func (g *game) resetLocked() {
 	for _, row := range g.cells {
-		for _, cell := range row {
-			cell.reset()
+		for _, current := range row {
+			current.reset()
 		}
 	}
 	g.started = false
@@ -126,27 +121,27 @@ func (g *game) resetLocked() {
 }
 
 // clickCell applies a reveal attempt and returns the changed dependency tags.
-func (g *game) clickCell(cell *cell) (tags []any) {
+func (g *game) clickCell(target *cell) (tags []any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if g.gameOver || cell.flagged || cell.revealed {
+	if g.gameOver || target.flagged || target.revealed {
 		return
 	}
 	if !g.started {
-		g.placeMinesLocked(cell)
+		g.placeMinesLocked(target)
 		g.started = true
 		tags = append(tags, &g.started)
 	}
 
-	if cell.mine {
+	if target.mine {
 		g.gameOver = true
 		g.revealAllMinesLocked()
 		tags = append(tags, &g.cells, &g.gameOver)
 		return
 	}
 
-	revealed := g.revealFromLocked(cell)
+	revealed := g.revealFromLocked(target)
 	if g.revealed == g.rows*g.cols-g.mines {
 		g.gameOver = true
 		g.won = true
@@ -162,20 +157,20 @@ func (g *game) clickCell(cell *cell) (tags []any) {
 }
 
 // toggleFlag applies a flag attempt and returns the changed dependency tags.
-func (g *game) toggleFlag(cell *cell) (tags []any) {
+func (g *game) toggleFlag(target *cell) (tags []any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if g.gameOver || cell.revealed {
+	if g.gameOver || target.revealed {
 		return
 	}
-	cell.flagged = !cell.flagged
-	if cell.flagged {
+	target.flagged = !target.flagged
+	if target.flagged {
 		g.flags++
 	} else {
 		g.flags--
 	}
-	tags = []any{cell, &g.flags}
+	tags = []any{target, &g.flags}
 	return
 }
 
@@ -204,22 +199,22 @@ func (g *game) revealFromLocked(start *cell) (revealed []*cell) {
 
 func (g *game) revealAllMinesLocked() {
 	for _, row := range g.cells {
-		for _, cell := range row {
-			if cell.mine {
-				cell.revealed = true
+		for _, current := range row {
+			if current.mine {
+				current.revealed = true
 			}
 		}
 	}
 }
 
-func (g *game) forEachNeighborLocked(cell *cell, fn func(*cell)) {
+func (g *game) forEachNeighborLocked(center *cell, fn func(*cell)) {
 	for dr := -1; dr <= 1; dr++ {
 		for dc := -1; dc <= 1; dc++ {
 			if dr == 0 && dc == 0 {
 				continue
 			}
-			row := cell.row + dr
-			col := cell.col + dc
+			row := center.row + dr
+			col := center.col + dc
 			if row < 0 || row >= g.rows || col < 0 || col >= g.cols {
 				continue
 			}

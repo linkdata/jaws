@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"html/template"
+	"io"
 	"strconv"
 
 	"github.com/linkdata/jaws"
@@ -51,36 +52,53 @@ func (c *cell) labelLocked() string {
 	}
 }
 
-func (c *cell) classLocked() string {
+func (c *cell) stateLocked() string {
 	switch {
 	case c.revealed && c.mine:
-		return "cell is-revealed is-mine"
+		return "mine"
 	case c.revealed:
-		return "cell is-revealed"
+		return "revealed"
 	case c.flagged:
-		return "cell is-hidden is-flagged"
+		return "flagged"
 	default:
-		return "cell is-hidden"
+		return "hidden"
 	}
 }
 
+func (c *cell) attributesLocked() (state, label string, disabled bool) {
+	state = c.stateLocked()
+	label = c.labelLocked()
+	disabled = c.revealed || c.game.gameOver
+	return
+}
+
 func (c *cell) initialAttrsLocked() (attrs template.HTMLAttr) {
-	attrs = htmlio.Attr("class", c.classLocked())
-	attrs += " " + htmlio.Attr("aria-label", c.labelLocked())
-	if c.revealed || c.game.gameOver {
+	state, label, disabled := c.attributesLocked()
+	attrs = htmlio.Attr("data-state", state)
+	attrs += " " + htmlio.Attr("aria-label", label)
+	if disabled {
 		attrs += " " + htmlio.Attr("disabled", "disabled")
 	}
 	return
 }
 
-func (c *cell) updateAttributesLocked(elem *jaws.Element) {
-	elem.SetAttr("class", c.classLocked())
-	elem.SetAttr("aria-label", c.labelLocked())
-	if c.revealed || c.game.gameOver {
-		elem.SetAttr("disabled", "disabled")
-	} else {
-		elem.RemoveAttr("disabled")
-	}
+// cellButton keeps the standard Button render path and specializes only its
+// update. A new definition is constructed by [cell.Button] for each template
+// execution; the shared pointer is the authoritative cell, not copied UI state.
+type cellButton struct {
+	source *cell
+}
+
+var _ jaws.UI = cellButton{}
+
+// Button returns a fresh semantic Button definition for the cell.
+func (c *cell) Button() cellButton {
+	return cellButton{source: c}
+}
+
+// JawsRender delegates initial rendering to the standard JaWS Button.
+func (button cellButton) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return ui.NewButton(button.source).JawsRender(elem, w, params)
 }
 
 // JawsGetTag returns the precise dependency tag for this cell.
@@ -108,15 +126,34 @@ func (c *cell) JawsInitialHTMLAttr(_ *jaws.Element) template.HTMLAttr {
 	return c.initialAttrsLocked()
 }
 
-// JawsGetHTML returns the cell's current markup and queues its Button attributes.
-func (c *cell) JawsGetHTML(elem *jaws.Element) template.HTML {
+// JawsGetHTML returns the cell's current trusted inner markup.
+func (c *cell) JawsGetHTML(_ *jaws.Element) template.HTML {
 	c.game.mu.Lock()
 	defer c.game.mu.Unlock()
 
-	// Dirtying the cell schedules every matching Element. Each batched update
-	// reads the shared state here, so connected browsers converge on that state.
-	c.updateAttributesLocked(elem)
+	// Initial attributes and content are separate direct reads. A mutation
+	// between them dirties a registered dependency, so the Button reads it again.
 	return c.htmlLocked()
+}
+
+// JawsUpdate synchronizes one live Button with its authoritative cell.
+func (button cellButton) JawsUpdate(elem *jaws.Element) {
+	c := button.source
+	c.game.mu.Lock()
+	inner := c.htmlLocked()
+	state, label, disabled := c.attributesLocked()
+	c.game.mu.Unlock()
+
+	// JaWS queue locks and application locks are both leaves. Capture only this
+	// control's presentation before entering the framework.
+	elem.SetAttr("data-state", state)
+	elem.SetAttr("aria-label", label)
+	if disabled {
+		elem.SetAttr("disabled", "disabled")
+	} else {
+		elem.RemoveAttr("disabled")
+	}
+	elem.SetInner(inner)
 }
 
 // JawsClick handles a reveal or Shift-click flag attempt.
