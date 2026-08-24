@@ -3,11 +3,24 @@ package tag
 import (
 	"errors"
 	"runtime"
+	"strings"
 	"testing"
 )
 
+type testIllegalOuterTagGetter struct{}
+
+func (testIllegalOuterTagGetter) JawsGetTag() any {
+	return &testIllegalInnerTagGetter{}
+}
+
+type testIllegalInnerTagGetter struct{}
+
+func (*testIllegalInnerTagGetter) JawsGetTag() any {
+	return "private-value"
+}
+
 func Test_errIllegalTagType_Error(t *testing.T) {
-	// The bare sentinel omits type and caller details.
+	// The bare sentinel omits type and origin details.
 	if got := ErrIllegalTagType.Error(); got != "illegal tag type" {
 		t.Fatalf("bare sentinel: got %q, want %q", got, "illegal tag type")
 	}
@@ -15,12 +28,43 @@ func Test_errIllegalTagType_Error(t *testing.T) {
 	if got := (errIllegalTagType{typeName: "int"}).Error(); got != "illegal tag type int" {
 		t.Fatalf("int tag: got %q, want %q", got, "illegal tag type int")
 	}
-	const withCaller = "illegal tag type string; nearest external caller: example.com/app.render (render.go:42)"
-	if got := (errIllegalTagType{typeName: "string", caller: "example.com/app.render (render.go:42)"}).Error(); got != withCaller {
-		t.Fatalf("caller hint: got %q, want %q", got, withCaller)
+	const withOrigin = "illegal tag type string returned by JawsGetTag on *example.com/app.getter; nearest external caller: example.com/app.render (render.go:42)"
+	err := errIllegalTagType{
+		typeName:      "string",
+		tagGetterType: "*example.com/app.getter",
+		caller:        "example.com/app.render (render.go:42)",
+	}
+	if got := err.Error(); got != withOrigin {
+		t.Fatalf("origin hints: got %q, want %q", got, withOrigin)
 	}
 	if !errors.Is(errIllegalTagType{typeName: "int"}, ErrIllegalTagType) {
 		t.Fatal("expected errors.Is match against ErrIllegalTagType")
+	}
+}
+
+func TestTagExpand_IllegalTagTypeNamesNearestTagGetter(t *testing.T) {
+	_, err := TagExpand(testIllegalOuterTagGetter{})
+	if !errors.Is(err, ErrIllegalTagType) {
+		t.Fatalf("TagExpand() error = %v, want ErrIllegalTagType", err)
+	}
+	if !strings.Contains(err.Error(), "returned by JawsGetTag on *tag.testIllegalInnerTagGetter") {
+		t.Fatalf("TagExpand() error = %q, want nearest TagGetter", err)
+	}
+	if strings.Contains(err.Error(), "testIllegalOuterTagGetter") {
+		t.Fatalf("TagExpand() error = %q, want only nearest TagGetter", err)
+	}
+	if strings.Contains(err.Error(), "private-value") {
+		t.Fatalf("TagExpand() error exposes the tag value: %q", err)
+	}
+}
+
+func Test_scanCallers(t *testing.T) {
+	caller := scanCallers(func(string) bool { return false })
+	if !strings.Contains(caller, ".Test_scanCallers (errillegaltagtype_test.go:") {
+		t.Fatalf("scanCallers() = %q, want this test's frame", caller)
+	}
+	if caller := scanCallers(func(string) bool { return true }); caller != "" {
+		t.Fatalf("scanCallers() = %q when every frame is ignored, want empty", caller)
 	}
 }
 
@@ -49,7 +93,7 @@ func Test_formatExternalCaller(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			frame := runtime.Frame{Function: tt.function, File: tt.file, Line: tt.line}
-			if got := formatExternalCaller(frame); got != tt.want {
+			if got := formatExternalCaller(frame, ignoredCaller); got != tt.want {
 				t.Errorf("formatExternalCaller() = %q, want %q", got, tt.want)
 			}
 		})

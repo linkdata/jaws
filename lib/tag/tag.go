@@ -185,7 +185,7 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 		float32, float64, bool:
 		// Reject these exact types to catch common accidental tags while still
 		// allowing named domain types with the same underlying representation.
-		return result, newErrIllegalTagType(tagValue)
+		return result, newErrIllegalTagType(tagValue, active)
 	default:
 		return addTag(result, data)
 	}
