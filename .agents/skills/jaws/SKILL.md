@@ -196,7 +196,9 @@ helpers.
   also renders a Span.
 
 Plain strings passed to HTML-producing JaWS helpers are trusted raw HTML. Route
-untrusted text through escaping Getter/Stringer forms or escape it explicitly.
+untrusted content through escaping Getter/Stringer forms. Build attributes from
+untrusted values with `htmlio.Attr` and a trusted name; convert the result to
+`string` for `NewTemplate`.
 
 ## Render shape and verification
 

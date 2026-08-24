@@ -48,9 +48,9 @@ type Template struct {
 	OuterHTMLTag string // Wrapper element; empty renders unwrapped and disables JawsUpdate.
 	Name         string // Template name to be looked up using Jaws.LookupTemplate.
 	Dot          any    // Template data, tag source, event delegate, and initial-attribute source.
-	// initialAttr packs constructor attributes into a comparable value. Each Element
-	// retains its Template definition in the UI slot.
-	initialAttr string
+	// initialAttrs stores the joined constructor attributes as a string so Template
+	// remains comparable and usable as a container reuse map key.
+	initialAttrs string
 }
 
 var (
@@ -105,8 +105,8 @@ func (st *templateState) restoreOwnedElements(owned []*jaws.Element) {
 
 // String returns a debug representation of t.
 func (tmpl Template) String() string {
-	if tmpl.initialAttr != "" {
-		return fmt.Sprintf("{%q, %q, %s, %q}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot), tmpl.initialAttr)
+	if tmpl.initialAttrs != "" {
+		return fmt.Sprintf("{%q, %q, %s, %q}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot), tmpl.initialAttrs)
 	}
 	return fmt.Sprintf("{%q, %q, %s}", tmpl.OuterHTMLTag, tmpl.Name, tag.TagString(tmpl.Dot))
 }
@@ -187,8 +187,8 @@ func (tmpl Template) render(elem *jaws.Element, w io.Writer, params []any) (err 
 			if doWrap {
 				// HTML parsing keeps the first duplicate attribute, so append
 				// constructor and Dot attributes after render-parameter attributes.
-				if tmpl.initialAttr != "" {
-					attrs = append(attrs, tmpl.initialAttr)
+				if tmpl.initialAttrs != "" {
+					attrs = append(attrs, tmpl.initialAttrs)
 				}
 				for _, attr := range elem.ApplyInitialHTMLAttr(tmpl.Dot) {
 					attrs = append(attrs, string(attr))
@@ -309,13 +309,15 @@ func (tmpl Template) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // attrs contains trusted raw HTML attributes for the generated wrapper. Values
 // are joined with a single space, and the result participates in Template equality.
+// Constructor attributes are applied only during initial rendering and persist
+// unchanged across [Template.JawsUpdate].
 // Attribute precedence is render parameters, attrs, then attributes returned by dot.
 func NewTemplate(outerHTMLTag, name string, dot any, attrs ...string) (tmpl Template) {
 	if outerHTMLTag == "" {
 		outerHTMLTag = "div"
 	}
 	tmpl = newTemplate(outerHTMLTag, name, dot)
-	tmpl.initialAttr = strings.Join(attrs, " ")
+	tmpl.initialAttrs = strings.Join(attrs, " ")
 	return
 }
 

@@ -142,8 +142,11 @@ widget as its updater or for managed widgets nested in its HTML.
 HTML-inner constructors and matching RequestWriter helpers route content through
 `bind.MakeHTMLGetter`. The conversion precedence and trust boundary are owned by
 the [bind guide](../bind/AI.md): plain strings and `template.HTML` are trusted,
-while getter/stringer forms escape returned strings. Raw `template.HTMLAttr`
-params are also trusted.
+while getter/stringer forms escape returned strings. String and
+`template.HTMLAttr` render params, including slices, and `NewTemplate` attribute
+strings are trusted raw attributes. Route untrusted content through escaping
+getter/stringer forms. Build attributes from untrusted values with `htmlio.Attr`
+and a trusted name; convert the result to `string` for `NewTemplate`.
 
 `Element.ApplyGetter` registers a primary getter's tags and event interfaces; it
 does not run initial-attribute hooks. Call `Element.ApplyInitialHTMLAttr`
