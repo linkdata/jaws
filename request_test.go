@@ -580,6 +580,7 @@ func TestRequest_writeTailScript_EmitsOnlyNeededHelpers(t *testing.T) {
 		{msg: wire.WsMsg{Jid: 1, What: what.RClass, Data: "class"}, helper: tailScriptD},
 	}
 	helpers := []string{tailScriptA, tailScriptR, tailScriptC, tailScriptD}
+	var scripts []string
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -609,7 +610,16 @@ func TestRequest_writeTailScript_EmitsOnlyNeededHelpers(t *testing.T) {
 				t.Errorf("%v: helper %q present = %t, want %t", tc.msg.What, helper[:2], got, want)
 			}
 		}
+		scripts = append(scripts, s)
 	}
+
+	t.Run("execute", func(t *testing.T) {
+		scriptsJSON, err := json.Marshal(scripts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runNodeSnippet(t, `const calls=[],errors=[],fail=n=>{calls.push(n);throw Error(n)},elem={getAttribute(){return null},setAttribute(){fail("A")},removeAttribute(){fail("R")},classList:{add(){fail("C")},remove(){fail("D")}}};global.document={getElementById(){return elem}};console.error=e=>errors.push(e.message);for(const script of `+string(scriptsJSON)+`){eval(script)}if(calls.join()!=="A,R,C,D"||errors.join()!=="A,R,C,D")throw Error(JSON.stringify({calls,errors}))`)
+	})
 }
 
 func runNodeSnippet(t *testing.T, script string) (out string) {

@@ -395,8 +395,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 const headerContentTypeJavaScript = "text/javascript; charset=utf-8"
 
-// tailScriptStart isolates initial DOM fixups. The remaining fragments define
-// only the helpers used by a particular tail.
+// Tail script fragments define the isolated fixup wrapper and operation helpers.
 const (
 	tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}}`
 	tailScriptGuard = `,I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"}`
@@ -447,6 +446,7 @@ var jsInlineScriptEscaper = strings.NewReplacer(
 	"\u2029", `\u2029`,
 )
 
+// tailScriptAlias returns the helper name and mask for a positive-Jid tail fixup.
 func tailScriptAlias(msg wire.WsMsg) (fn, bit byte) {
 	if msg.Jid > 0 {
 		switch msg.What {
@@ -481,7 +481,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 		rq.tailsent = true
 		sent = true
 		tailOps := 0
-		tailCap := 0
+		tailCap := 2 // closing block and newline
 		var aliases byte
 		for _, msg := range rq.wsQueue {
 			if fn, bit := tailScriptAlias(msg); fn != 0 {
