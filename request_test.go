@@ -512,9 +512,14 @@ func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 	th.Equal(strings.Count(tailScriptStart, wrapper), 1)
 	guard := `I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"}`
 	th.Equal(strings.Count(tailScriptStart, guard), 1)
-	for _, alias := range []string{"A=X(", "R=X(", "C=X(", "D=X("} {
-		th.Equal(strings.Count(tailScriptStart, alias), 1)
+	var aliases []byte
+	for i := range 256 {
+		if alias := tailScriptAlias(what.What(i)); alias != 0 {
+			aliases = append(aliases, alias)
+			th.Equal(strings.Count(tailScriptStart, string([]byte{alias})+"=X("), 1)
+		}
 	}
+	th.Equal(string(aliases), "ARCD")
 	th.True(strings.Contains(tailScriptStart, `I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)`))
 	th.True(strings.Contains(tailScriptStart, `I(n,"remove");e.removeAttribute(n)`))
 

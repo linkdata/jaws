@@ -393,7 +393,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 // The tail-script subsystem serves one-shot attribute and class updates queued
 // during initial rendering before the WebSocket connects.
 
-const headerContentTypeJavaScript = "text/javascript"
+const headerContentTypeJavaScript = "text/javascript; charset=utf-8"
 
 // tailScriptStart defines block-scoped helpers for initial DOM fixups.
 const tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}},` +
@@ -469,15 +469,16 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 		rq.tailsent = true
 		sent = true
 		tailOps := 0
+		tailCap := len(tailScriptStart)
 		for _, msg := range rq.wsQueue {
 			if msg.Jid > 0 && tailScriptAlias(msg.What) != 0 {
 				tailOps++
+				tailCap += len(msg.Data)
 			}
 		}
 		if tailOps > 0 {
-			// Reserve a modest per-fixup estimate; append still grows for
-			// unusually long payloads.
-			b = make([]byte, 0, len(tailScriptStart)+tailOps*32)
+			// Reserve payload bytes plus a small per-fixup syntax estimate.
+			b = make([]byte, 0, tailCap+tailOps*12)
 			b = append(b, tailScriptStart...)
 		}
 		n := 0
@@ -495,9 +496,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 				n++
 			}
 		}
-		for i := n; i < len(rq.wsQueue); i++ {
-			rq.wsQueue[i] = wire.WsMsg{}
-		}
+		clear(rq.wsQueue[n:])
 		rq.wsQueue = rq.wsQueue[:n]
 		if len(b) > 0 {
 			b = append(b, '}', '\n')

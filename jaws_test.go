@@ -3188,7 +3188,7 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	jw.ServeHTTP(w, req)
 
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Header().Get("Content-Type"), headerContentTypeJavaScript)
+	is.Equal(w.Header().Get("Content-Type"), "text/javascript; charset=utf-8")
 	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
 	is.Equal(strings.Contains(w.Body.String(), `A(1,"title\n\x3c/script>\x3cimg onerror=alert(1) src=x>");`), true)
 	is.Equal(strings.Contains(w.Body.String(), `C(1,"cls");`), true)
@@ -4200,7 +4200,7 @@ func BenchmarkAppendJSQuote(b *testing.B) {
 	}
 }
 
-// BenchmarkRequestDrainTailScript measures one- and 300-fixup tails.
+// BenchmarkRequestDrainTailScript measures representative compact-tail workloads.
 func BenchmarkRequestDrainTailScript(b *testing.B) {
 	b.Run("one-fixup", func(b *testing.B) {
 		benchmarkRequestDrainTailScript(b, []wire.WsMsg{
@@ -4228,6 +4228,15 @@ func BenchmarkRequestDrainTailScript(b *testing.B) {
 		}
 	}
 	b.Run("board-300", func(b *testing.B) {
+		benchmarkRequestDrainTailScript(b, messages)
+	})
+
+	messages = messages[:0]
+	data := "aria-label\n" + strings.Repeat("x", 120)
+	for id := Jid(1); id <= 100; id++ {
+		messages = append(messages, wire.WsMsg{Jid: id, What: what.SAttr, Data: data})
+	}
+	b.Run("long-attrs-100", func(b *testing.B) {
 		benchmarkRequestDrainTailScript(b, messages)
 	})
 }
