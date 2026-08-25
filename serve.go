@@ -394,6 +394,18 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 const headerContentTypeJavaScript = "text/javascript"
 
+// tailScriptStart defines block-scoped helpers for the four DOM fixups eligible
+// for the initial tail. X resolves each numeric Jid and catches each DOM failure,
+// so later fixups still run after one fails. I protects the framework-owned id
+// attribute, and Y adapts each DOM operation to the compact A/R/C/D call shape.
+const tailScriptStart = `{const X=(f,i,d)=>{try{let e=document.getElementById("Jid."+i);e&&f(e,d)}catch(e){console.error(e)}},` +
+	`I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"},` +
+	`Y=f=>(i,d)=>X(f,i,d),` +
+	`A=Y((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)}),` +
+	`R=Y((e,n)=>{I(n,"remove");e.removeAttribute(n)}),` +
+	`C=Y((e,c)=>e.classList.add(c)),` +
+	`D=Y((e,c)=>e.classList.remove(c));`
+
 // appendJSQuote appends s as a JavaScript string literal safe to embed in an inline
 // <script>.
 //
@@ -447,36 +459,30 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 		sent = true
 		n := 0
 		for _, msg := range rq.wsQueue {
-			var fn string
+			var fn byte
 			switch msg.What {
 			case what.SAttr:
-				fn = "setAttribute"
+				fn = 'A'
 			case what.RAttr:
-				fn = "removeAttribute"
+				fn = 'R'
 			case what.SClass:
-				fn = "classList?.add"
+				fn = 'C'
 			case what.RClass:
-				fn = "classList?.remove"
+				fn = 'D'
 			}
-			if fn != "" && msg.Jid > 0 {
-				// Wrap each fixup so one that throws at runtime (an invalid class token
-				// or attribute name reaches the throwing DOM call past the ?. element
-				// guard) does not abandon the fixups that follow. The drain removes these
-				// messages from wsQueue, making the tail script their sole applier, so an
-				// unisolated throw would lose the rest permanently; this mirrors the
-				// per-order isolation the WebSocket client applies in jawsMessage.
-				b = append(b, "try{document.getElementById("...)
-				b = msg.Jid.AppendQuote(b)
-				b = append(b, ")?."...)
-				b = append(b, fn...)
-				b = append(b, "("...)
-				attr, val, ok := strings.Cut(msg.Data, "\n")
-				b = appendJSQuote(b, attr)
-				if ok {
-					b = append(b, ',')
-					b = appendJSQuote(b, val)
+			if fn != 0 && msg.Jid > 0 {
+				if len(b) == 0 {
+					b = append(b, tailScriptStart...)
 				}
-				b = append(b, ");}catch(e){console.error(e);}\n"...)
+				b = append(b, fn, '(')
+				// X restores the common "Jid." prefix, so each call carries only the
+				// Request's monotonically assigned numeric suffix.
+				b = msg.Jid.AppendInt(b)
+				b = append(b, ',')
+				// Keep Data intact: A splits SAttr at its first newline in the browser;
+				// attribute removals and class operations treat every newline as data.
+				b = appendJSQuote(b, msg.Data)
+				b = append(b, ')', ';')
 			} else {
 				rq.wsQueue[n] = msg
 				n++
@@ -486,6 +492,9 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 			rq.wsQueue[i] = wire.WsMsg{}
 		}
 		rq.wsQueue = rq.wsQueue[:n]
+		if len(b) > 0 {
+			b = append(b, '}', '\n')
+		}
 	}
 	return
 }
@@ -504,7 +513,7 @@ func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (e
 		w.WriteHeader(http.StatusNoContent)
 	} else if len(b) > 0 {
 		// b is built by drainTailScript, which JS-escapes every attribute and class
-		// value via appendJSQuote (see TestRequest_writeTailScript_EscapesScriptClose),
+		// payload via appendJSQuote (see TestRequest_writeTailScript_EscapesScriptClose),
 		// so writing it verbatim to the response is safe.
 		_, err = w.Write(b) // #nosec G705 -- tail bytes are JS-escaped by drainTailScript via appendJSQuote
 	}

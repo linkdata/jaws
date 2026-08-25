@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -15,6 +16,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"os/exec"
 	"reflect"
 	"runtime"
 	"slices"
@@ -28,6 +31,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/lib/assets"
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/tag"
@@ -360,6 +364,7 @@ func TestRequest_writeTailScript_EscapesScriptClose(t *testing.T) {
 		t.Fatalf("writeTailScript did not escape </script> in attribute value: %s", s)
 	}
 	th.True(strings.Contains(s, `\x3c/script>`))
+	th.True(strings.Contains(s, `A(1,"title\n\x3c/script>\x3cimg onerror=alert(1) src=x>");`))
 }
 
 func TestRequest_writeTailScript_QuotesAstralAndLineSeparators(t *testing.T) {
@@ -375,7 +380,7 @@ func TestRequest_writeTailScript_QuotesAstralAndLineSeparators(t *testing.T) {
 	// text "U0001fffe", so the value must instead survive as literal UTF-8. U+2028 is a
 	// JavaScript line separator that must be escaped so it cannot break the inline
 	// <script> string literal.
-	e.SetAttr("data-x", "a\U0001FFFEb\u2028c")
+	e.SetAttr("data-x", "a\U0001FFFEb\u2028c\u2029d\"e\\f\x00g")
 
 	w := httptest.NewRecorder()
 	b, sent := rq.drainTailScript()
@@ -394,6 +399,13 @@ func TestRequest_writeTailScript_QuotesAstralAndLineSeparators(t *testing.T) {
 	if strings.ContainsRune(s, '\u2028') {
 		t.Fatalf("tail script contains a literal U+2028 line separator: %q", s)
 	}
+	th.True(strings.Contains(s, `\u2029`))
+	if strings.ContainsRune(s, '\u2029') {
+		t.Fatalf("tail script contains a literal U+2029 line separator: %q", s)
+	}
+	th.True(strings.Contains(s, `\"`))
+	th.True(strings.Contains(s, `\\`))
+	th.True(strings.Contains(s, `\u0000`))
 }
 
 func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
@@ -410,35 +422,13 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	e.SetValue("hello")
 	e.SetClass("cls")
 	e.SetInner("content")
-
 	rq.muQueue.Lock()
-	th.Equal(len(rq.wsQueue), 4)
+	rq.wsQueue = append(rq.wsQueue, wire.WsMsg{Jid: 0, What: what.SAttr, Data: "zero\nkept"})
 	rq.muQueue.Unlock()
 
-	w := httptest.NewRecorder()
-	b, sent := rq.drainTailScript()
-	if err := rq.writeTailResponse(w, b, sent); err != nil {
-		t.Fatal(err)
-	}
-
-	// SAttr and SClass consumed, Value and Inner preserved
 	rq.muQueue.Lock()
-	th.Equal(len(rq.wsQueue), 2)
-	th.Equal(rq.wsQueue[0].What, what.Value)
-	th.Equal(rq.wsQueue[1].What, what.Inner)
+	th.Equal(len(rq.wsQueue), 5)
 	rq.muQueue.Unlock()
-}
-
-func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
-	th := newTestHelper(t)
-	jw, _ := New()
-	defer jw.Close()
-	rq := jw.newRequest(nil)
-	defer jw.recycle(rq)
-	item := &testUi{}
-	e := rq.NewElement(item)
-	e.RemoveAttr("hidden")
-	e.RemoveClass("cls")
 
 	w := httptest.NewRecorder()
 	b, sent := rq.drainTailScript()
@@ -446,20 +436,85 @@ func TestRequest_writeTailScript_RemoveAttrAndClass(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := w.Body.String()
-	th.True(strings.Contains(s, `removeAttribute("hidden");`))
-	th.True(strings.Contains(s, `classList?.remove("cls");`))
+	th.True(strings.Contains(s, `A(1,"hidden\n");`))
+	th.True(strings.Contains(s, `C(1,"cls");`))
+	th.Equal(strings.Contains(s, "hello"), false)
+	th.Equal(strings.Contains(s, "content"), false)
+	th.Equal(strings.Contains(s, "zero"), false)
+
+	// The positive-Jid SAttr and SClass are consumed; Value, Inner, and the
+	// whole-request SAttr are preserved in their original order.
+	rq.muQueue.Lock()
+	th.Equal(len(rq.wsQueue), 3)
+	th.Equal(rq.wsQueue[0].What, what.Value)
+	th.Equal(rq.wsQueue[1].What, what.Inner)
+	th.Equal(rq.wsQueue[2], wire.WsMsg{Jid: 0, What: what.SAttr, Data: "zero\nkept"})
+	rq.muQueue.Unlock()
+
+	b, sent = rq.drainTailScript()
+	th.Equal(sent, false)
+	th.Equal(len(b), 0)
+	rq.muQueue.Lock()
+	th.Equal(len(rq.wsQueue), 3)
+	th.Equal(rq.wsQueue[0].What, what.Value)
+	th.Equal(rq.wsQueue[1].What, what.Inner)
+	th.Equal(rq.wsQueue[2], wire.WsMsg{Jid: 0, What: what.SAttr, Data: "zero\nkept"})
+	rq.muQueue.Unlock()
+}
+
+func TestRequest_writeTailScript_EncodesRawOperations(t *testing.T) {
+	th := newTestHelper(t)
+	jw, _ := New()
+	defer jw.Close()
+	rq := jw.newRequest(nil)
+	defer jw.recycle(rq)
+	item := &testUi{}
+	e := rq.NewElement(item)
+	e.SetAttr("title", "line1\nline2")
+	e.RemoveAttr("a\nb")
+	e.SetClass("c\nd")
+	e.RemoveClass("e\nf")
+	rq.NewElement(&testUi{}).SetClass("second")
+
+	w := httptest.NewRecorder()
+	b, sent := rq.drainTailScript()
+	if err := rq.writeTailResponse(w, b, sent); err != nil {
+		t.Fatal(err)
+	}
+	s := w.Body.String()
+	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}\n") {
+		t.Fatalf("tail script is not block-scoped: %q", s)
+	}
+	for _, helper := range []string{"A=Y(", "R=Y(", "C=Y(", "D=Y("} {
+		if got := strings.Count(s, helper); got != 1 {
+			t.Errorf("tail script contains %q %d times, want once", helper, got)
+		}
+	}
+	wants := []string{
+		`A(1,"title\nline1\nline2");`,
+		`R(1,"a\nb");`,
+		`C(1,"c\nd");`,
+		`D(1,"e\nf");`,
+		`C(2,"second");`,
+	}
+	previous := -1
+	for _, want := range wants {
+		pos := strings.Index(s, want)
+		if pos < 0 {
+			t.Errorf("tail script is missing %q: %s", want, s)
+		} else if pos <= previous {
+			t.Errorf("tail operation %q is out of order: %s", want, s)
+		}
+		previous = pos
+	}
 
 	rq.muQueue.Lock()
 	th.Equal(len(rq.wsQueue), 0)
 	rq.muQueue.Unlock()
 }
 
-// TestRequest_writeTailScript_IsolatesEachFixup verifies each attribute/class fixup
-// is wrapped in its own try/catch, so a fixup that throws at runtime (e.g. a class
-// token containing whitespace, which the ?. element guard does not catch) cannot
-// abandon the fixups that follow it. The drain removes these messages from wsQueue,
-// making the tail script their sole applier, so the isolation mirrors the per-order
-// isolation the WebSocket client applies in jawsMessage.
+// TestRequest_writeTailScript_IsolatesEachFixup verifies the shared helper catches
+// every individual fixup, so one throwing operation cannot abandon later calls.
 func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 	th := newTestHelper(t)
 	jw, _ := New()
@@ -481,12 +536,203 @@ func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := w.Body.String()
-	// One try and one catch per fixup.
-	th.Equal(strings.Count(s, "try{document.getElementById("), 3)
-	th.Equal(strings.Count(s, "}catch(e){console.error(e);}"), 3)
-	// The fixup after the throwing one lives in its own isolated statement, so the
-	// throwing one cannot prevent it from running.
-	th.True(strings.Contains(s, `classList?.add("ok-last");}catch(e){console.error(e);}`))
+	th.Equal(strings.Count(s, "try{"), 1)
+	th.Equal(strings.Count(s, "catch(e){console.error(e)}"), 1)
+	wants := []string{`C(1,"ok-first");`, `C(2,"btn primary");`, `C(3,"ok-last");`}
+	previous := -1
+	for _, want := range wants {
+		pos := strings.Index(s, want)
+		if pos < 0 {
+			t.Errorf("tail script is missing %q: %s", want, s)
+		} else if pos <= previous {
+			t.Errorf("tail operation %q is out of order: %s", want, s)
+		}
+		previous = pos
+	}
+}
+
+func runNodeSnippet(t *testing.T, script string) (out string) {
+	t.Helper()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		if os.Getenv("JAWS_REQUIRE_NODE") != "" {
+			t.Fatal("node executable not available but JAWS_REQUIRE_NODE is set")
+		}
+		t.Skip("node executable not available")
+	}
+	cmd := exec.CommandContext(t.Context(), node, "-e", script)
+	data, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node failed: %v\n%s", err, data)
+	}
+	out = string(data)
+	return
+}
+
+func TestRequest_writeTailScript_BrowserBehaviorMatchesWebSocket(t *testing.T) {
+	const changedValue = "line1\nline2\"\\\U0001FFFE\u2028\u2029</script>"
+	messages := []wire.WsMsg{
+		{Jid: 1, What: what.SAttr, Data: "title\nsame"},
+		{Jid: 1, What: what.SAttr, Data: "title\n" + changedValue},
+		{Jid: 1, What: what.RAttr, Data: "a\nb"},
+		{Jid: 1, What: what.SClass, Data: "bad token"},
+		{Jid: 1, What: what.SClass, Data: "ok-last"},
+		{Jid: 1, What: what.RClass, Data: "gone"},
+		{Jid: 1, What: what.SAttr, Data: "ID\nhacked"},
+		{Jid: 1, What: what.RAttr, Data: "iD"},
+		{Jid: 2, What: what.SClass, Data: "missing"},
+	}
+	rq := &Request{wsQueue: append([]wire.WsMsg(nil), messages...)}
+	tail, sent := rq.drainTailScript()
+	if !sent {
+		t.Fatal("drainTailScript did not report the first drain")
+	}
+	operations := make([][3]string, len(messages))
+	for i, msg := range messages {
+		operations[i] = [3]string{msg.What.String(), msg.Jid.String(), msg.Data}
+	}
+	operationsJSON, err := json.Marshal(operations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientJSON, err := json.Marshal(assets.JavascriptText)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	script := `const operations=` + string(operationsJSON) + `;
+const clientSource=` + string(clientJSON) + `;
+const tailEvents=[],tailErrors=[],tailLookups=[];
+const wsEvents=[],wsErrors=[],wsLookups=[];
+function makeElem(events) {
+	const elem = {
+		attrs: { title: "same" },
+		getAttribute: function(name) {
+			if (this !== elem) throw new Error("wrong getAttribute receiver");
+			events.push(["getAttribute", name]);
+			return Object.hasOwn(this.attrs, name) ? this.attrs[name] : null;
+		},
+		setAttribute: function(name, value) {
+			if (this !== elem) throw new Error("wrong setAttribute receiver");
+			events.push(["setAttribute", name, value]);
+			this.attrs[name] = value;
+		},
+		removeAttribute: function(name) {
+			if (this !== elem) throw new Error("wrong removeAttribute receiver");
+			events.push(["removeAttribute", name]);
+		},
+		classList: {
+			add: function(name) {
+				if (this !== elem.classList) throw new Error("wrong classList.add receiver");
+				events.push(["classList.add", name]);
+				if (name === "bad token") throw new Error("invalid class token");
+			},
+			remove: function(name) {
+				if (this !== elem.classList) throw new Error("wrong classList.remove receiver");
+				events.push(["classList.remove", name]);
+			},
+		},
+	};
+	return elem;
+}
+let target=makeElem(tailEvents),lookups=tailLookups;
+global.window={
+	location:{protocol:"http:",host:"example.test",reload:function(){},assign:function(){}},
+	addEventListener:function(){},
+	removeEventListener:function(){},
+	jawsNames:new Map(),
+};
+global.document = {
+	readyState:"loading",
+	addEventListener:function(){},
+	querySelector:function(){return null},
+	querySelectorAll:function(){return []},
+	getElementById: function(id) {
+		if (this !== document) throw new Error("wrong getElementById receiver");
+		lookups.push(id);
+		return id === "Jid.1" ? target : null;
+	},
+};
+global.XMLHttpRequest=function(){};
+global.Event=function(){};
+global.Node=function(){};
+global.WebSocket=function(){};
+console.error=function(err){tailErrors.push(String(err))};
+const X = "outer-X", I = "outer-I", Y = "outer-Y";
+const A = "outer-A", R = "outer-R", C = "outer-C", D = "outer-D";
+` + string(tail) + `
+const globals=[X,I,Y,A,R,C,D];
+target=makeElem(wsEvents);
+lookups=wsLookups;
+eval(clientSource);
+for(const operation of operations){
+	try{
+		jawsPerform(operation[0],operation[1],JSON.stringify(operation[2]));
+	}catch(err){
+		wsErrors.push(String(err));
+	}
+}
+process.stdout.write(JSON.stringify({
+	tailEvents,tailErrors,tailLookups,
+	wsEvents,wsErrors,wsLookups,
+	globals,
+}));
+`
+	var got struct {
+		TailEvents  [][]string `json:"tailEvents"`
+		TailErrors  []string   `json:"tailErrors"`
+		TailLookups []string   `json:"tailLookups"`
+		WSEvents    [][]string `json:"wsEvents"`
+		WSErrors    []string   `json:"wsErrors"`
+		WSLookups   []string   `json:"wsLookups"`
+		Globals     []string   `json:"globals"`
+	}
+	if err := json.Unmarshal([]byte(runNodeSnippet(t, script)), &got); err != nil {
+		t.Fatal(err)
+	}
+	wantEvents := [][]string{
+		{"getAttribute", "title"},
+		{"getAttribute", "title"},
+		{"setAttribute", "title", changedValue},
+		{"removeAttribute", "a\nb"},
+		{"classList.add", "bad token"},
+		{"classList.add", "ok-last"},
+		{"classList.remove", "gone"},
+	}
+	if !reflect.DeepEqual(got.TailEvents, wantEvents) {
+		t.Errorf("tail DOM events = %#v, want %#v", got.TailEvents, wantEvents)
+	}
+	if !reflect.DeepEqual(got.WSEvents, wantEvents) {
+		t.Errorf("WebSocket DOM events = %#v, want %#v", got.WSEvents, wantEvents)
+	}
+	wantErrors := []string{
+		"Error: invalid class token",
+		"jaws: refusing to change reserved attribute 'id'",
+		"jaws: refusing to remove reserved attribute 'id'",
+	}
+	if !reflect.DeepEqual(got.TailErrors, wantErrors) {
+		t.Errorf("tail errors = %#v, want %#v", got.TailErrors, wantErrors)
+	}
+	// TailHTML deliberately ignores a missing element, while the WebSocket client
+	// reports it after applying the same present-element operations.
+	wantWSErrors := append(append([]string(nil), wantErrors...), "jaws: element not found: Jid.2")
+	if !reflect.DeepEqual(got.WSErrors, wantWSErrors) {
+		t.Errorf("WebSocket errors = %#v, want %#v", got.WSErrors, wantWSErrors)
+	}
+	wantLookups := []string{
+		"Jid.1", "Jid.1", "Jid.1", "Jid.1", "Jid.1",
+		"Jid.1", "Jid.1", "Jid.1", "Jid.2",
+	}
+	if !reflect.DeepEqual(got.TailLookups, wantLookups) {
+		t.Errorf("tail element lookups = %#v, want %#v", got.TailLookups, wantLookups)
+	}
+	if !reflect.DeepEqual(got.WSLookups, wantLookups) {
+		t.Errorf("WebSocket element lookups = %#v, want %#v", got.WSLookups, wantLookups)
+	}
+	wantGlobals := []string{"outer-X", "outer-I", "outer-Y", "outer-A", "outer-R", "outer-C", "outer-D"}
+	if !reflect.DeepEqual(got.Globals, wantGlobals) {
+		t.Errorf("outer globals = %#v, want %#v", got.Globals, wantGlobals)
+	}
 }
 
 // TestRequest_TailScriptConcurrentWithRecycle exercises a /jaws/.tail fetch
