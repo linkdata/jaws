@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -392,7 +393,24 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 // The tail-script subsystem serves one-shot attribute and class updates queued
 // during initial rendering before the WebSocket connects.
 
-const headerContentTypeJavaScript = "text/javascript"
+const headerContentTypeJavaScript = "text/javascript; charset=utf-8"
+
+// Tail script fragments define the isolated fixup wrapper and operation helpers.
+const (
+	tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}}`
+	tailScriptGuard = `,I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"}`
+	tailScriptA     = `,A=X((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)})`
+	tailScriptR     = `,R=X((e,n)=>{I(n,"remove");e.removeAttribute(n)})`
+	tailScriptC     = `,C=X((e,c)=>e.classList.add(c))`
+	tailScriptD     = `,D=X((e,c)=>e.classList.remove(c))`
+)
+
+const (
+	tailScriptMaskA byte = 1 << iota
+	tailScriptMaskR
+	tailScriptMaskC
+	tailScriptMaskD
+)
 
 // appendJSQuote appends s as a JavaScript string literal safe to embed in an inline
 // <script>.
@@ -428,6 +446,23 @@ var jsInlineScriptEscaper = strings.NewReplacer(
 	"\u2029", `\u2029`,
 )
 
+// tailScriptAlias returns the helper name and mask for a positive-Jid tail fixup.
+func tailScriptAlias(msg wire.WsMsg) (fn, bit byte) {
+	if msg.Jid > 0 {
+		switch msg.What {
+		case what.SAttr:
+			fn, bit = 'A', tailScriptMaskA
+		case what.RAttr:
+			fn, bit = 'R', tailScriptMaskR
+		case what.SClass:
+			fn, bit = 'C', tailScriptMaskC
+		case what.RClass:
+			fn, bit = 'D', tailScriptMaskD
+		}
+	}
+	return
+}
+
 // drainTailScript builds the tail <script> body from the attribute and class messages
 // queued during initial rendering, reporting sent=true the first time it runs for this
 // Request (subsequent calls return sent=false so the response is 204).
@@ -445,47 +480,65 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 	if !rq.tailsent {
 		rq.tailsent = true
 		sent = true
-		n := 0
+		tailOps := 0
+		tailCap := 2 // closing block and newline
+		var aliases byte
 		for _, msg := range rq.wsQueue {
-			var fn string
-			switch msg.What {
-			case what.SAttr:
-				fn = "setAttribute"
-			case what.RAttr:
-				fn = "removeAttribute"
-			case what.SClass:
-				fn = "classList?.add"
-			case what.RClass:
-				fn = "classList?.remove"
+			if fn, bit := tailScriptAlias(msg); fn != 0 {
+				tailOps++
+				tailCap += len(msg.Data)
+				aliases |= bit
 			}
-			if fn != "" && msg.Jid > 0 {
-				// Wrap each fixup so one that throws at runtime (an invalid class token
-				// or attribute name reaches the throwing DOM call past the ?. element
-				// guard) does not abandon the fixups that follow. The drain removes these
-				// messages from wsQueue, making the tail script their sole applier, so an
-				// unisolated throw would lose the rest permanently; this mirrors the
-				// per-order isolation the WebSocket client applies in jawsMessage.
-				b = append(b, "try{document.getElementById("...)
-				b = msg.Jid.AppendQuote(b)
-				b = append(b, ")?."...)
-				b = append(b, fn...)
-				b = append(b, "("...)
-				attr, val, ok := strings.Cut(msg.Data, "\n")
-				b = appendJSQuote(b, attr)
-				if ok {
-					b = append(b, ',')
-					b = appendJSQuote(b, val)
-				}
-				b = append(b, ");}catch(e){console.error(e);}\n"...)
+		}
+		if tailOps > 0 {
+			preamble := [6]string{tailScriptStart}
+			if aliases&(tailScriptMaskA|tailScriptMaskR) != 0 {
+				preamble[1] = tailScriptGuard
+			}
+			if aliases&tailScriptMaskA != 0 {
+				preamble[2] = tailScriptA
+			}
+			if aliases&tailScriptMaskR != 0 {
+				preamble[3] = tailScriptR
+			}
+			if aliases&tailScriptMaskC != 0 {
+				preamble[4] = tailScriptC
+			}
+			if aliases&tailScriptMaskD != 0 {
+				preamble[5] = tailScriptD
+			}
+			for _, fragment := range preamble {
+				tailCap += len(fragment)
+			}
+			tailCap++ // const declaration terminator
+			// Reserve payload bytes plus a small per-fixup syntax estimate.
+			b = make([]byte, 0, tailCap+tailOps*12)
+			for _, fragment := range preamble {
+				b = append(b, fragment...)
+			}
+			b = append(b, ';')
+		}
+		n := 0
+		// Each helper catches independently because emitted messages are removed
+		// from wsQueue; one DOM error must not discard the remaining fixups.
+		for _, msg := range rq.wsQueue {
+			if fn, _ := tailScriptAlias(msg); fn != 0 {
+				b = append(b, fn, '(')
+				b = msg.Jid.AppendInt(b)
+				b = append(b, ',')
+				// A splits SAttr at its first newline; other operations use Data unchanged.
+				b = appendJSQuote(b, msg.Data)
+				b = append(b, ')', ';')
 			} else {
 				rq.wsQueue[n] = msg
 				n++
 			}
 		}
-		for i := n; i < len(rq.wsQueue); i++ {
-			rq.wsQueue[i] = wire.WsMsg{}
-		}
+		clear(rq.wsQueue[n:])
 		rq.wsQueue = rq.wsQueue[:n]
+		if len(b) > 0 {
+			b = append(b, '}', '\n')
+		}
 	}
 	return
 }
@@ -504,7 +557,7 @@ func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (e
 		w.WriteHeader(http.StatusNoContent)
 	} else if len(b) > 0 {
 		// b is built by drainTailScript, which JS-escapes every attribute and class
-		// value via appendJSQuote (see TestRequest_writeTailScript_EscapesScriptClose),
+		// payload via appendJSQuote (see TestRequest_writeTailScript_EscapesScriptClose),
 		// so writing it verbatim to the response is safe.
 		_, err = w.Write(b) // #nosec G705 -- tail bytes are JS-escaped by drainTailScript via appendJSQuote
 	}

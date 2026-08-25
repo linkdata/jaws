@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"math"
@@ -3164,7 +3165,7 @@ func TestServeHTTP_TailScript_UnknownSuffixDoesNotDrain(t *testing.T) {
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
+	is.Equal(strings.Contains(w.Body.String(), `C(1,"cls");`), true)
 }
 
 func TestServeHTTP_TailScript(t *testing.T) {
@@ -3187,10 +3188,10 @@ func TestServeHTTP_TailScript(t *testing.T) {
 	jw.ServeHTTP(w, req)
 
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(w.Header().Get("Content-Type"), headerContentTypeJavaScript)
+	is.Equal(w.Header().Get("Content-Type"), "text/javascript; charset=utf-8")
 	is.Equal(w.Header().Get("Cache-Control"), headerCacheControlNoStore)
-	is.Equal(strings.Contains(w.Body.String(), `setAttribute("title","\x3c/script>\x3cimg onerror=alert(1) src=x>");`), true)
-	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
+	is.Equal(strings.Contains(w.Body.String(), `A(1,"title\n\x3c/script>\x3cimg onerror=alert(1) src=x>");`), true)
+	is.Equal(strings.Contains(w.Body.String(), `C(1,"cls");`), true)
 	is.Equal(strings.Contains(w.Body.String(), "kept"), false)
 	is.Equal(jw.RequestCount(), 1)
 }
@@ -3209,6 +3210,7 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	w := httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
+	is.Equal(w.Body.Len(), 0)
 
 	req = httptest.NewRequest(http.MethodGet, "/jaws/.tail/"+rq.JawsKeyString(), nil)
 	req.RemoteAddr = hr.RemoteAddr
@@ -3257,7 +3259,7 @@ func TestServeHTTP_TailScript_RejectsRecycledKey(t *testing.T) {
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(strings.Contains(w.Body.String(), `classList?.add("fresh");`), true)
+	is.Equal(strings.Contains(w.Body.String(), `C(1,"fresh");`), true)
 	is.Equal(strings.Contains(w.Body.String(), "stale"), false)
 }
 
@@ -3291,7 +3293,7 @@ func TestServeHTTP_TailScript_IPMismatch(t *testing.T) {
 	w = httptest.NewRecorder()
 	jw.ServeHTTP(w, req)
 	is.Equal(w.Code, http.StatusOK)
-	is.Equal(strings.Contains(w.Body.String(), `classList?.add("cls");`), true)
+	is.Equal(strings.Contains(w.Body.String(), `C(1,"cls");`), true)
 }
 
 func TestServeHTTP_TailScript_WriteError(t *testing.T) {
@@ -4196,6 +4198,75 @@ func BenchmarkAppendJSQuote(b *testing.B) {
 			_ = buf
 		})
 	}
+}
+
+// BenchmarkRequestDrainTailScript measures representative compact-tail workloads.
+func BenchmarkRequestDrainTailScript(b *testing.B) {
+	b.Run("one-fixup", func(b *testing.B) {
+		benchmarkRequestDrainTailScript(b, []wire.WsMsg{
+			{Jid: 1, What: what.SClass, Data: "cls"},
+		})
+	})
+
+	const (
+		rows         = 10
+		columns      = 10
+		opsPerCell   = 3
+		firstCellJid = Jid(5)
+	)
+	messages := make([]wire.WsMsg, 0, rows*columns*opsPerCell)
+	currentJid := firstCellJid
+	for row := 1; row <= rows; row++ {
+		for column := 1; column <= columns; column++ {
+			messages = append(
+				messages,
+				wire.WsMsg{Jid: currentJid, What: what.SAttr, Data: "data-state\nhidden"},
+				wire.WsMsg{Jid: currentJid, What: what.SAttr, Data: fmt.Sprintf("aria-label\nRow %d, column %d: hidden", row, column)},
+				wire.WsMsg{Jid: currentJid, What: what.RAttr, Data: "disabled"},
+			)
+			currentJid++
+		}
+	}
+	b.Run("board-300", func(b *testing.B) {
+		benchmarkRequestDrainTailScript(b, messages)
+	})
+
+	messages = messages[:0]
+	data := "aria-label\n" + strings.Repeat("x", 120)
+	for id := Jid(1); id <= 100; id++ {
+		messages = append(messages, wire.WsMsg{Jid: id, What: what.SAttr, Data: data})
+	}
+	b.Run("long-attrs-100", func(b *testing.B) {
+		benchmarkRequestDrainTailScript(b, messages)
+	})
+}
+
+func benchmarkRequestDrainTailScript(b *testing.B, messages []wire.WsMsg) {
+	b.Helper()
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	go jw.Serve()
+	b.Cleanup(func() { jw.Close() })
+	rq := jw.newRequest(nil)
+	rq.muQueue.Lock()
+	rq.wsQueue = slices.Grow(rq.wsQueue[:0], len(messages))
+	rq.muQueue.Unlock()
+	var tail []byte
+	var sent bool
+	b.ReportAllocs()
+	for b.Loop() {
+		rq.muQueue.Lock()
+		rq.tailsent = false
+		rq.wsQueue = append(rq.wsQueue[:0], messages...)
+		rq.muQueue.Unlock()
+		tail, sent = rq.drainTailScript()
+	}
+	if !sent {
+		b.Fatal("drainTailScript did not report the first drain")
+	}
+	b.ReportMetric(float64(len(tail)), "tail-B/op")
 }
 
 // benchSink consumes drained messages so the outbound loop is not eliminated.
