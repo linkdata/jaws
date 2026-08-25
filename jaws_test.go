@@ -4200,12 +4200,16 @@ func BenchmarkAppendJSQuote(b *testing.B) {
 	}
 }
 
-// BenchmarkRequestDrainTailScript measures a representative 300-operation initial tail.
-//
-// The fixture queues two attribute sets and one attribute removal for each cell
-// in a 10-by-10 board. Queue refill and one-shot reset are excluded so the
-// benchmark measures only drainTailScript.
+// BenchmarkRequestDrainTailScript measures the fixed preamble cost with one class
+// fixup and the repetitive-tail path with two attribute sets plus one removal for
+// every cell in a 10-by-10 board.
 func BenchmarkRequestDrainTailScript(b *testing.B) {
+	b.Run("one-fixup", func(b *testing.B) {
+		benchmarkRequestDrainTailScript(b, []wire.WsMsg{
+			{Jid: 1, What: what.SClass, Data: "cls"},
+		})
+	})
+
 	const (
 		rows         = 10
 		columns      = 10
@@ -4216,7 +4220,8 @@ func BenchmarkRequestDrainTailScript(b *testing.B) {
 	currentJid := firstCellJid
 	for row := 1; row <= rows; row++ {
 		for column := 1; column <= columns; column++ {
-			messages = append(messages,
+			messages = append(
+				messages,
 				wire.WsMsg{Jid: currentJid, What: what.SAttr, Data: "data-state\nhidden"},
 				wire.WsMsg{Jid: currentJid, What: what.SAttr, Data: fmt.Sprintf("aria-label\nRow %d, column %d: hidden", row, column)},
 				wire.WsMsg{Jid: currentJid, What: what.RAttr, Data: "disabled"},
@@ -4224,18 +4229,24 @@ func BenchmarkRequestDrainTailScript(b *testing.B) {
 			currentJid++
 		}
 	}
+	b.Run("board-300", func(b *testing.B) {
+		benchmarkRequestDrainTailScript(b, messages)
+	})
+}
 
+func benchmarkRequestDrainTailScript(b *testing.B, messages []wire.WsMsg) {
+	b.Helper()
 	rq := &Request{wsQueue: make([]wire.WsMsg, 0, len(messages))}
 	var tail []byte
 	var sent bool
 	b.ReportAllocs()
 	for b.Loop() {
-		b.StopTimer()
+		// Timing the cheap reset avoids StopTimer/StartTimer dominating the
+		// one-fixup case; both implementations pay the same setup cost.
 		rq.muQueue.Lock()
 		rq.tailsent = false
 		rq.wsQueue = append(rq.wsQueue[:0], messages...)
 		rq.muQueue.Unlock()
-		b.StartTimer()
 		tail, sent = rq.drainTailScript()
 	}
 	if !sent {

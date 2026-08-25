@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
@@ -398,7 +399,7 @@ const headerContentTypeJavaScript = "text/javascript"
 // for the initial tail. X resolves each numeric Jid and catches each DOM failure,
 // so later fixups still run after one fails. I protects the framework-owned id
 // attribute, and Y adapts each DOM operation to the compact A/R/C/D call shape.
-const tailScriptStart = `{const X=(f,i,d)=>{try{let e=document.getElementById("Jid."+i);e&&f(e,d)}catch(e){console.error(e)}},` +
+const tailScriptStart = `{const X=(f,i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}},` +
 	`I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"},` +
 	`Y=f=>(i,d)=>X(f,i,d),` +
 	`A=Y((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)}),` +
@@ -440,6 +441,20 @@ var jsInlineScriptEscaper = strings.NewReplacer(
 	"\u2029", `\u2029`,
 )
 
+func tailScriptAlias(w what.What) (fn byte) {
+	switch w {
+	case what.SAttr:
+		fn = 'A'
+	case what.RAttr:
+		fn = 'R'
+	case what.SClass:
+		fn = 'C'
+	case what.RClass:
+		fn = 'D'
+	}
+	return
+}
+
 // drainTailScript builds the tail <script> body from the attribute and class messages
 // queued during initial rendering, reporting sent=true the first time it runs for this
 // Request (subsequent calls return sent=false so the response is 204).
@@ -457,25 +472,24 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 	if !rq.tailsent {
 		rq.tailsent = true
 		sent = true
+		tailOps := 0
+		for _, msg := range rq.wsQueue {
+			if msg.Jid > 0 && tailScriptAlias(msg.What) != 0 {
+				tailOps++
+			}
+		}
+		if tailOps > 0 {
+			// Reserve a modest per-fixup estimate; append still grows for
+			// unusually long payloads.
+			b = make([]byte, 0, len(tailScriptStart)+tailOps*32)
+			b = append(b, tailScriptStart...)
+		}
 		n := 0
 		for _, msg := range rq.wsQueue {
-			var fn byte
-			switch msg.What {
-			case what.SAttr:
-				fn = 'A'
-			case what.RAttr:
-				fn = 'R'
-			case what.SClass:
-				fn = 'C'
-			case what.RClass:
-				fn = 'D'
-			}
+			fn := tailScriptAlias(msg.What)
 			if fn != 0 && msg.Jid > 0 {
-				if len(b) == 0 {
-					b = append(b, tailScriptStart...)
-				}
 				b = append(b, fn, '(')
-				// X restores the common "Jid." prefix, so each call carries only the
+				// X restores jid.Prefix, so each call carries only the
 				// Request's monotonically assigned numeric suffix.
 				b = msg.Jid.AppendInt(b)
 				b = append(b, ',')

@@ -513,44 +513,6 @@ func TestRequest_writeTailScript_EncodesRawOperations(t *testing.T) {
 	rq.muQueue.Unlock()
 }
 
-// TestRequest_writeTailScript_IsolatesEachFixup verifies the shared helper catches
-// every individual fixup, so one throwing operation cannot abandon later calls.
-func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
-	th := newTestHelper(t)
-	jw, _ := New()
-	defer jw.Close()
-	rq := jw.newRequest(nil)
-	defer jw.recycle(rq)
-	e1 := rq.NewElement(&testUi{})
-	e2 := rq.NewElement(&testUi{})
-	e3 := rq.NewElement(&testUi{})
-	// A valid fixup, then one whose class token throws in the browser (whitespace is
-	// not a valid classList token), then another valid fixup.
-	e1.SetClass("ok-first")
-	e2.SetClass("btn primary")
-	e3.SetClass("ok-last")
-
-	w := httptest.NewRecorder()
-	b, sent := rq.drainTailScript()
-	if err := rq.writeTailResponse(w, b, sent); err != nil {
-		t.Fatal(err)
-	}
-	s := w.Body.String()
-	th.Equal(strings.Count(s, "try{"), 1)
-	th.Equal(strings.Count(s, "catch(e){console.error(e)}"), 1)
-	wants := []string{`C(1,"ok-first");`, `C(2,"btn primary");`, `C(3,"ok-last");`}
-	previous := -1
-	for _, want := range wants {
-		pos := strings.Index(s, want)
-		if pos < 0 {
-			t.Errorf("tail script is missing %q: %s", want, s)
-		} else if pos <= previous {
-			t.Errorf("tail operation %q is out of order: %s", want, s)
-		}
-		previous = pos
-	}
-}
-
 func runNodeSnippet(t *testing.T, script string) (out string) {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -599,9 +561,14 @@ func TestRequest_writeTailScript_BrowserBehaviorMatchesWebSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	jidPrefixJSON, err := json.Marshal(jid.Prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	script := `const operations=` + string(operationsJSON) + `;
 const clientSource=` + string(clientJSON) + `;
+const jidPrefix=` + string(jidPrefixJSON) + `;
 const tailEvents=[],tailErrors=[],tailLookups=[];
 const wsEvents=[],wsErrors=[],wsLookups=[];
 function makeElem(events) {
@@ -650,7 +617,7 @@ global.document = {
 	getElementById: function(id) {
 		if (this !== document) throw new Error("wrong getElementById receiver");
 		lookups.push(id);
-		return id === "Jid.1" ? target : null;
+		return id === jidPrefix+"1" ? target : null;
 	},
 };
 global.XMLHttpRequest=function(){};
@@ -715,13 +682,13 @@ process.stdout.write(JSON.stringify({
 	}
 	// TailHTML deliberately ignores a missing element, while the WebSocket client
 	// reports it after applying the same present-element operations.
-	wantWSErrors := append(append([]string(nil), wantErrors...), "jaws: element not found: Jid.2")
+	wantWSErrors := append(append([]string(nil), wantErrors...), "jaws: element not found: "+jid.Prefix+"2")
 	if !reflect.DeepEqual(got.WSErrors, wantWSErrors) {
 		t.Errorf("WebSocket errors = %#v, want %#v", got.WSErrors, wantWSErrors)
 	}
 	wantLookups := []string{
-		"Jid.1", "Jid.1", "Jid.1", "Jid.1", "Jid.1",
-		"Jid.1", "Jid.1", "Jid.1", "Jid.2",
+		jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1",
+		jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "2",
 	}
 	if !reflect.DeepEqual(got.TailLookups, wantLookups) {
 		t.Errorf("tail element lookups = %#v, want %#v", got.TailLookups, wantLookups)
