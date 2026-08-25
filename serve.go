@@ -395,13 +395,23 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 const headerContentTypeJavaScript = "text/javascript; charset=utf-8"
 
-// tailScriptStart isolates initial DOM fixups and protects the id attribute.
-const tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}},` +
-	`I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"},` +
-	`A=X((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)}),` +
-	`R=X((e,n)=>{I(n,"remove");e.removeAttribute(n)}),` +
-	`C=X((e,c)=>e.classList.add(c)),` +
-	`D=X((e,c)=>e.classList.remove(c));`
+// tailScriptStart isolates initial DOM fixups. The remaining fragments define
+// only the helpers used by a particular tail.
+const (
+	tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}}`
+	tailScriptGuard = `,I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"}`
+	tailScriptA     = `,A=X((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)})`
+	tailScriptR     = `,R=X((e,n)=>{I(n,"remove");e.removeAttribute(n)})`
+	tailScriptC     = `,C=X((e,c)=>e.classList.add(c))`
+	tailScriptD     = `,D=X((e,c)=>e.classList.remove(c))`
+)
+
+const (
+	tailScriptMaskA byte = 1 << iota
+	tailScriptMaskR
+	tailScriptMaskC
+	tailScriptMaskD
+)
 
 // appendJSQuote appends s as a JavaScript string literal safe to embed in an inline
 // <script>.
@@ -437,17 +447,17 @@ var jsInlineScriptEscaper = strings.NewReplacer(
 	"\u2029", `\u2029`,
 )
 
-func tailScriptAlias(msg wire.WsMsg) (fn byte) {
+func tailScriptAlias(msg wire.WsMsg) (fn, bit byte) {
 	if msg.Jid > 0 {
 		switch msg.What {
 		case what.SAttr:
-			fn = 'A'
+			fn, bit = 'A', tailScriptMaskA
 		case what.RAttr:
-			fn = 'R'
+			fn, bit = 'R', tailScriptMaskR
 		case what.SClass:
-			fn = 'C'
+			fn, bit = 'C', tailScriptMaskC
 		case what.RClass:
-			fn = 'D'
+			fn, bit = 'D', tailScriptMaskD
 		}
 	}
 	return
@@ -471,21 +481,48 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 		rq.tailsent = true
 		sent = true
 		tailOps := 0
-		tailCap := len(tailScriptStart)
+		tailCap := 0
+		var aliases byte
 		for _, msg := range rq.wsQueue {
-			if tailScriptAlias(msg) != 0 {
+			if fn, bit := tailScriptAlias(msg); fn != 0 {
 				tailOps++
 				tailCap += len(msg.Data)
+				aliases |= bit
 			}
 		}
 		if tailOps > 0 {
+			preamble := [6]string{tailScriptStart}
+			if aliases&(tailScriptMaskA|tailScriptMaskR) != 0 {
+				preamble[1] = tailScriptGuard
+			}
+			if aliases&tailScriptMaskA != 0 {
+				preamble[2] = tailScriptA
+			}
+			if aliases&tailScriptMaskR != 0 {
+				preamble[3] = tailScriptR
+			}
+			if aliases&tailScriptMaskC != 0 {
+				preamble[4] = tailScriptC
+			}
+			if aliases&tailScriptMaskD != 0 {
+				preamble[5] = tailScriptD
+			}
+			for _, fragment := range preamble {
+				tailCap += len(fragment)
+			}
+			tailCap++ // const declaration terminator
 			// Reserve payload bytes plus a small per-fixup syntax estimate.
 			b = make([]byte, 0, tailCap+tailOps*12)
-			b = append(b, tailScriptStart...)
+			for _, fragment := range preamble {
+				b = append(b, fragment...)
+			}
+			b = append(b, ';')
 		}
 		n := 0
+		// Each helper catches independently because emitted messages are removed
+		// from wsQueue; one DOM error must not discard the remaining fixups.
 		for _, msg := range rq.wsQueue {
-			if fn := tailScriptAlias(msg); fn != 0 {
+			if fn, _ := tailScriptAlias(msg); fn != 0 {
 				b = append(b, fn, '(')
 				b = msg.Jid.AppendInt(b)
 				b = append(b, ',')

@@ -495,8 +495,11 @@ func TestRequest_writeTailScript_EncodesRawOperations(t *testing.T) {
 		pos := strings.Index(s, want)
 		if pos < 0 {
 			t.Errorf("tail script is missing %q: %s", want, s)
-		} else if pos <= previous {
+			continue
+		}
+		if pos <= previous {
 			t.Errorf("tail operation %q is out of order: %s", want, s)
+			continue
 		}
 		previous = pos
 	}
@@ -511,18 +514,31 @@ func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 	wrapper := `X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}}`
 	th.Equal(strings.Count(tailScriptStart, wrapper), 1)
 	guard := `I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"}`
-	th.Equal(strings.Count(tailScriptStart, guard), 1)
-	var aliases []byte
+	th.Equal(strings.Count(tailScriptGuard, guard), 1)
+	wantAliases := map[what.What][2]byte{
+		what.SAttr:  {'A', tailScriptMaskA},
+		what.RAttr:  {'R', tailScriptMaskR},
+		what.SClass: {'C', tailScriptMaskC},
+		what.RClass: {'D', tailScriptMaskD},
+	}
+	helpers := map[byte]string{
+		'A': tailScriptA,
+		'R': tailScriptR,
+		'C': tailScriptC,
+		'D': tailScriptD,
+	}
 	for i := range 256 {
-		if alias := tailScriptAlias(wire.WsMsg{Jid: 1, What: what.What(i)}); alias != 0 {
-			aliases = append(aliases, alias)
-			th.Equal(strings.Count(tailScriptStart, string([]byte{alias})+"=X("), 1)
+		w := what.What(i)
+		fn, bit := tailScriptAlias(wire.WsMsg{Jid: 1, What: w})
+		th.Equal([2]byte{fn, bit}, wantAliases[w])
+		if fn != 0 {
+			th.Equal(strings.Count(helpers[fn], string([]byte{',', fn})+"=X("), 1)
 		}
 	}
-	th.Equal(string(aliases), "ARCD")
-	th.Equal(tailScriptAlias(wire.WsMsg{What: what.SAttr}), byte(0))
-	th.True(strings.Contains(tailScriptStart, `I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)`))
-	th.True(strings.Contains(tailScriptStart, `I(n,"remove");e.removeAttribute(n)`))
+	fn, bit := tailScriptAlias(wire.WsMsg{What: what.SAttr})
+	th.Equal([2]byte{fn, bit}, [2]byte{})
+	th.True(strings.Contains(tailScriptA, `I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)`))
+	th.True(strings.Contains(tailScriptR, `I(n,"remove");e.removeAttribute(n)`))
 
 	jw, err := New()
 	if err != nil {
@@ -547,8 +563,53 @@ func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
 		t.Fatal("drainTailScript did not report the first drain")
 	}
 	s := string(b)
-	th.True(strings.HasPrefix(s, tailScriptStart))
+	usedPreamble := tailScriptStart + tailScriptGuard + tailScriptA + tailScriptR + tailScriptC + ";"
+	th.True(strings.HasPrefix(s, usedPreamble))
 	th.True(strings.HasSuffix(s, `C(1,"bad token");A(1,"ID\nhacked");R(1,"iD");C(1,"ok-last");}`+"\n"))
+}
+
+func TestRequest_writeTailScript_EmitsOnlyNeededHelpers(t *testing.T) {
+	tests := []struct {
+		msg       wire.WsMsg
+		helper    string
+		wantGuard bool
+	}{
+		{msg: wire.WsMsg{Jid: 1, What: what.SAttr, Data: "title\nvalue"}, helper: tailScriptA, wantGuard: true},
+		{msg: wire.WsMsg{Jid: 1, What: what.RAttr, Data: "title"}, helper: tailScriptR, wantGuard: true},
+		{msg: wire.WsMsg{Jid: 1, What: what.SClass, Data: "class"}, helper: tailScriptC},
+		{msg: wire.WsMsg{Jid: 1, What: what.RClass, Data: "class"}, helper: tailScriptD},
+	}
+	helpers := []string{tailScriptA, tailScriptR, tailScriptC, tailScriptD}
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	defer jw.Close()
+
+	for _, tc := range tests {
+		rq := jw.newRequest(nil)
+		rq.muQueue.Lock()
+		rq.wsQueue = append(rq.wsQueue, tc.msg)
+		rq.muQueue.Unlock()
+		b, sent := rq.drainTailScript()
+		jw.recycle(rq)
+		if !sent {
+			t.Fatalf("%v: drainTailScript did not report the first drain", tc.msg.What)
+		}
+		s := string(b)
+		if !strings.HasPrefix(s, tailScriptStart) || !strings.HasSuffix(s, "}\n") {
+			t.Fatalf("%v: invalid tail block: %q", tc.msg.What, s)
+		}
+		if got := strings.Contains(s, tailScriptGuard); got != tc.wantGuard {
+			t.Errorf("%v: attribute guard present = %t, want %t", tc.msg.What, got, tc.wantGuard)
+		}
+		for _, helper := range helpers {
+			if got, want := strings.Contains(s, helper), helper == tc.helper; got != want {
+				t.Errorf("%v: helper %q present = %t, want %t", tc.msg.What, helper[:2], got, want)
+			}
+		}
+	}
 }
 
 func runNodeSnippet(t *testing.T, script string) (out string) {
