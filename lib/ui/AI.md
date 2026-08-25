@@ -477,7 +477,13 @@ extra behavior is needed, keep it in a named field and delegate render and updat
 to that same value. The outer value must remain comparable/reflexive and must not
 claim a second Element state slot.
 
-Use a custom `JawsUpdate` only when behavior differs from rendering the original
+An outer UI may embed a standard widget and override `JawsRender` or `JawsUpdate`
+when one phase genuinely requires behavior the standard widget cannot express.
+Retain and delegate to the embedded widget for the standard phase; the outer UI
+remains the Element's definition and is responsible for preserving the embedded
+widget's registration, ownership, and multiplicity contracts.
+
+Use a custom `JawsUpdate` only when behavior differs from reading the original
 getter again. Element SetAttr/RemoveAttr/SetClass/RemoveClass/SetInner/SetValue,
 Append/Order/Remove/Replace operations belong only in render/update processing.
 

@@ -7,8 +7,9 @@ metadata:
 
 # JaWS application design
 
-Build the smallest direct projection of synchronized server state. JaWS is an
-immediate-mode, server-driven UI framework, not MVC.
+Build the UI directly from synchronized server state. JaWS is an immediate-mode,
+server-driven UI framework, not MVC. Authoritative server state is the only
+application state model; this is a design requirement, not a preference.
 
 ## Match the application version first
 
@@ -46,20 +47,35 @@ does not contain a guide, inspect its exported docs and source instead.
 - Do not retain JaWS Requests, Elements, or UI definitions in application or
   domain state. JaWS owns that live tree.
 
-Default to definition dots that retain stable pointers to authoritative
-synchronized state. Render and update through direct binders and synchronized
-getters over that state. Do not add page-, screen-, state-, or component-shaped
-render DTOs or broad snapshots merely to make template execution atomic. JaWS
-requires race-free reads and correct dependency invalidation, not a transaction
-across an entire fragment. Do not hold an application lock across template
-execution to manufacture one. Separate reads may observe adjacent valid states;
-after mutation, dirty the relevant dependencies so the UI converges.
+Definition dots should retain stable pointers to authoritative synchronized
+state. Render and update through direct binders and synchronized getters over
+that state.
+
+Application code MUST NOT create a second representation of application state
+for rendering. Page, screen, state, component, view-model, or DTO structs that
+copy authoritative fields for templates, getters, attributes, or updates are
+forbidden. Renaming such a copy does not make it acceptable. If a proposed type
+exists only to carry render data copied from domain state, stop and redesign the
+UI to read the authoritative state directly.
+
+Application code MUST NOT use broad snapshots to manufacture fragment-wide
+atomic rendering. JaWS requires race-free reads and correct dependency
+invalidation, not a transaction across an entire fragment. Do not hold an
+application lock across template execution to manufacture one. Separate reads
+may observe adjacent valid states; dirty dispatch is the consistency mechanism
+that makes matching Elements converge on current authoritative state.
+
+When mutation code owns the writes, it MUST return or dirty the exact dependency
+tags whose rendered output may change. It MUST NOT snapshot application state
+only to diff it afterward and discover which ordinary mutation tags to dirty.
+Derive that tag set directly from the mutation semantics.
 
 Copying mutable collection storage under its lock so a caller can iterate after
 unlock is a synchronization boundary, not a presentation snapshot. Capture
 multiple primitives together only when one widget, attribute set, or operation
-requires an invariant; keep that capture local instead of expanding it into a
-fragment-wide render model.
+requires an invariant. Such a capture MUST remain local to that operation; it
+must not become a retained render object, template Dot, or fragment-wide state
+model.
 
 For a Container, a freshly returned equal child is a reconciliation key. JaWS
 reuses the existing Element and its original UI value; it does not replace
@@ -73,6 +89,25 @@ equality or be read indirectly from synchronized mutable state.
 
 ## Choose the smallest rendering primitive
 
+- When an authoritative source implements the getter and event interfaces for a
+  standard widget, pass that source directly as the widget's primary argument,
+  for example `{{$.Button .Action}}`. When the read is naturally a functor,
+  adapt it with `bind.HTMLGetterFunc`; for text, use `bind.StringGetterFunc` and
+  let the widget's `bind.MakeHTMLGetter` conversion escape it. A bound value can
+  customize markup with `Binder.GetHTML` while remaining a standard
+  `HTMLGetter`.
+- An application UI may overload a standard widget's render or update behavior,
+  but this is discouraged when a standard getter, binder, semantic `ui.Object`,
+  or render parameter expresses the same control. Keep the overload only when it
+  adds behavior the standard composition cannot provide. Embed or retain the
+  standard widget, document the exact phase behavior being replaced, and keep
+  the outer definition as the Element's single UI value for both phases.
+- By default, HTML-inner widgets call their getters during initial rendering and
+  dirty updates; a justified outer updater may replace the dirty phase. If a
+  getter queues wrapper attributes, `TailHTML` may repeat attributes already
+  emitted inline. Treat an overload that suppresses that payload as a performance
+  change: retain a benchmark and weigh the measured result against the simpler
+  standard composition.
 - **Full HTML document:** use `ui.Handler`. It creates the JaWS Request, applies
   `no-store`, renders without a generated wrapper, and treats the page Dot as
   arbitrary template data rather than a tag or equality key. The page
@@ -181,11 +216,19 @@ helpers.
   and attrs from Dot for its generated wrapper.
 - Render params contribute literal attributes and register recognized handlers
   and tags. A parameter-valued `InitialHTMLAttrHandler` is not invoked.
+- Prefer an ordinary render parameter for attributes specific to one widget use.
+  Put `InitialHTMLAttrHandler` on a shared getter only when every widget using
+  that getter should inherit those attributes.
 - `ui.NewTemplate(tag, name, dot, attrs...)` accepts trusted raw wrapper attributes,
   which participate in Template equality. For duplicate names, precedence is render
   params, constructor attrs, then Dot attrs.
 - Initial attrs run once for that Element. Dirty updates do not rerun them.
   Change dynamic attrs through Element update methods or replace the Element.
+- A `template.HTMLAttr` result is raw opening-tag syntax, not a DOM update or
+  attribute diff. By itself it identifies neither removals nor attribute
+  ownership. Never reinterpret an initial-attribute hook as an update getter; a
+  reusable dynamic-attribute contract must define ownership and diff semantics,
+  preferably through explicit structured set/remove operations.
 - A retained Template wrapper keeps its attributes while its recreated
   descendants run their own initial attrs.
 - Object attribute hooks concatenate. Binder attribute hooks run with the Binder
@@ -202,6 +245,11 @@ untrusted values with `htmlio.Attr` and a trusted name; convert the result to
 
 ## Render shape and verification
 
+- Before implementing, identify the authoritative state, its synchronization,
+  the direct binders/getters that read it, and the precise dependencies whose
+  rendered output each mutation can change. If the plan includes a
+  render-specific copy of domain fields or a snapshot/diff layer for ordinary
+  dirty tracking, stop and redesign it first.
 - Keep HTML structure in templates and state mutations out of getter/render
   paths. When one direct getter result must remain consistent within a template
   execution, assign that value to a local template variable. This is not a
@@ -216,7 +264,9 @@ untrusted values with `htmlio.Attr` and a trusted name; convert the result to
   connect, and disconnect behavior.
 - Test pure domain transitions separately from JaWS transport.
 
-Before finishing, confirm the design does not introduce an application-owned UI
-tree, a full-document Template, screen-shaped render state, pointer-wrapped
+The following are completion blockers. Do not finish while the design contains
+an application-owned UI tree, a full-document Template, any render DTO or
+retained presentation snapshot, screen-shaped render state, pointer-wrapped
 definition values, mutable tag identity, duplicate JaWS IDs, direct locked-field
-assignment, or broad dirtying that masks dependency errors.
+assignment, snapshot/diff dirty tracking for mutation-owned writes, or broad
+dirtying that masks dependency errors. Refactor the violation before continuing.

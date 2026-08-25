@@ -52,6 +52,12 @@ h1 {
 	cursor: pointer;
 }
 
+.control:focus-visible,
+.cell:focus-visible {
+	outline: 3px solid var(--ink);
+	outline-offset: 2px;
+}
+
 .status-line,
 .stats-line {
 	background: var(--panel);
@@ -59,6 +65,16 @@ h1 {
 	padding: 0.55rem 0.7rem;
 	border-radius: 0.45rem;
 	margin-bottom: 0.5rem;
+}
+
+.board-scroll {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.board-scroll:focus-visible {
+	outline: 3px solid var(--ink);
+	outline-offset: 0.25rem;
 }
 
 .board {
@@ -97,17 +113,18 @@ h1 {
 	box-shadow: 0 0.18rem 0.45rem rgba(31, 42, 68, 0.16);
 }
 
-.cell.is-revealed {
+.cell[data-state="revealed"],
+.cell[data-state="mine"] {
 	background: #b8a57a;
 	cursor: default;
 	box-shadow: none;
 }
 
-.cell.is-hidden.is-flagged {
+.cell[data-state="flagged"] {
 	background: #e8d7b4;
 }
 
-.cell.is-revealed.is-mine {
+.cell[data-state="mine"] {
 	background: #d0745c;
 	border-color: #7a1f1f;
 }
@@ -126,5 +143,11 @@ h1 {
 @media (max-width: 620px) {
 	.layout {
 		padding: 1.25rem 0.75rem 2rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cell {
+		transition: none;
 	}
 }

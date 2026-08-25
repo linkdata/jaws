@@ -112,9 +112,11 @@ func main() {
 }
 ```
 
-Next steps usually include adding templates with `AddTemplateLookuper`, creating
-types that implement `JawsRender` and `JawsUpdate`, and introducing sessions for
-per-user state.
+Next steps usually include composing standard widgets and binders, creating
+semantic controls with `ui.Object`, and registering precise dependency tags.
+The [Minesweeper example](./examples/minesweeper/) shows those patterns in a
+complete collaborative application. Introduce sessions when state should belong
+to an individual user.
 
 ## Production guidance
 
@@ -150,5 +152,7 @@ JaWS keeps dependencies outside the standard library to a minimum:
   the complete package-guide index.
 * Inspect the compile-checked [examples](./examples/example_test.go) to copy and
   adapt the setup sequence.
+* Run the [Minesweeper example](./examples/minesweeper/) to explore targeted
+  updates in a complete server-driven UI.
 * Explore the [demo application](https://github.com/linkdata/jawsdemo) for a more
   complete project structure.

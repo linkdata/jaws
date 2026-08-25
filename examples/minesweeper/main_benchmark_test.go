@@ -8,40 +8,32 @@ import (
 
 	"github.com/linkdata/jaws"
 	jawstag "github.com/linkdata/jaws/lib/tag"
-	"github.com/linkdata/jaws/lib/ui"
 )
 
 var dirtyFanoutSink int
 
-// BenchmarkSingleCellDirtyFanout measures the per-event work a single-cell action
-// triggers: how many element re-renders a flag toggle's dirty set resolves to after
-// tag expansion. It renders a full default board (100 cell elements registered under
-// both their per-cell tag and the shared board tag), then resolves the dirty tags
-// the way the framework's update step does (expand, then look up elements per tag).
+// BenchmarkSingleCellDirtyFanout measures tag expansion and cell-Element lookup
+// for one flag action on a full default board.
 //
-// A single-cell action resolves to exactly one element re-render (the correctness
-// of that scoping is asserted by TestSingleCellDirtyStaysScopedToOneCell); were
-// Cell.JawsGetTag to expand to the shared board tag it would resolve to all 100
-// cells instead. This benchmark measures the cost of that per-event resolution;
-// run with -benchmem and track regressions with benchstat.
+// It deliberately registers only cell Buttons, isolating cell fanout from the
+// separate Stats update. TestSingleCellDirtyStaysScopedToOneCell guards the
+// corresponding correctness invariant.
 func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 	jw, err := jaws.New()
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer jw.Close()
+	go jw.Serve()
 
 	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-	if rq == nil {
-		b.Fatal("expected a request")
-	}
 
 	g := newGame(10, 10, 15)
 	for _, row := range g.Board() {
-		for _, cell := range row {
-			elem := rq.NewElement(ui.NewButton(cell))
+		for _, current := range row {
+			elem := rq.NewElement(current.Button())
 			var sb strings.Builder
-			if err := elem.JawsRender(&sb, []any{cell.BoardTag(), `class="cell"`}); err != nil {
+			if err := elem.JawsRender(&sb, cellButtonParams(current)); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -49,11 +41,8 @@ func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 
 	cell := g.cells[0][0]
 	b.ReportAllocs()
+	b.ResetTimer()
 	for b.Loop() {
-		// Mirror the framework's dirty dispatch: expand the toggle's tags and
-		// resolve each to its registered elements (Request.GetElements is the same
-		// tagMap lookup makeUpdateList performs). The sum is the number of element
-		// re-renders the toggle would drive.
 		expanded, err := jawstag.TagExpand(g.toggleFlag(cell))
 		if err != nil {
 			b.Fatal(err)

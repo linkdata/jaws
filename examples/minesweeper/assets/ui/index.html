@@ -1,4 +1,3 @@
-{{with .Dot}}
 <!doctype html>
 <html lang="en">
 
@@ -10,31 +9,35 @@
 </head>
 
 <body>
+	{{with .Dot}}
 	<main class="layout">
 		<h1>Minesweeper</h1>
-		<p class="subtitle">Server-driven UI with JaWS. No custom client-side JavaScript.</p>
+		<p class="subtitle">A collaborative, server-driven JaWS UI with no custom client-side JavaScript.</p>
 
 		<div class="controls">
-			{{$.Button .NewGameButton `class="control"`}}
+			{{$.Button .NewGameAction `class="control"`}}
 		</div>
 
-		<div class="status-line">{{$.Span .StatusSpan}}</div>
-		<div class="stats-line">{{$.Span .StatsSpan}}</div>
+		{{/* Keep independently dirtied text in separate live regions. */}}
+		<div class="status-line" role="status">{{$.Span .Status}}</div>
+		<div class="stats-line" role="status">{{$.Span .Stats}}</div>
 
-		<table class="board" aria-label="Minesweeper board">
-			<tbody>
-				{{range .Board}}
-				<tr>
-					{{range .}}
-					<td>{{$.Button . .BoardTag `class="cell"`}}</td>
+		<div class="board-scroll" role="region" aria-label="Scrollable Minesweeper board" tabindex="0">
+			<table class="board" aria-label="Minesweeper board">
+				<tbody>
+					{{range .Board}}
+					<tr>
+						{{range .}}
+						<td>{{$.NewUI .Button .BoardTag .GameOverTag `class="cell"` .InitialAttrs}}</td>
+						{{end}}
+					</tr>
 					{{end}}
-				</tr>
-				{{end}}
-			</tbody>
-		</table>
+				</tbody>
+			</table>
+		</div>
 	</main>
+	{{end}}
 	{{$.TailHTML}}
 </body>
 
 </html>
-{{end}}
