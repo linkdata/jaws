@@ -395,7 +395,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 const headerContentTypeJavaScript = "text/javascript; charset=utf-8"
 
-// tailScriptStart defines block-scoped helpers for initial DOM fixups.
+// tailScriptStart isolates initial DOM fixups and protects the id attribute.
 const tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}},` +
 	`I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"},` +
 	`A=X((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)}),` +
@@ -437,16 +437,18 @@ var jsInlineScriptEscaper = strings.NewReplacer(
 	"\u2029", `\u2029`,
 )
 
-func tailScriptAlias(w what.What) (fn byte) {
-	switch w {
-	case what.SAttr:
-		fn = 'A'
-	case what.RAttr:
-		fn = 'R'
-	case what.SClass:
-		fn = 'C'
-	case what.RClass:
-		fn = 'D'
+func tailScriptAlias(msg wire.WsMsg) (fn byte) {
+	if msg.Jid > 0 {
+		switch msg.What {
+		case what.SAttr:
+			fn = 'A'
+		case what.RAttr:
+			fn = 'R'
+		case what.SClass:
+			fn = 'C'
+		case what.RClass:
+			fn = 'D'
+		}
 	}
 	return
 }
@@ -471,7 +473,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 		tailOps := 0
 		tailCap := len(tailScriptStart)
 		for _, msg := range rq.wsQueue {
-			if msg.Jid > 0 && tailScriptAlias(msg.What) != 0 {
+			if tailScriptAlias(msg) != 0 {
 				tailOps++
 				tailCap += len(msg.Data)
 			}
@@ -483,8 +485,7 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 		}
 		n := 0
 		for _, msg := range rq.wsQueue {
-			fn := tailScriptAlias(msg.What)
-			if fn != 0 && msg.Jid > 0 {
+			if fn := tailScriptAlias(msg); fn != 0 {
 				b = append(b, fn, '(')
 				b = msg.Jid.AppendInt(b)
 				b = append(b, ',')
