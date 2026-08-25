@@ -4200,9 +4200,7 @@ func BenchmarkAppendJSQuote(b *testing.B) {
 	}
 }
 
-// BenchmarkRequestDrainTailScript measures the fixed preamble cost with one class
-// fixup and the repetitive-tail path with two attribute sets plus one removal for
-// every cell in a 10-by-10 board.
+// BenchmarkRequestDrainTailScript measures one- and 300-fixup tails.
 func BenchmarkRequestDrainTailScript(b *testing.B) {
 	b.Run("one-fixup", func(b *testing.B) {
 		benchmarkRequestDrainTailScript(b, []wire.WsMsg{
@@ -4236,13 +4234,20 @@ func BenchmarkRequestDrainTailScript(b *testing.B) {
 
 func benchmarkRequestDrainTailScript(b *testing.B, messages []wire.WsMsg) {
 	b.Helper()
-	rq := &Request{wsQueue: make([]wire.WsMsg, 0, len(messages))}
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	go jw.Serve()
+	b.Cleanup(func() { jw.Close() })
+	rq := jw.newRequest(nil)
+	rq.muQueue.Lock()
+	rq.wsQueue = slices.Grow(rq.wsQueue[:0], len(messages))
+	rq.muQueue.Unlock()
 	var tail []byte
 	var sent bool
 	b.ReportAllocs()
 	for b.Loop() {
-		// Timing the cheap reset avoids StopTimer/StartTimer dominating the
-		// one-fixup case; both implementations pay the same setup cost.
 		rq.muQueue.Lock()
 		rq.tailsent = false
 		rq.wsQueue = append(rq.wsQueue[:0], messages...)

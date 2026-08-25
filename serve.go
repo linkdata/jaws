@@ -395,17 +395,13 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 
 const headerContentTypeJavaScript = "text/javascript"
 
-// tailScriptStart defines block-scoped helpers for the four DOM fixups eligible
-// for the initial tail. X resolves each numeric Jid and catches each DOM failure,
-// so later fixups still run after one fails. I protects the framework-owned id
-// attribute, and Y adapts each DOM operation to the compact A/R/C/D call shape.
-const tailScriptStart = `{const X=(f,i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}},` +
+// tailScriptStart defines block-scoped helpers for initial DOM fixups.
+const tailScriptStart = `{const X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}},` +
 	`I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"},` +
-	`Y=f=>(i,d)=>X(f,i,d),` +
-	`A=Y((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)}),` +
-	`R=Y((e,n)=>{I(n,"remove");e.removeAttribute(n)}),` +
-	`C=Y((e,c)=>e.classList.add(c)),` +
-	`D=Y((e,c)=>e.classList.remove(c));`
+	`A=X((e,d)=>{let i=d.indexOf("\n"),n=d.substring(0,i),v=d.substring(i+1);I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)}),` +
+	`R=X((e,n)=>{I(n,"remove");e.removeAttribute(n)}),` +
+	`C=X((e,c)=>e.classList.add(c)),` +
+	`D=X((e,c)=>e.classList.remove(c));`
 
 // appendJSQuote appends s as a JavaScript string literal safe to embed in an inline
 // <script>.
@@ -489,12 +485,9 @@ func (rq *Request) drainTailScript() (b []byte, sent bool) {
 			fn := tailScriptAlias(msg.What)
 			if fn != 0 && msg.Jid > 0 {
 				b = append(b, fn, '(')
-				// X restores jid.Prefix, so each call carries only the
-				// Request's monotonically assigned numeric suffix.
 				b = msg.Jid.AppendInt(b)
 				b = append(b, ',')
-				// Keep Data intact: A splits SAttr at its first newline in the browser;
-				// attribute removals and class operations treat every newline as data.
+				// A splits SAttr at its first newline; other operations use Data unchanged.
 				b = appendJSQuote(b, msg.Data)
 				b = append(b, ')', ';')
 			} else {

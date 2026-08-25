@@ -442,8 +442,6 @@ func TestRequest_writeTailScript_PreservesNonAttrMessages(t *testing.T) {
 	th.Equal(strings.Contains(s, "content"), false)
 	th.Equal(strings.Contains(s, "zero"), false)
 
-	// The positive-Jid SAttr and SClass are consumed; Value, Inner, and the
-	// whole-request SAttr are preserved in their original order.
 	rq.muQueue.Lock()
 	th.Equal(len(rq.wsQueue), 3)
 	th.Equal(rq.wsQueue[0].What, what.Value)
@@ -485,11 +483,6 @@ func TestRequest_writeTailScript_EncodesRawOperations(t *testing.T) {
 	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}\n") {
 		t.Fatalf("tail script is not block-scoped: %q", s)
 	}
-	for _, helper := range []string{"A=Y(", "R=Y(", "C=Y(", "D=Y("} {
-		if got := strings.Count(s, helper); got != 1 {
-			t.Errorf("tail script contains %q %d times, want once", helper, got)
-		}
-	}
 	wants := []string{
 		`A(1,"title\nline1\nline2");`,
 		`R(1,"a\nb");`,
@@ -513,6 +506,45 @@ func TestRequest_writeTailScript_EncodesRawOperations(t *testing.T) {
 	rq.muQueue.Unlock()
 }
 
+func TestRequest_writeTailScript_IsolatesEachFixup(t *testing.T) {
+	th := newTestHelper(t)
+	wrapper := `X=f=>(i,d)=>{try{let e=document.getElementById("` + jid.Prefix + `"+i);e&&f(e,d)}catch(e){console.error(e)}}`
+	th.Equal(strings.Count(tailScriptStart, wrapper), 1)
+	guard := `I=(n,a)=>{if(n.toLowerCase()==="id")throw"jaws: refusing to "+a+" reserved attribute 'id'"}`
+	th.Equal(strings.Count(tailScriptStart, guard), 1)
+	for _, alias := range []string{"A=X(", "R=X(", "C=X(", "D=X("} {
+		th.Equal(strings.Count(tailScriptStart, alias), 1)
+	}
+	th.True(strings.Contains(tailScriptStart, `I(n,"change");e.getAttribute(n)===v||e.setAttribute(n,v)`))
+	th.True(strings.Contains(tailScriptStart, `I(n,"remove");e.removeAttribute(n)`))
+
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	defer jw.Close()
+	rq := jw.newRequest(nil)
+	defer jw.recycle(rq)
+	rq.muQueue.Lock()
+	rq.wsQueue = append(
+		rq.wsQueue,
+		wire.WsMsg{Jid: 1, What: what.SClass, Data: "bad token"},
+		wire.WsMsg{Jid: 1, What: what.SAttr, Data: "ID\nhacked"},
+		wire.WsMsg{Jid: 1, What: what.RAttr, Data: "iD"},
+		wire.WsMsg{Jid: 1, What: what.SClass, Data: "ok-last"},
+	)
+	rq.muQueue.Unlock()
+
+	b, sent := rq.drainTailScript()
+	if !sent {
+		t.Fatal("drainTailScript did not report the first drain")
+	}
+	s := string(b)
+	th.True(strings.HasPrefix(s, tailScriptStart))
+	th.True(strings.HasSuffix(s, `C(1,"bad token");A(1,"ID\nhacked");R(1,"iD");C(1,"ok-last");}`+"\n"))
+}
+
 func runNodeSnippet(t *testing.T, script string) (out string) {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -523,9 +555,11 @@ func runNodeSnippet(t *testing.T, script string) (out string) {
 		t.Skip("node executable not available")
 	}
 	cmd := exec.CommandContext(t.Context(), node, "-e", script)
-	data, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	data, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("node failed: %v\n%s", err, data)
+		t.Fatalf("node failed: %v\n%s", err, stderr.Bytes())
 	}
 	out = string(data)
 	return
@@ -536,6 +570,7 @@ func TestRequest_writeTailScript_BrowserBehaviorMatchesWebSocket(t *testing.T) {
 	messages := []wire.WsMsg{
 		{Jid: 1, What: what.SAttr, Data: "title\nsame"},
 		{Jid: 1, What: what.SAttr, Data: "title\n" + changedValue},
+		{Jid: 1, What: what.SAttr, Data: "no-newline"},
 		{Jid: 1, What: what.RAttr, Data: "a\nb"},
 		{Jid: 1, What: what.SClass, Data: "bad token"},
 		{Jid: 1, What: what.SClass, Data: "ok-last"},
@@ -544,7 +579,17 @@ func TestRequest_writeTailScript_BrowserBehaviorMatchesWebSocket(t *testing.T) {
 		{Jid: 1, What: what.RAttr, Data: "iD"},
 		{Jid: 2, What: what.SClass, Data: "missing"},
 	}
-	rq := &Request{wsQueue: append([]wire.WsMsg(nil), messages...)}
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	defer jw.Close()
+	rq := jw.newRequest(nil)
+	defer jw.recycle(rq)
+	rq.muQueue.Lock()
+	rq.wsQueue = append(rq.wsQueue, messages...)
+	rq.muQueue.Unlock()
 	tail, sent := rq.drainTailScript()
 	if !sent {
 		t.Fatal("drainTailScript did not report the first drain")
@@ -582,6 +627,7 @@ function makeElem(events) {
 		setAttribute: function(name, value) {
 			if (this !== elem) throw new Error("wrong setAttribute receiver");
 			events.push(["setAttribute", name, value]);
+			if (name === "") throw new Error("invalid attribute name");
 			this.attrs[name] = value;
 		},
 		removeAttribute: function(name) {
@@ -625,10 +671,11 @@ global.Event=function(){};
 global.Node=function(){};
 global.WebSocket=function(){};
 console.error=function(err){tailErrors.push(String(err))};
-const X = "outer-X", I = "outer-I", Y = "outer-Y";
+const X = "outer-X", I = "outer-I";
 const A = "outer-A", R = "outer-R", C = "outer-C", D = "outer-D";
+process.stderr.write("ignored node stderr\n");
 ` + string(tail) + `
-const globals=[X,I,Y,A,R,C,D];
+const globals=[X,I,A,R,C,D];
 target=makeElem(wsEvents);
 lookups=wsLookups;
 eval(clientSource);
@@ -661,6 +708,8 @@ process.stdout.write(JSON.stringify({
 		{"getAttribute", "title"},
 		{"getAttribute", "title"},
 		{"setAttribute", "title", changedValue},
+		{"getAttribute", ""},
+		{"setAttribute", "", "no-newline"},
 		{"removeAttribute", "a\nb"},
 		{"classList.add", "bad token"},
 		{"classList.add", "ok-last"},
@@ -673,6 +722,7 @@ process.stdout.write(JSON.stringify({
 		t.Errorf("WebSocket DOM events = %#v, want %#v", got.WSEvents, wantEvents)
 	}
 	wantErrors := []string{
+		"Error: invalid attribute name",
 		"Error: invalid class token",
 		"jaws: refusing to change reserved attribute 'id'",
 		"jaws: refusing to remove reserved attribute 'id'",
@@ -680,15 +730,14 @@ process.stdout.write(JSON.stringify({
 	if !reflect.DeepEqual(got.TailErrors, wantErrors) {
 		t.Errorf("tail errors = %#v, want %#v", got.TailErrors, wantErrors)
 	}
-	// TailHTML deliberately ignores a missing element, while the WebSocket client
-	// reports it after applying the same present-element operations.
+	// TailHTML ignores missing elements; the WebSocket client reports them.
 	wantWSErrors := append(append([]string(nil), wantErrors...), "jaws: element not found: "+jid.Prefix+"2")
 	if !reflect.DeepEqual(got.WSErrors, wantWSErrors) {
 		t.Errorf("WebSocket errors = %#v, want %#v", got.WSErrors, wantWSErrors)
 	}
 	wantLookups := []string{
 		jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1",
-		jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "2",
+		jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "1", jid.Prefix + "2",
 	}
 	if !reflect.DeepEqual(got.TailLookups, wantLookups) {
 		t.Errorf("tail element lookups = %#v, want %#v", got.TailLookups, wantLookups)
@@ -696,7 +745,7 @@ process.stdout.write(JSON.stringify({
 	if !reflect.DeepEqual(got.WSLookups, wantLookups) {
 		t.Errorf("WebSocket element lookups = %#v, want %#v", got.WSLookups, wantLookups)
 	}
-	wantGlobals := []string{"outer-X", "outer-I", "outer-Y", "outer-A", "outer-R", "outer-C", "outer-D"}
+	wantGlobals := []string{"outer-X", "outer-I", "outer-A", "outer-R", "outer-C", "outer-D"}
 	if !reflect.DeepEqual(got.Globals, wantGlobals) {
 		t.Errorf("outer globals = %#v, want %#v", got.Globals, wantGlobals)
 	}
