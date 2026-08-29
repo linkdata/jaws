@@ -8,7 +8,6 @@ require (
 	github.com/linkdata/jq v0.6.0
 	github.com/linkdata/secureheaders v1.5.0
 	github.com/linkdata/staticserve v1.1.8
-	golang.org/x/net v0.58.0
 )
 
 require github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect

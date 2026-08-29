@@ -51,6 +51,6 @@ already trusted must be escaped before conversion to `template.HTML`.
 ## Verification
 
 Run `go test -race ./lib/htmlio` and `go test ./lib/htmlio` from the module root.
-Keep table and fuzz coverage for escaping, CR/NUL behavior, DOM-parsed values,
-void elements, textarea/pre leading newlines, positive/zero/invalid Jids, and
-Writer-error propagation.
+Keep table and fuzz coverage for escaping, CR/NUL behavior, modeled DOM
+attribute values, void elements, textarea/pre leading newlines,
+positive/zero/invalid Jids, and Writer-error propagation.
