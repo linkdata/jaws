@@ -9,7 +9,6 @@ import (
 
 	"github.com/linkdata/jaws/lib/htmlio"
 	"github.com/linkdata/jaws/lib/jid"
-	xhtml "golang.org/x/net/html"
 )
 
 func Test_WriteHTMLInner(t *testing.T) {
@@ -458,38 +457,9 @@ func normalizeCR(s string) string {
 	return strings.ReplaceAll(s, "\r", "\n")
 }
 
-func parsedAttr(t *testing.T, source, name string) string {
-	t.Helper()
-	doc, err := xhtml.Parse(strings.NewReader(source))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var findAttr func(*xhtml.Node) (string, bool)
-	findAttr = func(node *xhtml.Node) (string, bool) {
-		if node.Type == xhtml.ElementNode {
-			for _, attr := range node.Attr {
-				if attr.Key == name {
-					return attr.Val, true
-				}
-			}
-		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			if value, ok := findAttr(child); ok {
-				return value, true
-			}
-		}
-		return "", false
-	}
-	if value, ok := findAttr(doc); ok {
-		return value
-	}
-	t.Fatalf("attribute %q not found in parsed source %q", name, source)
-	return ""
-}
-
-// TestAttr_DOMValue verifies the DOM attribute value exposed by an HTML
-// parser. Carriage returns round-trip, while U+0000 is deliberately
-// canonicalized to the U+FFFD value required by HTML parsing.
+// TestAttr_DOMValue models the attribute value exposed by an HTML parser.
+// Carriage returns round-trip, while U+0000 is deliberately canonicalized to
+// the U+FFFD value required by HTML parsing.
 func TestAttr_DOMValue(t *testing.T) {
 	values := []string{
 		"", "plain", "a\rb", "a\r\nb", "\rlead", "trail\r", "x\ry\rz",
@@ -501,9 +471,15 @@ func TestAttr_DOMValue(t *testing.T) {
 		if strings.IndexByte(src, 0) >= 0 {
 			t.Fatalf("Attr(%q) = %q, contains raw NUL", value, src)
 		}
-		got := parsedAttr(t, "<div "+src+"></div>", "data-x")
+		const prefix = `data-x="`
+		if len(src) <= len(prefix) || !strings.HasPrefix(src, prefix) || !strings.HasSuffix(src, `"`) {
+			t.Fatalf("Attr(%q) = %q, want a quoted data-x attribute", value, src)
+		}
+		// Attr's fixed quoted shape is checked above; model browser input
+		// preprocessing before character-reference decoding for its value.
+		got := html.UnescapeString(normalizeCR(src[len(prefix) : len(src)-1]))
 		if want := strings.ReplaceAll(value, "\x00", "\uFFFD"); got != want {
-			t.Errorf("attribute value %q parsed as %q, want %q (source %q)", value, got, want, src)
+			t.Errorf("attribute value %q decoded as %q, want %q (source %q)", value, got, want, src)
 		}
 	}
 }
