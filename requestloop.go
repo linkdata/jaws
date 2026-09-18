@@ -331,14 +331,7 @@ func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call
 // is not ErrEventUnhandled. ErrEventUnhandled is normalized to nil.
 func (call eventFnCall) invoke() (err error) {
 	if call.elem != nil {
-		if err = CallEventHandlers(call.elem.UI(), call.elem, call.wht, call.data); !errors.Is(err, ErrEventUnhandled) {
-			return
-		}
-	}
-	for _, e := range call.more {
-		if err = CallEventHandlers(e.UI(), e, call.wht, call.data); !errors.Is(err, ErrEventUnhandled) {
-			return
-		}
+		err = callEventHandlers(call.elem.UI(), call.elem, call.more, call.wht, call.data)
 	}
 	if errors.Is(err, ErrEventUnhandled) {
 		err = nil

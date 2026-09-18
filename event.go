@@ -169,29 +169,25 @@ func callInputHandler(obj any, elem *Element, value string) (err error) {
 	return ErrEventUnhandled
 }
 
-func callEventHandler(obj any, elem *Element, wht what.What, value string) (err error) {
+func callEventHandler(obj any, elem *Element, wht what.What, value string, clk Click) (err error) {
 	err = ErrEventUnhandled
 	switch wht {
 	case what.Click, what.ContextMenu:
-		var clk Click
-		var ok bool
-		if clk, _, ok = parseClickData(value); ok {
-			if !finite(clk.X) || !finite(clk.Y) {
-				// A non-finite coordinate cannot come from a well-behaved browser;
-				// terminate the Request rather than dispatch a garbage click. Report the
-				// event handled (nil) so the dispatch loop stops without also alerting a
-				// connection that is being torn down.
-				elem.Request.Cancel(fmt.Errorf("%w: click %v,%v", ErrValueNotFinite, clk.X, clk.Y))
-				err = nil
-				return
+		if !finite(clk.X) || !finite(clk.Y) {
+			// A non-finite coordinate cannot come from a well-behaved browser;
+			// terminate the Request rather than dispatch a garbage click. Report the
+			// event handled (nil) so the dispatch loop stops without also alerting a
+			// connection that is being torn down.
+			elem.Request.Cancel(fmt.Errorf("%w: click %v,%v", ErrValueNotFinite, clk.X, clk.Y))
+			err = nil
+			return
+		}
+		if wht == what.Click {
+			if h, ok := obj.(ClickHandler); ok {
+				err = h.JawsClick(elem, clk)
 			}
-			if wht == what.Click {
-				if h, ok := obj.(ClickHandler); ok {
-					err = h.JawsClick(elem, clk)
-				}
-			} else if h, ok := obj.(ContextMenuHandler); ok {
-				err = h.JawsContextMenu(elem, clk)
-			}
+		} else if h, ok := obj.(ContextMenuHandler); ok {
+			err = h.JawsContextMenu(elem, clk)
 		}
 	case what.Input, what.Hook, what.Set:
 		err = callInputHandler(obj, elem, value)
@@ -199,13 +195,37 @@ func callEventHandler(obj any, elem *Element, wht what.What, value string) (err 
 	return
 }
 
-func callEventHandlers(ui any, elem *Element, wht what.What, value string) (err error) {
-	for i := len(elem.handlers) - 1; i >= 0; i-- {
-		if err = callEventHandler(elem.handlers[i], elem, wht, value); !errors.Is(err, ErrEventUnhandled) {
-			return
+func callEventHandlers(ui any, elem *Element, more []*Element, wht what.What, value string) (err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			err = errEventHandlerPanic{
+				Type:  reflect.TypeOf(ui),
+				Value: x,
+			}
+		}
+	}()
+	var clk Click
+	if wht == what.Click || wht == what.ContextMenu {
+		// A bubbled route reuses the same peer-sized click payload for every target,
+		// so parse it before the target loop rather than multiplying that work.
+		var ok bool
+		if clk, _, ok = parseClickData(value); !ok {
+			return ErrEventUnhandled
 		}
 	}
-	return callEventHandler(ui, elem, wht, value)
+	for {
+		for i := len(elem.handlers) - 1; i >= 0; i-- {
+			if err = callEventHandler(elem.handlers[i], elem, wht, value, clk); !errors.Is(err, ErrEventUnhandled) {
+				return
+			}
+		}
+		if err = callEventHandler(ui, elem, wht, value, clk); !errors.Is(err, ErrEventUnhandled) || len(more) == 0 {
+			return
+		}
+		elem = more[0]
+		more = more[1:]
+		ui = elem.UI()
+	}
 }
 
 // CallEventHandlers calls the event handlers for the given [Element].
@@ -216,13 +236,5 @@ func callEventHandlers(ui any, elem *Element, wht what.What, value string) (err 
 //
 // It must not run concurrently with rendering or handler registration.
 func CallEventHandlers(ui any, elem *Element, wht what.What, value string) (err error) {
-	defer func() {
-		if x := recover(); x != nil {
-			err = errEventHandlerPanic{
-				Type:  reflect.TypeOf(ui),
-				Value: x,
-			}
-		}
-	}()
-	return callEventHandlers(ui, elem, wht, value)
+	return callEventHandlers(ui, elem, nil, wht, value)
 }
