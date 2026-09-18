@@ -44,6 +44,10 @@ import (
 // pending Request was created or written recently, it retires the least recently
 // written one so the configured maximum is never exceeded.
 //
+// Clients whose initial HTTP requests resolve to the same IP share the limit and
+// eviction pool, including clients behind a shared NAT and clients behind a proxy
+// unless [Jaws.TrustForwardedHeaders] is enabled.
+//
 // A Request created after [Jaws.Close] has an already-canceled context and cannot
 // be claimed by [Jaws.UseRequest].
 //
@@ -116,6 +120,11 @@ func (jw *Jaws) refreshRuntimeSeconds() {
 // limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
 // satisfied. Caller must hold jw.mu.
 func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
+	// Evicting instead of refusing the newcomer is deliberate: refusal lets a
+	// stalled or non-JavaScript client fill the bucket and deny every later same-IP
+	// page until entries expire. The IP bucket is a resource bound, not a principal
+	// identity, so shared-address users can evict one another only during the
+	// pending pre-claim window. See "Pending-cap availability tradeoff" in AI.md.
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
 		nowSeconds := jw.runtimeSeconds.Load()
