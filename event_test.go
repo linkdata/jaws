@@ -1202,7 +1202,7 @@ func Test_clickHandlerWrapper_Dispatch(t *testing.T) {
 }
 
 func Test_InitialHTMLAttrHandler_IgnoredByDispatch(t *testing.T) {
-	if err := callEventHandler(testJawsInitialHTMLAttr{}, nil, what.Input, "ignored"); err != ErrEventUnhandled {
+	if err := callEventHandler(testJawsInitialHTMLAttr{}, nil, what.Input, "ignored", Click{}); err != ErrEventUnhandled {
 		t.Fatalf("expected ErrEventUnhandled, got %v", err)
 	}
 }

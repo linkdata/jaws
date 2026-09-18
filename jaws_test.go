@@ -4114,7 +4114,8 @@ func BenchmarkRequestEventCallChannelAllocation(b *testing.B) {
 
 // BenchmarkRequestEventDispatch measures synchronous target resolution and
 // handler invocation. The bubbled cases exercise eligibility and deduplication
-// before every handler returns unhandled.
+// before every handler returns unhandled; the large click case also guards that
+// one payload is parsed once across all targets.
 func BenchmarkRequestEventDispatch(b *testing.B) {
 	for _, n := range []int{1, 1000} {
 		b.Run("direct/elems="+strconv.Itoa(n), func(b *testing.B) {
@@ -4160,6 +4161,34 @@ func BenchmarkRequestEventDispatch(b *testing.B) {
 			}
 		})
 	}
+
+	const largeCandidateCount = 200
+	b.Run("bubbled/large-click/candidates=200/elems=1000", func(b *testing.B) {
+		rq := newBenchRequest(b, elemCount)
+		var value strings.Builder
+		value.WriteString("1 2 5 ")
+		value.WriteString(strings.Repeat("name ", 5000))
+		for id := elemCount - largeCandidateCount + 1; id <= elemCount; id++ {
+			elem := rq.GetElementByJid(Jid(id))
+			elem.Freeze()
+			value.WriteByte('\t')
+			value.WriteString(elem.Jid().String())
+		}
+		clickValue := value.String()
+		if frameSize := len("Click\t\t\n") + len(clickValue); frameSize > webSocketReadLimit {
+			b.Fatalf("click frame = %d bytes, limit %d", frameSize, webSocketReadLimit)
+		}
+
+		var err error
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			err = rq.callAllEventHandlers(0, what.Click, clickValue)
+		}
+		if err != nil {
+			b.Fatal(err)
+		}
+	})
 
 	const repeatedCount = 4000
 	b.Run("bubbled/repeated=4000/elems=1000", func(b *testing.B) {
