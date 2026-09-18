@@ -54,7 +54,7 @@ func benchOwnedFixture(b *testing.B, nested int) (jw *jaws.Jaws, update func()) 
 	tmpl := NewTemplate("div", "bench-parent", &benchOwnedDot{names: names})
 	elem := rq.NewElement(tmpl)
 	// Extra tags on the wrapper, so unregistering a generation has to visit more than
-	// one tag entry: removeElementsLocked scans every tag entry per call.
+	// one tag entry: purgeDeletedElementsLocked scans every tag entry per call.
 	if err = elem.JawsRender(io.Discard, []any{tag.Tag("alpha"), tag.Tag("beta"), tag.Tag("gamma")}); err != nil {
 		jw.Close()
 		b.Fatal(err)
