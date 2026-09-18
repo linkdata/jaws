@@ -473,6 +473,11 @@ cross-file invariants:
 * Dirty inputs expand once. Ordinary keys target registered Elements and an
   expanded `*Element` targets only itself on its owning Request. Neither path
   may update a finished unregistered Request.
+* Browser-reported removals become invisible immediately but may remain as
+  tombstones until deleted Elements reach half the registry. Every registry and
+  tag reader must ignore tombstones. The threshold amortizes cleanup when a peer
+  splits removals across messages while retaining fewer tombstones than live
+  Elements; explicit server-side deletion compacts immediately.
 * Session grace windows remain deliberate for pending, claimed,
   failed-upgrade, and closed-WebSocket Requests.
 * Upgrade changes preserve single-use keys, IP binding, and fail-closed Origin

@@ -2324,6 +2324,63 @@ func TestRequest_IncomingRemove(t *testing.T) {
 	})
 }
 
+func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
+	rq := newTestRequest(t)
+	container := rq.NewElement(&testUi{})
+	children := make([]*Element, 4)
+	for i := range children {
+		children[i] = rq.NewElement(&testUi{})
+	}
+	removedTag := tag.Tag("removed")
+	rq.Tag(children[0], removedTag)
+	rq.mu.Lock()
+	rq.todoDirt = append(rq.todoDirt, children[0], removedTag)
+	rq.mu.Unlock()
+
+	rq.handleRemove(container.Jid(), children[0].Jid().String())
+
+	if got := rq.GetElementByJid(children[0].Jid()); got != nil {
+		t.Fatalf("removed element remains findable: %v", got)
+	}
+	if got := rq.GetElements(removedTag); len(got) != 0 {
+		t.Fatalf("removed tag returns %d elements", len(got))
+	}
+	if children[0].HasTag(removedTag) {
+		t.Fatal("removed element still reports its tag")
+	}
+	if got := rq.TagsOf(children[0]); len(got) != 0 {
+		t.Fatalf("removed element retains visible tags: %v", got)
+	}
+	if rq.wantMessage(&wire.Message{Dest: removedTag}) {
+		t.Fatal("request accepts a broadcast for a tag with only a removed element")
+	}
+	if got := rq.makeUpdateList(); len(got) != 0 {
+		t.Fatalf("removed element remains dirty: %v", got)
+	}
+	rq.mu.RLock()
+	if got := len(rq.elems); got != 5 {
+		t.Errorf("registry compacted early: %d elements, want 5", got)
+	}
+	if rq.deletedElems != 1 {
+		t.Errorf("deleted tombstones = %d, want 1", rq.deletedElems)
+	}
+	rq.mu.RUnlock()
+
+	rq.handleRemove(container.Jid(), children[1].Jid().String()+"\t"+children[2].Jid().String())
+
+	rq.mu.RLock()
+	defer rq.mu.RUnlock()
+	if got := len(rq.elems); got != 2 {
+		t.Errorf("registry elements after threshold compaction = %d, want 2", got)
+	}
+	if rq.deletedElems != 0 {
+		t.Errorf("deleted tombstones after compaction = %d, want 0", rq.deletedElems)
+	}
+	if _, ok := rq.tagMap[removedTag]; ok {
+		t.Error("empty removed tag remains registered after compaction")
+	}
+}
+
 type requestEventOrderHandler struct {
 	calls atomic.Int32
 }
