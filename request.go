@@ -102,6 +102,7 @@ type Request struct {
 	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
 	buffers          *requestBuffers         // reusable storage borrowed from Jaws.requestBufferPool; returned to the pool on completion, kept on retirement
 	elems            []*Element              // our Elements
+	deletedElems     int                     // deleted tombstones retained in elems until amortized compaction
 	tagMap           map[any][]*Element      // maps tags to Elements
 	muQueue          deadlock.Mutex          // protects wsQueue and tailsent
 	wsQueue          []wire.WsMsg            // queued messages to send
@@ -441,6 +442,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	rq.buffers = nil
 	rq.todoDirt = nil
 	rq.elems = nil
+	rq.deletedElems = 0
 	rq.tagMap = nil
 
 	// wsQueue and tailsent are guarded by muQueue, not rq.mu. Hold muQueue across the
@@ -603,16 +605,19 @@ func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx contex
 	return
 }
 
-// maintenance reports whether rq has expired and should be retired. For a
-// request that never went live it cancels and reports expiry once it has been
-// idle (no [RequestWriter] write) longer than requestTimeout, or immediately if its
-// context is already done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]).
-// Called from the Serve loop's maintenance pass while jw.mu is held.
+// maintenance performs periodic Request cleanup.
+//
+// It purges browser-removal tombstones. For a request that never went live it
+// also cancels and reports expiry once it has been idle (no [RequestWriter]
+// write) longer than requestTimeout, or immediately if its context is already
+// done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]). Called from
+// the Serve loop's maintenance pass while jw.mu is held.
 //
 // It returns the cancellation cause (or nil) for the caller to queue.
 func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
 	if rq.loadState() != reqRunning {
-		rq.mu.Lock()
 		if rq.ctx.Err() != nil {
 			expired = true
 		} else {
@@ -622,8 +627,8 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 				expired = true
 			}
 		}
-		rq.mu.Unlock()
 	}
+	rq.purgeDeletedElementsLocked()
 	return
 }
 
@@ -726,6 +731,9 @@ func (rq *Request) Redirect(url string) {
 // tagsOfLocked returns the tags currently associated with elem. Caller must hold
 // rq.mu (read or write).
 func (rq *Request) tagsOfLocked(elem *Element) (tags []any) {
+	if elem.deleted.Load() {
+		return
+	}
 	for tagValue, elems := range rq.tagMap {
 		if slices.Contains(elems, elem) {
 			tags = append(tags, tagValue)
@@ -779,14 +787,14 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 		rq.mu.RLock()
 		defer rq.mu.RUnlock()
 		for i := range dest {
-			if _, yes = rq.tagMap[dest[i]]; yes {
+			if yes = rq.hasLiveTagLocked(dest[i]); yes {
 				break
 			}
 		}
 	default:
 		rq.mu.RLock()
 		defer rq.mu.RUnlock()
-		_, yes = rq.tagMap[msg.Dest]
+		yes = rq.hasLiveTagLocked(msg.Dest)
 	}
 	return
 }
@@ -855,7 +863,9 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	if i, ok := slices.BinarySearchFunc(rq.elems, jid, func(e *Element, target Jid) int {
 		return cmp.Compare(e.Jid(), target)
 	}); ok {
-		elem = rq.elems[i]
+		if candidate := rq.elems[i]; !candidate.deleted.Load() {
+			elem = candidate
+		}
 	}
 	return
 }
@@ -863,7 +873,15 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 // hasTagLocked reports whether elem is registered under tagValue. Caller must
 // hold rq.mu (read or write).
 func (rq *Request) hasTagLocked(elem *Element, tagValue any) bool {
-	return slices.Contains(rq.tagMap[tagValue], elem)
+	return elem != nil && !elem.deleted.Load() && slices.Contains(rq.tagMap[tagValue], elem)
+}
+
+// hasLiveTagLocked reports whether tagValue has a live Element. Caller must hold
+// rq.mu (read or write).
+func (rq *Request) hasLiveTagLocked(tagValue any) bool {
+	return slices.ContainsFunc(rq.tagMap[tagValue], func(elem *Element) bool {
+		return !elem.deleted.Load()
+	})
 }
 
 // HasTag reports whether elem has tagValue in rq.
@@ -971,16 +989,17 @@ func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 	rq.mu.RLock()
 	defer rq.mu.RUnlock()
 	if len(expanded) == 1 {
-		// The common single-tag case needs no de-duplication: rq.tagMap[tag] is
-		// already duplicate-free. Clone it (callers like handleBroadcast mutate
-		// tagMap after the lock is released, so we must not alias it).
-		return slices.Clone(rq.tagMap[expanded[0]])
+		// The common single-tag case needs no de-duplication. Clone so callers do
+		// not alias tagMap, then discard tombstones retained until compaction.
+		return slices.DeleteFunc(slices.Clone(rq.tagMap[expanded[0]]), func(elem *Element) bool {
+			return elem.deleted.Load()
+		})
 	}
 	seen := map[*Element]struct{}{}
 	for _, tagValue := range expanded {
 		if el, ok := rq.tagMap[tagValue]; ok {
 			for _, e := range el {
-				if _, ok = seen[e]; !ok {
+				if _, ok = seen[e]; !ok && !e.deleted.Load() {
 					seen[e] = struct{}{}
 					elems = append(elems, e)
 				}

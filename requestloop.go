@@ -219,25 +219,19 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	if containerJid > 0 {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		// Collect the requested child elements, then delete them in a single pass
-		// over rq.elems and rq.tagMap, rather than an O(N) scan plus O(N) compaction
-		// per id (the id count is client-controlled, bounded by the read limit).
-		var victims map[Jid]struct{}
+		// Mark removals immediately so all readers stop seeing them. Compact when
+		// tombstones reach half the registry; fixed maintenance purges any remainder.
+		// The threshold bounds retention and amortizes scans when a peer splits
+		// acknowledgements across messages. Dirty/update activity never compacts, so
+		// it cannot trigger a full scan per removal.
 		for jidstr := range strings.SplitSeq(data, "\t") {
 			if id := jid.ParseString(jidstr); id != containerJid {
-				if e := rq.getElementByJidLocked(id); e != nil {
-					if victims == nil {
-						victims = map[Jid]struct{}{}
-					}
-					e.deleted.Store(true)
-					victims[e.Jid()] = struct{}{}
-				}
+				rq.markElementDeletedLocked(rq.getElementByJidLocked(id))
 			}
 		}
-		if len(victims) == 0 {
-			return
+		if 2*rq.deletedElems >= len(rq.elems) {
+			rq.purgeDeletedElementsLocked()
 		}
-		rq.removeElementsLocked(func(e *Element) bool { _, ok := victims[e.Jid()]; return ok })
 	}
 }
 
@@ -435,13 +429,25 @@ func (rq *Request) sendQueue(outboundMsgCh chan<- wire.WsMsg) {
 	}
 }
 
-// removeElementsLocked drops every element matching pred from the request's pending
-// exact targets, element list, and tag entries, deleting tag entries that become empty.
+// markElementDeletedLocked marks elem deleted and records its tombstone. Caller must
+// hold rq.mu.
+func (rq *Request) markElementDeletedLocked(elem *Element) {
+	if elem != nil && elem.Request == rq && !elem.deleted.Load() {
+		elem.deleted.Store(true)
+		rq.deletedElems++
+	}
+}
+
+// purgeDeletedElementsLocked drops deleted elements from the request's pending exact
+// targets, element list, and tag entries, deleting tag entries that become empty.
 //
 // slices.DeleteFunc zeros the freed tail slots, so the dropped *Element pointers do
-// not linger in the backing arrays. Caller must hold rq.mu and is responsible for
-// marking the matched elements deleted.
-func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
+// not linger in the backing arrays. Caller must hold rq.mu.
+func (rq *Request) purgeDeletedElementsLocked() {
+	if rq.deletedElems == 0 {
+		return
+	}
+	pred := func(e *Element) bool { return e.deleted.Load() }
 	rq.todoDirt = slices.DeleteFunc(rq.todoDirt, func(tagValue any) bool {
 		elem, ok := tagValue.(*Element)
 		return ok && pred(elem)
@@ -453,16 +459,7 @@ func (rq *Request) removeElementsLocked(pred func(*Element) bool) {
 			delete(rq.tagMap, k)
 		}
 	}
-}
-
-// deleteElementLocked removes elem from the request's element list and from every
-// tag entry, marking it deleted; it is a no-op if elem is nil or belongs to another
-// request. Caller must hold rq.mu.
-func (rq *Request) deleteElementLocked(elem *Element) {
-	if elem != nil && elem.Request == rq {
-		elem.deleted.Store(true)
-		rq.removeElementsLocked(func(e *Element) bool { return e == elem })
-	}
+	rq.deletedElems = 0
 }
 
 // DeleteElement removes elem from the [Request] element registry without
@@ -478,7 +475,8 @@ func (rq *Request) deleteElementLocked(elem *Element) {
 func (rq *Request) DeleteElement(elem *Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	rq.deleteElementLocked(elem)
+	rq.markElementDeletedLocked(elem)
+	rq.purgeDeletedElementsLocked()
 }
 
 // DeleteElements removes all of elems from the [Request] element registry in a
@@ -489,27 +487,12 @@ func (rq *Request) DeleteElement(elem *Element) {
 // dropped, rather than one pass per element. Nil elements and elements belonging to
 // another Request are skipped, and repeated elements are tolerated.
 func (rq *Request) DeleteElements(elems []*Element) {
-	if len(elems) == 0 {
-		return
-	}
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if len(elems) == 1 {
-		// Avoid allocating a victims map for the common single-element case.
-		rq.deleteElementLocked(elems[0])
-		return
-	}
-	victims := make(map[*Element]struct{}, len(elems))
 	for _, elem := range elems {
-		if elem != nil && elem.Request == rq {
-			elem.deleted.Store(true)
-			victims[elem] = struct{}{}
-		}
+		rq.markElementDeletedLocked(elem)
 	}
-	if len(victims) == 0 {
-		return
-	}
-	rq.removeElementsLocked(func(e *Element) bool { _, ok := victims[e]; return ok })
+	rq.purgeDeletedElementsLocked()
 }
 
 // makeUpdateList drains exact Element targets and pending-dirt tags, resolves them
@@ -520,16 +503,16 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	seen := map[*Element]struct{}{}
 	for _, tagValue := range rq.todoDirt {
 		if elem, exact := tagValue.(*Element); exact {
-			// appendDirtyTags establishes ownership and liveness. Deletion removes
-			// queued targets under rq.mu; JawsUpdate handles deletion after this drain.
-			if _, ok := seen[elem]; !ok {
+			// appendDirtyTags establishes ownership and liveness. Browser-reported
+			// deletion may leave a tombstone until amortized compaction.
+			if _, ok := seen[elem]; !ok && !elem.deleted.Load() {
 				seen[elem] = struct{}{}
 				todo = append(todo, elem)
 			}
 			continue
 		}
 		for _, elem := range rq.tagMap[tagValue] {
-			if _, ok := seen[elem]; !ok {
+			if _, ok := seen[elem]; !ok && !elem.deleted.Load() {
 				seen[elem] = struct{}{}
 				todo = append(todo, elem)
 			}
