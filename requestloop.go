@@ -219,19 +219,17 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	if containerJid > 0 {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		// Mark removals immediately so all readers stop seeing them. Compact only
-		// when tombstones reach half the registry: a peer can split acknowledgements
-		// across messages, so compacting per message would make deleting N elements
-		// quadratic. The threshold amortizes scans while keeping retained slots below
-		// twice the live count.
+		// Mark removals immediately so all readers stop seeing them. Compact when
+		// tombstones reach half the registry; fixed maintenance purges any remainder.
+		// The threshold bounds retention and amortizes scans when a peer splits
+		// acknowledgements across messages. Dirty/update activity never compacts, so
+		// it cannot trigger a full scan per removal.
 		for jidstr := range strings.SplitSeq(data, "\t") {
 			if id := jid.ParseString(jidstr); id != containerJid {
-				if e := rq.getElementByJidLocked(id); e != nil {
-					rq.markElementDeletedLocked(e)
-				}
+				rq.markElementDeletedLocked(rq.getElementByJidLocked(id))
 			}
 		}
-		if rq.deletedElems >= len(rq.elems)-rq.deletedElems {
+		if 2*rq.deletedElems >= len(rq.elems) {
 			rq.purgeDeletedElementsLocked()
 		}
 	}

@@ -2330,8 +2330,7 @@ func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	rq := &Request{Jaws: jw, tagMap: make(map[any][]*Element)}
-	rq.storeState(reqRunning)
+	rq := jw.newRequest(nil)
 	container := rq.NewElement(&testUi{})
 	children := make([]*Element, 4)
 	for i := range children {
@@ -2382,7 +2381,7 @@ func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
 	}
 	rq.mu.RUnlock()
 	if expired, cause := rq.maintenance(0, time.Hour); expired || cause != nil {
-		t.Fatalf("running request maintenance = (%v, %v), want (false, nil)", expired, cause)
+		t.Fatalf("request maintenance = (%v, %v), want (false, nil)", expired, cause)
 	}
 	rq.mu.RLock()
 	if got := len(rq.elems); got != 4 {
