@@ -2325,16 +2325,23 @@ func TestRequest_IncomingRemove(t *testing.T) {
 }
 
 func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
-	rq := newTestRequest(t)
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := &Request{Jaws: jw, tagMap: make(map[any][]*Element)}
+	rq.storeState(reqRunning)
 	container := rq.NewElement(&testUi{})
 	children := make([]*Element, 4)
 	for i := range children {
 		children[i] = rq.NewElement(&testUi{})
 	}
-	removedTag := tag.Tag("removed")
-	rq.Tag(children[0], removedTag)
+	sharedTag := tag.Tag("shared")
+	rq.Tag(children[0], sharedTag)
+	rq.Tag(children[3], sharedTag)
 	rq.mu.Lock()
-	rq.todoDirt = append(rq.todoDirt, children[0], removedTag)
+	rq.todoDirt = append(rq.todoDirt, children[0], sharedTag)
 	rq.mu.Unlock()
 
 	rq.handleRemove(container.Jid(), children[0].Jid().String())
@@ -2342,20 +2349,29 @@ func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
 	if got := rq.GetElementByJid(children[0].Jid()); got != nil {
 		t.Fatalf("removed element remains findable: %v", got)
 	}
-	if got := rq.GetElements(removedTag); len(got) != 0 {
-		t.Fatalf("removed tag returns %d elements", len(got))
+	if got := rq.GetElements(sharedTag); len(got) != 1 || got[0] != children[3] {
+		t.Fatalf("single-tag lookup = %v, want only live element %v", got, children[3])
 	}
-	if children[0].HasTag(removedTag) {
+	if got := rq.GetElements([]any{sharedTag, tag.Tag("missing")}); len(got) != 1 || got[0] != children[3] {
+		t.Fatalf("multi-tag lookup = %v, want only live element %v", got, children[3])
+	}
+	if children[0].HasTag(sharedTag) {
 		t.Fatal("removed element still reports its tag")
+	}
+	if rq.HasTag(children[0], sharedTag) {
+		t.Fatal("request reports the removed element still has its tag")
+	}
+	if !rq.HasTag(children[3], sharedTag) {
+		t.Fatal("request does not report the live element's tag")
 	}
 	if got := rq.TagsOf(children[0]); len(got) != 0 {
 		t.Fatalf("removed element retains visible tags: %v", got)
 	}
-	if rq.wantMessage(&wire.Message{Dest: removedTag}) {
-		t.Fatal("request accepts a broadcast for a tag with only a removed element")
+	if !rq.wantMessage(&wire.Message{Dest: sharedTag}) {
+		t.Fatal("request rejects a broadcast for a tag with a live element after a tombstone")
 	}
-	if got := rq.makeUpdateList(); len(got) != 0 {
-		t.Fatalf("removed element remains dirty: %v", got)
+	if got := rq.makeUpdateList(); len(got) != 1 || got[0] != children[3] {
+		t.Fatalf("dirty list = %v, want only live element %v", got, children[3])
 	}
 	rq.mu.RLock()
 	if got := len(rq.elems); got != 5 {
@@ -2363,6 +2379,20 @@ func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
 	}
 	if rq.deletedElems != 1 {
 		t.Errorf("deleted tombstones = %d, want 1", rq.deletedElems)
+	}
+	rq.mu.RUnlock()
+	if expired, cause := rq.maintenance(0, time.Hour); expired || cause != nil {
+		t.Fatalf("running request maintenance = (%v, %v), want (false, nil)", expired, cause)
+	}
+	rq.mu.RLock()
+	if got := len(rq.elems); got != 4 {
+		t.Errorf("registry elements after periodic compaction = %d, want 4", got)
+	}
+	if rq.deletedElems != 0 {
+		t.Errorf("deleted tombstones after periodic compaction = %d, want 0", rq.deletedElems)
+	}
+	if got := rq.tagMap[sharedTag]; len(got) != 1 || got[0] != children[3] {
+		t.Errorf("tag entry after periodic compaction = %v, want only live element %v", got, children[3])
 	}
 	rq.mu.RUnlock()
 
@@ -2376,8 +2406,8 @@ func TestRequest_IncomingRemoveAmortizesCompaction(t *testing.T) {
 	if rq.deletedElems != 0 {
 		t.Errorf("deleted tombstones after compaction = %d, want 0", rq.deletedElems)
 	}
-	if _, ok := rq.tagMap[removedTag]; ok {
-		t.Error("empty removed tag remains registered after compaction")
+	if got := rq.tagMap[sharedTag]; len(got) != 1 || got[0] != children[3] {
+		t.Errorf("tag entry after compaction = %v, want only live element %v", got, children[3])
 	}
 }
 

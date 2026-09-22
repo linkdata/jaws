@@ -605,16 +605,19 @@ func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx contex
 	return
 }
 
-// maintenance reports whether rq has expired and should be retired. For a
-// request that never went live it cancels and reports expiry once it has been
-// idle (no [RequestWriter] write) longer than requestTimeout, or immediately if its
-// context is already done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]).
-// Called from the Serve loop's maintenance pass while jw.mu is held.
+// maintenance performs periodic Request cleanup.
+//
+// It purges browser-removal tombstones. For a request that never went live it
+// also cancels and reports expiry once it has been idle (no [RequestWriter]
+// write) longer than requestTimeout, or immediately if its context is already
+// done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]). Called from
+// the Serve loop's maintenance pass while jw.mu is held.
 //
 // It returns the cancellation cause (or nil) for the caller to queue.
 func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (expired bool, cause error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
 	if rq.loadState() != reqRunning {
-		rq.mu.Lock()
 		if rq.ctx.Err() != nil {
 			expired = true
 		} else {
@@ -624,8 +627,8 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 				expired = true
 			}
 		}
-		rq.mu.Unlock()
 	}
+	rq.purgeDeletedElementsLocked()
 	return
 }
 

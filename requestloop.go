@@ -464,16 +464,6 @@ func (rq *Request) purgeDeletedElementsLocked() {
 	rq.deletedElems = 0
 }
 
-// deleteElementLocked removes elem from the request's element list and from every
-// tag entry, marking it deleted; it is a no-op if elem is nil or belongs to another
-// request. Caller must hold rq.mu.
-func (rq *Request) deleteElementLocked(elem *Element) {
-	if elem != nil && elem.Request == rq {
-		rq.markElementDeletedLocked(elem)
-		rq.purgeDeletedElementsLocked()
-	}
-}
-
 // DeleteElement removes elem from the [Request] element registry without
 // queueing a browser operation.
 //
@@ -487,7 +477,8 @@ func (rq *Request) deleteElementLocked(elem *Element) {
 func (rq *Request) DeleteElement(elem *Element) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	rq.deleteElementLocked(elem)
+	rq.markElementDeletedLocked(elem)
+	rq.purgeDeletedElementsLocked()
 }
 
 // DeleteElements removes all of elems from the [Request] element registry in a
@@ -498,26 +489,12 @@ func (rq *Request) DeleteElement(elem *Element) {
 // dropped, rather than one pass per element. Nil elements and elements belonging to
 // another Request are skipped, and repeated elements are tolerated.
 func (rq *Request) DeleteElements(elems []*Element) {
-	if len(elems) == 0 {
-		return
-	}
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	if len(elems) == 1 {
-		// Avoid allocating a victims map for the common single-element case.
-		rq.deleteElementLocked(elems[0])
-		return
-	}
-	owned := false
 	for _, elem := range elems {
-		if elem != nil && elem.Request == rq {
-			owned = true
-			rq.markElementDeletedLocked(elem)
-		}
+		rq.markElementDeletedLocked(elem)
 	}
-	if owned {
-		rq.purgeDeletedElementsLocked()
-	}
+	rq.purgeDeletedElementsLocked()
 }
 
 // makeUpdateList drains exact Element targets and pending-dirt tags, resolves them
