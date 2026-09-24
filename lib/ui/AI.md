@@ -288,37 +288,27 @@ slider := ui.NewRange(binder)
 JsVar binds a JSON-marshalable Go value to an application-owned property on
 `window`. It is bidirectional: neither side becomes authoritative merely because
 the binding exists. Create a fresh binding for each Request. A shared handler
-can expose a method that makes a new JsVar over synchronized, possibly shared
-state.
+can implement `JsVarMaker` so each render receives a new JsVar over synchronized,
+possibly shared state.
 
 ```go
 type application struct {
 	clientMu sync.Mutex
 	client   Client
-	store    *ui.JsVarStore[Client]
 }
 
-func newApplication() *application {
-	app := new(application)
-	app.store = ui.NewJsVarStore(&app.clientMu, &app.client)
-	return app
-}
-
-func (app *application) ClientJsVar() *ui.JsVar[Client] {
-	jsv := app.store.NewJsVar()
+func (app *application) JawsMakeJsVar(*jaws.Request) (ui.IsJsVar, error) {
+	jsv := ui.NewJsVar(&app.clientMu, &app.client)
 	jsv.ClientCheck = ui.JSONSizeCheck[Client](1 << 20)
-	return jsv
+	return jsv, nil
 }
 
-handler := ui.Handler(jw, "index", newApplication())
+handler := ui.Handler(jw, "index", new(application))
 ```
 
 ```gotemplate
-{{$.JsVar "client" .Dot.ClientJsVar}}
+{{$.JsVar "client" .Dot}}
 ```
-
-When no per-binding check is needed, pass `store.NewJsVar()` directly to
-`RequestWriter.JsVar` for each request.
 
 Several bindings may share a name. A browser write fans out to every live
 binding of that name; a removed binding stops receiving it. If several bindings
@@ -335,12 +325,10 @@ are not queued, and server broadcasts are not replayed to a rendered page that
 has not subscribed. Applications needing convergence must define a handshake,
 resend, merge, or browser-authoritative policy.
 
-JsVar batches server path broadcasts at the normal 100 ms update rate. Repeated
-writes to one path keep the latest requested value; different paths keep their
-latest-write order. Bindings from the same `JsVarStore` share a batch. The batch
-contains path values rather than the whole bound object, so a large state can
-send one small changed field. An overloaded peer can drop a `Set` and retain a
-stale value until another write or re-render.
+A full recipient broadcast channel may drop a `Set` without disconnecting that
+Request. The browser can remain stale; if the dropped value established a parent
+object, later child-path writes can fail. A parent or root update or re-render
+can resynchronize it.
 
 ### JSON representation
 
@@ -408,9 +396,9 @@ aliases, and capacity may require a domain-specific check.
 Configure equivalent policies and the same locker on every binding exposing the
 same Ptr or reachable mutable state. One unchecked binding bypasses the policy.
 
-Concurrent writes to one JsVar serialize. Broadcasts for different paths follow
-the order of their latest writes. Transport backpressure can delay later writes
-but does not hold the application locker.
+Concurrent writes to one JsVar serialize, and resulting broadcasts retain that
+order. Transport backpressure can delay later writes but does not hold the
+application locker.
 
 ## Container-family widgets
 

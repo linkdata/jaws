@@ -110,7 +110,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	}
 
 	// Keep the broadcast distribution loop running when a Request falls behind.
-	// State Set messages and the periodic dirty-render tick can be dropped;
+	// Set state messages and the periodic dirty-render tick can be dropped;
 	// other messages require delivery, so an overloaded Request is terminated.
 	mustBroadcast := func(msg wire.Message) {
 		for msgCh, rq := range subs {
@@ -127,11 +127,12 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 					// without it: a Request already in its process loop is woken by the
 					// message that filled the channel and drains todoDirt on the next pass,
 					// and one still starting up (subscribed before onConnect) drains
-					// todoDirt on its first pass without needing a wake. A Set carries
-					// replaceable state: a slow peer may miss the last value for a path
-					// until another write or re-render, but remains connected. Other
-					// addressed messages are one-shot and must not be dropped, including
-					// tag-targeted Update and Session.Close's key-targeted wake-up.
+					// todoDirt on its first pass without needing a wake. Set frames
+					// may be lost under overload. A dropped parent value can prevent
+					// later child-path writes from applying until a parent or root
+					// update or re-render. Other addressed messages are one-shot and
+					// must not be dropped, including tag-targeted Update and
+					// Session.Close's key-targeted wake-up.
 					if msg.What != what.Set && (msg.What != what.Update || msg.Dest != nil) {
 						killSub(msgCh)
 						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))

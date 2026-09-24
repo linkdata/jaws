@@ -48,7 +48,7 @@ func newBenchmarkJsVar(b *testing.B) (jsvar *JsVar[benchmarkJsVarState], elem *j
 	return
 }
 
-func BenchmarkJsVarSetPathUpdate(b *testing.B) {
+func BenchmarkJsVarSetPathBroadcast(b *testing.B) {
 	jsvar, elem := newBenchmarkJsVar(b)
 
 	b.Run("Serial", func(b *testing.B) {

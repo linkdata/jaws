@@ -21,8 +21,9 @@ import (
 // [wire.Message.Dest].
 //
 // A [what.Set] message may be dropped for a Request whose broadcast channel is
-// full. If that was the last update to a path, its browser value stays stale
-// until another write or re-render.
+// full. It is not replayed. A dropped parent value can prevent later child-path
+// updates from applying; a parent or root update or re-render may be needed to
+// resynchronize the browser.
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
 // [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.

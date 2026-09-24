@@ -3,6 +3,7 @@ package jaws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -337,14 +338,24 @@ func TestJaws_ServeDropsOverloadedSet(t *testing.T) {
 
 		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 		rq.NewElement(nil).Tag(tag.Tag("state"))
-		msgCh := make(chan wire.Message)
-		jw.subCh <- subscription{msgCh: msgCh, rq: rq}
+		msgCh := jw.subscribe(rq, 8)
 		waitForServeLoop(t, jw)
 
-		jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Set, Data: "value=1"})
+		for i := range 9 {
+			jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Set, Data: fmt.Sprintf("value=%d", i)})
+		}
 		synctest.Wait()
 		if cause := context.Cause(rq.Context()); cause != nil {
 			t.Fatalf("Set canceled overloaded request: %v", cause)
+		}
+		if got := len(msgCh); got != 8 {
+			t.Fatalf("queued Set messages = %d, want 8", got)
+		}
+		<-msgCh
+		jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Set, Data: "value=next"})
+		synctest.Wait()
+		if got := len(msgCh); got != 8 {
+			t.Fatalf("queued Set messages after overload = %d, want 8", got)
 		}
 
 		jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Alert, Data: "required"})
