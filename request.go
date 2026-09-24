@@ -1208,16 +1208,16 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 	rq.mu.RLock()
 	numElems := len(rq.elems)
 	rq.mu.RUnlock()
-	// Size the broadcast buffer with headroom that scales with the page's element
-	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
-	// would block, kills the subscription and cancels this request for every message
-	// except the coalescible nil-destination Update tick, which it drops instead.
-	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
+	// Size the broadcast queue with headroom that scales with the page's element
+	// count. Serve coalesces pending Set messages for the same destination and
+	// path on overflow, or drops a Set with no pending match. A one-shot message
+	// can displace a pending Set; without one, it cancels an overloaded Request.
+	pendingSubscription := rq.Jaws.subscribeQueue(rq, 4+numElems*4)
 	defer func() {
 		// onConnect is user code and may return an error or panic. Release its
 		// subscription unless process took responsibility for doing so.
 		if pendingSubscription != nil {
-			rq.Jaws.unsubscribe(pendingSubscription)
+			rq.Jaws.unsubscribeQueue(pendingSubscription)
 		}
 	}()
 
@@ -1237,14 +1237,14 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 			}
 			rq.cancel(err)
 		}
-		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
+		outboundMsgCh := make(chan wire.WsMsg, len(pendingSubscription.msgs))
 		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
 		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
-		broadcastMsgCh := pendingSubscription
+		broadcastQueue := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays
 		// contained to the failed Request while its connection is torn down.
-		rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
+		rq.process(nil, broadcastQueue, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastQueue, closes outboundMsgCh
 	}
 	return
 }

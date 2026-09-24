@@ -24,11 +24,15 @@ import (
 
 // process runs the main message-processing loop.
 //
-// It unsubscribes broadcastMsgCh and closes outboundMsgCh before returning. A
+// It unsubscribes the broadcast source and closes outboundMsgCh before returning. A
 // loop panic is contained, a diagnostic is passed to [Jaws.Log], and the
 // recovered value is returned unchanged for the caller to handle.
-func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) (panicValue any) {
+func (rq *Request) process(broadcastMsgCh chan wire.Message, queue *broadcastQueue, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) (panicValue any) {
 	jawsDoneCh := rq.Jaws.Done()
+	var queueReady <-chan struct{}
+	if queue != nil {
+		queueReady = queue.ready
+	}
 	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers
 	// (claim, getRequestLocked, releaseBuffersLocked) run strictly before or after
 	// process, so the captured value is stable for the loop's lifetime and the
@@ -43,7 +47,11 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 
 	defer func() {
 		panicValue = recover()
-		rq.Jaws.unsubscribe(broadcastMsgCh)
+		if queue != nil {
+			rq.Jaws.unsubscribeQueue(queue)
+		} else {
+			rq.Jaws.unsubscribe(broadcastMsgCh)
+		}
 		// process runs only for a running (hence claimed) Request, so its WebSocket
 		// earns the session grace window.
 		rq.killSession(rq.loadState().claimed())
@@ -94,6 +102,8 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		case <-httpDoneCh:
 		case <-rq.Context().Done():
 		case tagmsg, ok = <-broadcastMsgCh:
+		case <-queueReady:
+			tagmsg, ok = queue.pop()
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
 				// incoming event message from the WebSocket

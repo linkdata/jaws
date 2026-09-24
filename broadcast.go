@@ -41,6 +41,11 @@ import (
 // illegal tag type through [Jaws.MustLog]: that panics when no [Jaws.Logger] is set,
 // while with a Logger the error is queued and the message is sent to the destinations
 // that did expand.
+//
+// On a full Request queue, a [what.Set] replaces pending Sets for the same
+// destination and path. If none are pending, that Set is dropped; the browser
+// value can remain stale until another Set or re-render. A one-shot message
+// can also displace a pending Set to keep that message deliverable.
 func (jw *Jaws) Broadcast(msg wire.Message) {
 	switch msg.What {
 	case what.Replace:

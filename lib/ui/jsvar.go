@@ -261,6 +261,11 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // that require the two sides to converge after either can change the value
 // during that interval must reconcile it explicitly.
 //
+// On a full Request queue, a write replaces pending writes to the same
+// destination and path. If none are pending, that Request misses the write and
+// its browser value may remain stale until another write or re-render. A
+// one-shot message may also displace a pending write.
+//
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
 // for concurrent use. Concurrent writes are applied one at a time. Any
 // broadcasts they produce preserve the order in which the writes modify the
@@ -457,7 +462,7 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // JsVar has acquired a dirty tag from rendering also produces no broadcast; its
 // initial render seeds the value via the data-jawsdata attribute.
 //
-// The broadcast reaches matching active requests only. It is not replayed to a
+// The broadcast targets matching active requests only. It is not replayed to a
 // page between its initial render and its broadcast subscription; see [JsVar]
 // for the synchronization model.
 //

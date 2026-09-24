@@ -1244,10 +1244,9 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 	}
 }
 
-// TestServeKeyTargetedUpdateFailFast verifies the overload classification the
-// Session.Close wake-up relies on: only the internal nil-destination Update tick
-// is droppable, while every addressed Update — tag-targeted or key-targeted — is
-// one-shot and must fail-fast an overloaded Request.
+// TestServeKeyTargetedUpdateFailFast verifies that addressed Updates are required
+// when a full subscriber buffer has no Set to evict. The key-targeted Update is
+// the Session.Close wake-up.
 func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	jw, err := New()
 	if err != nil {

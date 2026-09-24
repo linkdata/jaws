@@ -317,6 +317,65 @@ func TestJaws_ServeOverloadLoggerCanBroadcastRepeatedly(t *testing.T) {
 	})
 }
 
+func TestJaws_ServeCoalescesSetForOverloadedSubscriber(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		serveDone := make(chan struct{})
+		go func() {
+			jw.ServeWithTimeout(time.Hour)
+			close(serveDone)
+		}()
+		defer func() {
+			jw.Close()
+			<-serveDone
+		}()
+		waitForServeLoop(t, jw)
+
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		dest := &struct{ value int }{}
+		rq.Tag(rq.NewElement(&testUi{}), dest)
+		queue := jw.subscribeQueue(rq, 1)
+
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Set, Data: "value=1"})
+		synctest.Wait()
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Set, Data: "value=2"})
+		synctest.Wait()
+		if cause := context.Cause(rq.Context()); cause != nil {
+			t.Fatalf("Set overflow cancelled Request: %v", cause)
+		}
+		if msg, ok := queue.pop(); !ok || msg.Data != "value=2" {
+			t.Fatalf("coalesced Set = %#v, %t; want value=2", msg, ok)
+		}
+
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Set, Data: "value=3"})
+		synctest.Wait()
+		if msg, ok := queue.pop(); !ok || msg.Data != "value=3" {
+			t.Fatalf("Set after overflow = %#v, %t; want value=3", msg, ok)
+		}
+
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Set, Data: "value=4"})
+		synctest.Wait()
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Update})
+		synctest.Wait()
+		if cause := context.Cause(rq.Context()); cause != nil {
+			t.Fatalf("Update displaced Set but cancelled Request: %v", cause)
+		}
+		if msg, ok := queue.pop(); !ok || msg.What != what.Update {
+			t.Fatalf("message after Set eviction = %#v, %t; want Update", msg, ok)
+		}
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Update})
+		synctest.Wait()
+		jw.Broadcast(wire.Message{Dest: dest, What: what.Update})
+		synctest.Wait()
+		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrRequestOverloaded) {
+			t.Fatalf("one-shot Update overflow cause = %v, want ErrRequestOverloaded", cause)
+		}
+	})
+}
+
 func TestJaws_MaintenanceRetiresExpiredRequestOnce(t *testing.T) {
 	jw, err := New()
 	if err != nil {
