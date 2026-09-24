@@ -278,7 +278,8 @@ func TestTemplate_RenderAttributePrecedence(t *testing.T) {
 	}
 
 	dot := templateStaticInitialAttrDot{attr: `class="dot" data-dot="yes"`}
-	_, got := renderUI(t, rq,
+	_, got := renderUI(
+		t, rq,
 		NewTemplate("article", "attrtmpl", dot, `class="constructor"`, `data-constructor="yes"`),
 		template.HTMLAttr(`class="param" data-param="yes"`),
 	)

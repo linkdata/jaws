@@ -15,11 +15,51 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
-	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/staticserve"
 )
+
+func TestJaws_ServeBatchesSetBeforeRequiredMessage(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		serveDone := make(chan struct{})
+		go func() {
+			jw.ServeWithTimeout(time.Hour)
+			close(serveDone)
+		}()
+		defer func() {
+			jw.Close()
+			<-serveDone
+		}()
+		waitForServeLoop(t, jw)
+
+		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+		msgCh := jw.subscribe(rq, 8)
+		waitForServeLoop(t, jw)
+
+		for i := range 40 {
+			jw.Broadcast(wire.Message{What: what.Set, Data: fmt.Sprintf("value=%d", i)})
+		}
+		jw.Broadcast(wire.Message{What: what.Alert, Data: "required"})
+		synctest.Wait()
+		if cause := context.Cause(rq.Context()); cause != nil {
+			t.Fatalf("batched Sets cancelled request: %v", cause)
+		}
+		if got := len(msgCh); got != 2 {
+			t.Fatalf("queued messages = %d, want final Set and Alert", got)
+		}
+		if msg := <-msgCh; msg.What != what.Set || msg.Data != "value=39" {
+			t.Fatalf("first message = %#v, want final Set", msg)
+		}
+		if msg := <-msgCh; msg.What != what.Alert || msg.Data != "required" {
+			t.Fatalf("second message = %#v, want Alert", msg)
+		}
+	})
+}
 
 type maintenanceTestLogger struct {
 	mu   sync.Mutex
@@ -315,53 +355,6 @@ func TestJaws_ServeOverloadLoggerCanBroadcastRepeatedly(t *testing.T) {
 		case extra := <-logger.logged:
 			t.Errorf("unexpected duplicate log: %v", extra)
 		default:
-		}
-	})
-}
-
-func TestJaws_ServeDropsOverloadedSet(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		jw, err := New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		serveDone := make(chan struct{})
-		go func() {
-			jw.ServeWithTimeout(time.Hour)
-			close(serveDone)
-		}()
-		defer func() {
-			jw.Close()
-			<-serveDone
-		}()
-		waitForServeLoop(t, jw)
-
-		rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-		rq.NewElement(nil).Tag(tag.Tag("state"))
-		msgCh := jw.subscribe(rq, 8)
-		waitForServeLoop(t, jw)
-
-		for i := range 9 {
-			jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Set, Data: fmt.Sprintf("value=%d", i)})
-		}
-		synctest.Wait()
-		if cause := context.Cause(rq.Context()); cause != nil {
-			t.Fatalf("Set canceled overloaded request: %v", cause)
-		}
-		if got := len(msgCh); got != 8 {
-			t.Fatalf("queued Set messages = %d, want 8", got)
-		}
-		<-msgCh
-		jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Set, Data: "value=next"})
-		synctest.Wait()
-		if got := len(msgCh); got != 8 {
-			t.Fatalf("queued Set messages after overload = %d, want 8", got)
-		}
-
-		jw.Broadcast(wire.Message{Dest: tag.Tag("state"), What: what.Alert, Data: "required"})
-		synctest.Wait()
-		if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrRequestOverloaded) {
-			t.Fatalf("required message cancellation cause = %v, want ErrRequestOverloaded", cause)
 		}
 	})
 }

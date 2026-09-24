@@ -106,7 +106,7 @@ func readJsVarSet(t *testing.T, tr *jawstest.TestRequest) (data string) {
 	return readJsVarMessage(t, tr, what.Set)
 }
 
-func TestJsVarConcurrentBroadcastsFollowMutationOrder(t *testing.T) {
+func TestJsVarConcurrentBroadcastsKeepLatestMutation(t *testing.T) {
 	jsvar, elem, tr := newOrderedJsVar(t)
 
 	firstEntered := make(chan struct{})
@@ -168,10 +168,8 @@ func TestJsVarConcurrentBroadcastsFollowMutationOrder(t *testing.T) {
 		}
 	}
 
-	got := []string{readJsVarSet(t, tr), readJsVarSet(t, tr)}
-	want := []string{`value="first"`, `value="second"`}
-	if got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("broadcast order = %q, want mutation order %q", got, want)
+	if got := readJsVarSet(t, tr); got != `value="second"` {
+		t.Fatalf("broadcast = %q, want latest mutation", got)
 	}
 	if current := jsvar.JawsGet(elem).Value; current != "second" {
 		t.Fatalf("bound value = %q, want latest mutation %q", current, "second")
@@ -320,9 +318,7 @@ func TestJsVarSetPatherCanReenterSetter(t *testing.T) {
 		t.Fatalf("state after reentrant callback = %#v", state)
 	}
 
-	got := []string{readJsVarSet(t, tr), readJsVarSet(t, tr)}
-	want := []string{`value="outer"`, `value="callback"`}
-	if got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("broadcast order = %q, want callback order %q", got, want)
+	if got := readJsVarSet(t, tr); got != `value="callback"` {
+		t.Fatalf("broadcast = %q, want callback mutation", got)
 	}
 }

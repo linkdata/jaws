@@ -260,16 +260,18 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // that require the two sides to converge after either can change the value
 // during that interval must reconcile it explicitly.
 //
-// A full recipient broadcast channel may drop a Set without cancelling its
-// Request. A dropped parent value can prevent later child-path updates from
-// applying. A parent or root update or re-render may be needed to resynchronize
-// the browser.
+// Accepted writes change Go state immediately. [jaws.Jaws.Broadcast] batches
+// path updates up to the next [jaws.DefaultUpdateInterval] tick, sending the
+// latest requested value for each destination and path in a batch. Distinct
+// paths remain partial updates. Applicable generic browser writes run
+// [JsVar.ClientCheck] individually before batching.
 //
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
-// for concurrent use. Concurrent writes are applied one at a time. Any
-// broadcasts they produce preserve the order in which the writes modify the
-// bound value. This concurrency guarantee does not permit one JsVar to be
-// shared between requests.
+// for concurrent use. Writes through one JsVar are applied serially, and their
+// broadcast requests enter JaWS in mutation order. Coalescing may omit
+// intermediate values. Distinct JsVar values sharing Ptr have no cross-binding
+// broadcast order guarantee. This does not permit one JsVar to be shared
+// between requests.
 //
 // Rendering and write broadcasts invoke JSON marshalers while the locker passed
 // to [NewJsVar] is held. Custom marshaling callbacks reached in either case,
@@ -465,8 +467,8 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // page between its initial render and its broadcast subscription; see [JsVar]
 // for the synchronization model.
 //
-// A full recipient broadcast channel may drop the update without cancelling
-// its Request; see [jaws.Jaws.Broadcast].
+// [jaws.Jaws.Broadcast] batches path updates by destination and path; see
+// [JsVar] for the timing and ordering rules.
 //
 // The browser receives the JSON encoding of value, not a re-encoding of the
 // destination field after assignment. Applications using an encoded
@@ -573,7 +575,7 @@ func (jsvar *JsVar[T]) JawsGetTag() any {
 	return jsvar.dirtyTag
 }
 
-// JawsUpdate is a no-op because updates are broadcast by path setters.
+// JawsUpdate is a no-op because path setters schedule their own broadcasts.
 //
 // Dirtying a JsVar therefore does not resend its root value. Use [JsVar.JawsSet]
 // or [JsVar.JawsSetPath], together with the application's synchronization

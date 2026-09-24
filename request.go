@@ -41,9 +41,10 @@ const webSocketReadLimit = 32 * 1024
 // that rendered Elements depend on, use [Request.Dirty] to schedule their updates
 // for when message processing starts.
 //
-// Broadcasts for the Request are buffered while the function runs and are
+// Broadcasts for the Request are buffered while the function runs, with
+// [what.Set] path updates coalesced as described by [Jaws.Broadcast]. They are
 // processed after it returns nil. The buffer is bounded, so the function should
-// return promptly; normal [ErrRequestOverloaded] handling applies if it fills.
+// return promptly; [ErrRequestOverloaded] applies if it fills.
 //
 // Events before the WebSocket opens are not replayed. To prevent early
 // interaction, initially disable native controls or make the interactive region
@@ -1210,8 +1211,8 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 	rq.mu.RUnlock()
 	// Size the broadcast buffer with headroom that scales with the page's element
 	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
-	// would block, drops Set state messages and nil-destination Update ticks;
-	// other messages kill the subscription and cancel this request.
+	// would block, kills the subscription and cancels this request for every message
+	// except the coalescible nil-destination Update tick, which it drops instead.
 	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
 	defer func() {
 		// onConnect is user code and may return an error or panic. Release its

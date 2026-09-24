@@ -17,13 +17,13 @@ import (
 	"github.com/linkdata/jaws/lib/wire"
 )
 
-// Broadcast sends msg to the active [Request] and [Element] values selected by
-// [wire.Message.Dest].
+// Broadcast queues msg for delivery to [Request] and [Element] values selected
+// by [wire.Message.Dest].
 //
-// A [what.Set] message may be dropped for a Request whose broadcast channel is
-// full. It is not replayed. A dropped parent value can prevent later child-path
-// updates from applying; a parent or root update or re-render may be needed to
-// resynchronize the browser.
+// [what.Set] messages containing a path and value are batched up to the next
+// [DefaultUpdateInterval] tick. Each batch sends the latest value for each
+// expanded destination and path, with different paths in last-write order.
+// A non-Set broadcast flushes pending Sets first.
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
 // [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.

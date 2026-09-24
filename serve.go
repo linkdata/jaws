@@ -77,6 +77,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	maintenanceInterval = max(maintenanceInterval, minInterval)
 
 	subs := map[chan wire.Message]*Request{}
+	var sets setBatch
 	t := jw.newMaintenanceTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
@@ -109,16 +110,16 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}
 
-	// Keep the broadcast distribution loop running when a Request falls behind.
-	// Set state messages and the periodic dirty-render tick can be dropped;
-	// other messages require delivery, so an overloaded Request is terminated.
+	// Set frames are coalesced before distribution. Every remaining addressed
+	// frame except the internal Update tick is required, so an overloaded
+	// Request is cancelled instead of silently losing a frame.
 	mustBroadcast := func(msg wire.Message) {
 		for msgCh, rq := range subs {
 			if msg.Dest == nil || rq.wantMessage(&msg) {
 				select {
 				case msgCh <- msg:
 				default:
-					// The internal periodic dirty-render tick, a nil-destination
+					// Only the internal periodic dirty-render tick, a nil-destination
 					// Update (see the updateTicker case below), is safe to drop.
 					// distributeDirt has already moved the dirty selectors into Requests'
 					// pending-dirt lists and cleared the global set, so the
@@ -127,13 +128,11 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 					// without it: a Request already in its process loop is woken by the
 					// message that filled the channel and drains todoDirt on the next pass,
 					// and one still starting up (subscribed before onConnect) drains
-					// todoDirt on its first pass without needing a wake. Set frames
-					// may be lost under overload. A dropped parent value can prevent
-					// later child-path writes from applying until a parent or root
-					// update or re-render. Other addressed messages are one-shot and
-					// must not be dropped, including tag-targeted Update and
-					// Session.Close's key-targeted wake-up.
-					if msg.What != what.Set && (msg.What != what.Update || msg.Dest != nil) {
+					// todoDirt on its first pass without needing a wake. Every addressed
+					// message is one-shot and must not be silently dropped — including a
+					// tag-targeted Update and the key-targeted Update wake-up from
+					// Session.Close — so an overloaded Request is failed-fast instead.
+					if msg.What != what.Update || msg.Dest != nil {
 						killSub(msgCh)
 						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 					}
@@ -148,6 +147,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			normalShutdown = true
 			return
 		case <-jw.updateTicker.C:
+			sets.flush(mustBroadcast)
 			if jw.distributeDirt() > 0 {
 				mustBroadcast(wire.Message{What: what.Update})
 			}
@@ -162,7 +162,10 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			killSub(msgCh)
 		case msg, ok := <-jw.bcastCh:
 			if ok {
-				mustBroadcast(msg)
+				if msg.What != what.Set || !sets.add(msg) {
+					sets.flush(mustBroadcast)
+					mustBroadcast(msg)
+				}
 			}
 		}
 	}

@@ -23,17 +23,10 @@ var ErrServeAlreadyRunning = errors.New("serve loop already running")
 // implementations share one error identity.
 var ErrValueUnchanged = errors.New("value unchanged")
 
-// ErrRequestOverloaded indicates a [Request] was torn down because it could not keep
-// up with the messages addressed to it.
+// ErrRequestOverloaded indicates that a [Request] could not keep up with its messages.
 //
-// A Request is overloaded when its buffered broadcast channel fills for a
-// required message or its internal event-call channel fills. An internal
-// nil-destination [github.com/linkdata/jaws/lib/what.Update] tick and
-// [github.com/linkdata/jaws/lib/what.Set] state message may be dropped from a
-// full broadcast channel without cancelling the Request. See [Jaws.Broadcast]
-// for the effect of a dropped Set. The cancellation cause reachable via
-// [context.Cause] on [Request.Context] wraps this sentinel, so it can be matched
-// with [errors.Is]; the wrapped text identifies which channel overflowed.
+// The cancellation cause reachable via [context.Cause] on [Request.Context]
+// wraps this sentinel, so callers can match it with [errors.Is].
 var ErrRequestOverloaded = errors.New("request overloaded")
 
 // ErrValueNotFinite indicates that a [Request] was cancelled by a non-finite UI value.

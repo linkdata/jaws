@@ -314,6 +314,11 @@ Several bindings may share a name. A browser write fans out to every live
 binding of that name; a removed binding stops receiving it. If several bindings
 share one non-idempotent backing value, that write is applied once per binding.
 
+Each accepted write changes Go state immediately. JaWS batches outbound path
+updates up to its 100 ms update tick. Each batch sends the latest value for each
+destination and path. Distinct paths remain partial updates. Applicable generic
+browser writes still run ClientCheck individually.
+
 The server rejects the exact top-level name `__proto__`; the browser rejects that
 exact component anywhere in a dotted `jawsVar` path. Names share the page global
 namespace, so use an application-owned top-level symbol and dotted suffixes for
@@ -324,11 +329,6 @@ it when the binding element attaches. Browser writes before the WebSocket opens
 are not queued, and server broadcasts are not replayed to a rendered page that
 has not subscribed. Applications needing convergence must define a handshake,
 resend, merge, or browser-authoritative policy.
-
-A full recipient broadcast channel may drop a `Set` without disconnecting that
-Request. The browser can remain stale; if the dropped value established a parent
-object, later child-path writes can fail. A parent or root update or re-render
-can resynchronize it.
 
 ### JSON representation
 
