@@ -76,7 +76,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	maintenanceInterval := min(requestTimeout/2, maxInterval)
 	maintenanceInterval = max(maintenanceInterval, minInterval)
 
-	subs := map[any]*Request{}
+	subs := map[chan wire.Message]*Request{}
 	t := jw.newMaintenanceTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
@@ -85,21 +85,13 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	// Seed the seconds counter so it is accurate from the first request, then keep
 	// it fresh on every maintenance tick (see the case below).
 	jw.refreshRuntimeSeconds()
-	closeSub := func(id any) {
-		switch sub := id.(type) {
-		case chan wire.Message:
-			close(sub)
-		case *broadcastQueue:
-			sub.close()
-		}
-	}
 
 	normalShutdown := false
 	defer func() {
 		t.Stop()
-		for sub, rq := range subs {
+		for ch, rq := range subs {
 			rq.cancel(nil)
-			closeSub(sub)
+			close(ch)
 		}
 		// Only the Done case below is a normal shutdown. A panic can race Close;
 		// waiting here while it unwinds could hide that panic behind a blocked
@@ -110,35 +102,40 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}()
 
-	killSub := func(id any) {
-		if _, ok := subs[id]; ok {
-			delete(subs, id)
-			closeSub(id)
+	killSub := func(msgCh chan wire.Message) {
+		if _, ok := subs[msgCh]; ok {
+			delete(subs, msgCh)
+			close(msgCh)
 		}
 	}
 
-	// Keep distribution nonblocking. A full live queue replaces pending Sets
-	// for the same destination and path, or drops one with no pending match.
-	// A one-shot message displaces the oldest pending Set when full. A
-	// nil-destination Update tick carries no payload after distributeDirt queues
-	// the work. Other one-shot overloads require cancellation.
+	// Keep the broadcast distribution loop running when a Request falls behind.
+	// State Set messages and the periodic dirty-render tick can be dropped;
+	// other messages require delivery, so an overloaded Request is terminated.
 	mustBroadcast := func(msg wire.Message) {
-		for id, rq := range subs {
+		for msgCh, rq := range subs {
 			if msg.Dest == nil || rq.wantMessage(&msg) {
-				var overloaded bool
-				switch sub := id.(type) {
-				case chan wire.Message:
-					select {
-					case sub <- msg:
-					default:
-						overloaded = broadcastOverloadCancels(msg)
+				select {
+				case msgCh <- msg:
+				default:
+					// The internal periodic dirty-render tick, a nil-destination
+					// Update (see the updateTicker case below), is safe to drop.
+					// distributeDirt has already moved the dirty selectors into Requests'
+					// pending-dirt lists and cleared the global set, so the
+					// tick carries no payload;
+					// it only nudges the Request. The pending dirt is still rendered
+					// without it: a Request already in its process loop is woken by the
+					// message that filled the channel and drains todoDirt on the next pass,
+					// and one still starting up (subscribed before onConnect) drains
+					// todoDirt on its first pass without needing a wake. A Set carries
+					// replaceable state: a slow peer may miss the last value for a path
+					// until another write or re-render, but remains connected. Other
+					// addressed messages are one-shot and must not be dropped, including
+					// tag-targeted Update and Session.Close's key-targeted wake-up.
+					if msg.What != what.Set && (msg.What != what.Update || msg.Dest != nil) {
+						killSub(msgCh)
+						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 					}
-				case *broadcastQueue:
-					overloaded = sub.offer(msg)
-				}
-				if overloaded {
-					rq.cancel(fmt.Errorf("%w: %v: broadcast buffer full sending %s", ErrRequestOverloaded, rq, msg.String()))
-					killSub(id)
 				}
 			}
 		}
@@ -159,13 +156,9 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		case sub := <-jw.subCh:
 			if sub.msgCh != nil {
 				subs[sub.msgCh] = sub.rq
-			} else if sub.queue != nil {
-				subs[sub.queue] = sub.rq
 			}
 		case msgCh := <-jw.unsubCh:
 			killSub(msgCh)
-		case queue := <-jw.unsubQueueCh:
-			killSub(queue)
 		case msg, ok := <-jw.bcastCh:
 			if ok {
 				mustBroadcast(msg)
@@ -196,24 +189,6 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 	select {
 	case <-jw.Done():
 	case jw.unsubCh <- msgCh:
-	}
-}
-
-func (jw *Jaws) subscribeQueue(rq *Request, size int) *broadcastQueue {
-	queue := newBroadcastQueue(size)
-	select {
-	case <-jw.Done():
-		queue.close()
-		return nil
-	case jw.subCh <- subscription{queue: queue, rq: rq}:
-	}
-	return queue
-}
-
-func (jw *Jaws) unsubscribeQueue(queue *broadcastQueue) {
-	select {
-	case <-jw.Done():
-	case jw.unsubQueueCh <- queue:
 	}
 }
 

@@ -64,7 +64,6 @@ const (
 
 type subscription struct {
 	msgCh chan wire.Message
-	queue *broadcastQueue
 	rq    *Request
 }
 
@@ -150,7 +149,6 @@ type Jaws struct {
 	bcastCh                 chan wire.Message
 	subCh                   chan subscription
 	unsubCh                 chan chan wire.Message
-	unsubQueueCh            chan *broadcastQueue
 	newMaintenanceTicker    func(time.Duration) *time.Ticker
 	updateTicker            *time.Ticker
 	serving                 atomic.Bool
@@ -202,7 +200,6 @@ func New() (jw *Jaws, err error) {
 				bcastCh:                 make(chan wire.Message, 1),
 				subCh:                   make(chan subscription),
 				unsubCh:                 make(chan chan wire.Message),
-				unsubQueueCh:            make(chan *broadcastQueue),
 				newMaintenanceTicker:    time.NewTicker,
 				updateTicker:            time.NewTicker(DefaultUpdateInterval),
 				kg:                      bufio.NewReader(rand.Reader),

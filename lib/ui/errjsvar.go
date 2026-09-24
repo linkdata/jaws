@@ -23,9 +23,8 @@ func (errIllegalJsVarName) Is(target error) bool {
 	return target == ErrIllegalJsVarName
 }
 
-// ErrJsVarArgumentType is returned when [RequestWriter.JsVar] receives an
-// argument that is neither a JaWS UI nor a [JsVarMaker].
-var ErrJsVarArgumentType = errors.New("expected jaws.UI or JsVarMaker")
+// ErrJsVarArgumentType is returned when [RequestWriter.JsVar] receives a nil UI.
+var ErrJsVarArgumentType = errors.New("expected non-nil jaws.UI")
 
 // ErrJsVarTooLarge reports a failed client-writable JsVar size check.
 //

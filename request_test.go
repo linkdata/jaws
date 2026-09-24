@@ -3237,7 +3237,7 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 		unsubDone <- <-jw.unsubCh
 	}()
 	go func() {
-		rq.process(bcastCh, nil, inCh, outCh)
+		rq.process(bcastCh, inCh, outCh)
 		close(done)
 	}()
 	cancel()
@@ -4561,17 +4561,17 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 			rq.SetConnectFn(tt.connectFn)
 
 			type subscriptionPair struct {
-				subscribed   *broadcastQueue
-				unsubscribed *broadcastQueue
+				subscribed   chan wire.Message
+				unsubscribed chan wire.Message
 			}
 			cleanupCh := make(chan subscriptionPair, 1)
 			go func() {
 				select {
 				case sub := <-jw.subCh:
 					select {
-					case queue := <-jw.unsubQueueCh:
-						sub.queue.close()
-						cleanupCh <- subscriptionPair{subscribed: sub.queue, unsubscribed: queue}
+					case msgCh := <-jw.unsubCh:
+						close(sub.msgCh)
+						cleanupCh <- subscriptionPair{subscribed: sub.msgCh, unsubscribed: msgCh}
 					case <-jw.Done():
 					}
 				case <-jw.Done():
@@ -4604,10 +4604,10 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 			select {
 			case cleanup := <-cleanupCh:
 				if cleanup.subscribed == nil {
-					t.Fatal("subscribed queue is nil")
+					t.Fatal("subscribed channel is nil")
 				}
 				if cleanup.unsubscribed != cleanup.subscribed {
-					t.Fatalf("unsubscribed queue %p, want %p", cleanup.unsubscribed, cleanup.subscribed)
+					t.Fatalf("unsubscribed channel %p, want %p", cleanup.unsubscribed, cleanup.subscribed)
 				}
 			case <-ctx.Done():
 				t.Fatal("ConnectFn subscription was not released")

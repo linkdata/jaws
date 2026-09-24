@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -175,20 +177,6 @@ func (d *jsVarPathHooks) JawsSetPath(elem *jaws.Element, _ string, value any) er
 
 func (d *jsVarPathHooks) JawsPathSet(elem *jaws.Element, jsPath string, value any) {
 	d.pathSetCall++
-}
-
-type testJsVarMaker struct{}
-
-func (testJsVarMaker) JawsMakeJsVar(rq *jaws.Request) (IsJsVar, error) {
-	var mu sync.Mutex
-	v := jsVarData{Text: "maker", Num: 1}
-	return NewJsVar(&mu, &v), nil
-}
-
-type errorJsVarMaker struct{}
-
-func (errorJsVarMaker) JawsMakeJsVar(rq *jaws.Request) (IsJsVar, error) {
-	return nil, errors.New("maker error")
 }
 
 func htmlAttrValue(t *testing.T, htmlText, name string) string {
@@ -542,6 +530,104 @@ func TestJsVar_SetBroadcastsWirePayload(t *testing.T) {
 	}
 }
 
+func TestJsVar_WriteBurstKeepsSlowPeerConnected(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	go jw.Serve()
+
+	source := jawstest.NewTestRequest(jw, nil)
+	peer := jawstest.NewTestRequest(jw, nil)
+	if source == nil || peer == nil {
+		t.Fatal("expected two test requests")
+	}
+	t.Cleanup(func() {
+		jw.Close()
+		source.Close()
+		peer.Close()
+		<-source.DoneCh
+		<-peer.DoneCh
+	})
+	<-source.ReadyCh
+	<-peer.ReadyCh
+
+	var mu sync.Mutex
+	state := jsVarData{}
+	store := NewJsVarStore(&mu, &state)
+	sourceVar := store.NewJsVar()
+	peerVar := store.NewJsVar()
+	sourceElem := source.NewElement(sourceVar)
+	peerElem := peer.NewElement(peerVar)
+	if err = sourceElem.JawsRender(io.Discard, []any{"state"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = peerElem.JawsRender(io.Discard, []any{"state"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range 1024 {
+		writer, elem := peerVar, peerElem
+		if i%2 != 0 {
+			writer, elem = sourceVar, sourceElem
+		}
+		if err = writer.JawsSetPath(elem, "num", i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source.DeleteElement(sourceElem)
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			t.Fatal("peer did not receive the latest coordinate")
+		case msg := <-peer.OutCh:
+			if msg.What == what.Set && msg.Data == "num=1024" {
+				if err := peer.Context().Err(); err != nil {
+					t.Fatalf("peer disconnected: %v", err)
+				}
+				return
+			}
+		}
+	}
+}
+
+func TestJsVar_PendingPathsCoalesce(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, rq := newCoreRequest(t)
+		defer jw.Close()
+		var mu sync.Mutex
+		state := jsVarData{}
+		jsvar := NewJsVar(&mu, &state)
+		elem := rq.NewElement(jsvar)
+		if err := elem.JawsRender(io.Discard, []any{"state"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := jsvar.JawsSetPath(elem, "text", "first"); err != nil {
+			t.Fatal(err)
+		}
+		if err := jsvar.JawsSetPath(elem, "num", 7); err != nil {
+			t.Fatal(err)
+		}
+		if err := jsvar.JawsSetPath(elem, "text", "last"); err != nil {
+			t.Fatal(err)
+		}
+
+		jsvar.setMu.Lock()
+		defer jsvar.setMu.Unlock()
+		if len(jsvar.pending.updates) != 2 {
+			t.Fatalf("pending paths = %d, want 2", len(jsvar.pending.updates))
+		}
+		text := jsvar.pending.updates[jsVarPendingKey{jaws: jw, path: "text"}]
+		num := jsvar.pending.updates[jsVarPendingKey{jaws: jw, path: "num"}]
+		if text.msg.Data != `text="last"` || num.msg.Data != "num=7" || text.order <= num.order {
+			t.Fatalf("pending text = %#v, num = %#v; want latest values in write order", text, num)
+		}
+	})
+}
+
 // TestJsVar_SetBeforeRenderDoesNotBroadcast verifies that a JawsSet/JawsSetPath
 // on a JsVar that has not yet been rendered produces no broadcast. Before the
 // first render the dirty tag is nil, and a what.Set with a nil Dest would target
@@ -732,19 +818,17 @@ func TestJsVar_PathHooksAndRequestWriter(t *testing.T) {
 	if err := rw.JsVar("direct", jsv); err != nil {
 		t.Fatal(err)
 	}
-	if err := rw.JsVar("maker", testJsVarMaker{}); err != nil {
+	store := NewJsVarStore(&mu, &v)
+	if err := rw.JsVar("store", store.NewJsVar()); err != nil {
 		t.Fatal(err)
-	}
-	if err := rw.JsVar("bad", errorJsVarMaker{}); err == nil || err.Error() != "maker error" {
-		t.Fatalf("expected maker error, got %v", err)
 	}
 	if err := rw.JsVar("bad.name", jsv); !errors.Is(err, ErrIllegalJsVarName) {
 		t.Fatalf("expected ErrIllegalJsVarName, got %v", err)
 	}
-	if err := rw.JsVar("badtype", 123); !errors.Is(err, ErrJsVarArgumentType) {
+	if err := rw.JsVar("nil", nil); !errors.Is(err, ErrJsVarArgumentType) {
 		t.Fatalf("expected ErrJsVarArgumentType, got %v", err)
 	}
-	if got := sb.String(); !strings.Contains(got, `data-jawsname="direct"`) || !strings.Contains(got, `data-jawsname="maker"`) {
+	if got := sb.String(); !strings.Contains(got, `data-jawsname="direct"`) || !strings.Contains(got, `data-jawsname="store"`) {
 		t.Fatalf("unexpected jsvar output %q", got)
 	}
 }

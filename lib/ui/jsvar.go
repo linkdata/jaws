@@ -64,18 +64,17 @@ type PathSetter interface {
 	// implementation must not lock or unlock the JsVar, nor call its locked
 	// accessors such as [JsVar.JawsGet] or [JsVar.JawsSet].
 	//
-	// When an accepted update is broadcast, the JsVar marshals value before
-	// releasing that write lock. Custom marshaling callbacks reachable from value,
-	// including MarshalJSON and MarshalText, must not acquire the same locker or
-	// re-enter the JsVar.
+	// When an accepted update is queued for broadcast, the JsVar marshals value
+	// before releasing that write lock. Custom marshaling callbacks reachable
+	// from value, including MarshalJSON and MarshalText, must not acquire the
+	// same locker or re-enter the JsVar.
 	//
 	// If an implementation panics, the calling JsVar releases its write lock
 	// before propagating the panic.
 	JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error)
 }
 
-// SetPather is notified after a nested JSON path value has been set and
-// broadcast.
+// SetPather is notified after a nested JSON path value has been queued for broadcast.
 type SetPather interface {
 	// JawsPathSet notifies that a JSON object member identified by jsPath has been set
 	// to the given value and the change has been queued for broadcast.
@@ -93,15 +92,6 @@ type IsJsVar interface {
 	jaws.UI
 	jaws.InputHandler
 	PathSetter
-}
-
-// JsVarMaker creates a request-scoped JavaScript variable binding.
-//
-// JawsMakeJsVar must return a fresh [IsJsVar] for each call. The returned value
-// is scoped to rq and one live [jaws.Element]. Bindings may share synchronized
-// backing state, but the binding values themselves must remain distinct.
-type JsVarMaker interface {
-	JawsMakeJsVar(rq *jaws.Request) (value IsJsVar, err error)
 }
 
 var (
@@ -172,10 +162,12 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 //
 // A JsVar is request-scoped and must not be rendered by more than one
 // [jaws.Request]. Within that request, it must back at most one live
-// [jaws.Element]. Construct a fresh JsVar for each binding, either directly
-// while rendering or through [JsVarMaker]. Distinct JsVar values may use the
-// same locker and Ptr to expose synchronized application state to multiple
-// Elements or requests.
+// [jaws.Element]. Create a fresh JsVar for each binding with [NewJsVar] or
+// [JsVarStore.NewJsVar] while rendering.
+// Distinct JsVar values may use the same locker and Ptr to expose synchronized
+// application state to multiple Elements or requests. Bindings created from
+// one [JsVarStore] also share a pending path batch, so writes through them
+// coalesce. A zero-value JsVar is not ready for use.
 //
 // JsVar is intended for JSON-marshalable state shared with application
 // JavaScript. The browser binding reads and writes the window property named
@@ -256,28 +248,28 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // value to initialize the browser variable. A browser call to the JavaScript
 // jawsVar function sends only while its WebSocket is open; an earlier call is
 // not queued for later transmission. [JsVar.JawsSet] and [JsVar.JawsSetPath]
-// broadcast only to matching active requests, so an update is not replayed to a
-// page between its initial render and its broadcast subscription. Applications
-// that require the two sides to converge after either can change the value
-// during that interval must reconcile it explicitly.
+// queue path broadcasts for matching active requests. A JsVar sends at most one
+// batch per [jaws.DefaultUpdateInterval]; repeated writes to the same path in a
+// batch send only the latest requested value. Different paths retain the order
+// of their latest writes. A batch is not replayed to a page that subscribes
+// after it is sent. An overloaded recipient may drop a Set and remain stale
+// until another write or re-render; see [jaws.Jaws.Broadcast]. Applications
+// that require convergence across initial render and subscription must
+// reconcile it explicitly.
 //
-// On a full Request queue, a write replaces pending writes to the same
-// destination and path. If none are pending, that Request misses the write and
-// its browser value may remain stale until another write or re-render. A
-// one-shot message may also displace a pending write.
+// It is safe for concurrent use when the locker passed to [NewJsVar] or
+// [NewJsVarStore] is safe for concurrent use. Concurrent writes are applied one
+// at a time. Broadcasts for different paths preserve the order of their latest
+// writes. This concurrency guarantee does not permit one JsVar to be shared
+// between requests.
 //
-// It is safe for concurrent use when the locker passed to [NewJsVar] is safe
-// for concurrent use. Concurrent writes are applied one at a time. Any
-// broadcasts they produce preserve the order in which the writes modify the
-// bound value. This concurrency guarantee does not permit one JsVar to be
-// shared between requests.
-//
-// Rendering and write broadcasts invoke JSON marshalers while the locker passed
-// to [NewJsVar] is held. Custom marshaling callbacks reached in either case,
+// Rendering and queued path writes invoke JSON marshalers while the bound
+// value's locker is held. Custom marshaling callbacks reached in either case,
 // including MarshalJSON and MarshalText, must not acquire that locker or re-enter
 // the JsVar.
 //
 // A JsVar must not be copied after first use.
+// Do not reassign Ptr or RWLocker after construction.
 //
 // SECURITY: a JsVar is client-writable. Incoming browser "set" messages are
 // applied by path to the bound value. If the bound value implements [PathSetter],
@@ -311,10 +303,11 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // client writes to a single boolean field.
 type JsVar[T any] struct {
 	bind.RWLocker
-	Ptr         *T            // bound Go value
+	Ptr         *T            // bound Go value; may be nil
 	ClientCheck JsVarCheck[T] // optional check for generic browser writes; configure before first use
-	setMu       sync.Mutex    // serializes each mutation with its broadcast
 	dirtyTag    any           // current dirty tag, set during render; read via JawsGetTag
+	setMu       *sync.Mutex
+	pending     *jsVarPendingSet
 }
 
 // JawsGetPath returns the value at jsPath.
@@ -391,7 +384,7 @@ func (jsvar *JsVar[T]) setPathAndMarshal(elem *jaws.Element, jsPath string, valu
 	return
 }
 
-func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any, clientWrite bool) (broadcasted, checkRejected, pathSetter bool, err error) {
+func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any, clientWrite bool) (queued, checkRejected, pathSetter bool, err error) {
 	jsvar.setMu.Lock()
 	defer jsvar.setMu.Unlock()
 
@@ -410,12 +403,12 @@ func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any,
 	// JawsGet returns. If peers must observe a transformed stored value, the
 	// application must reject the input or reconcile after the callback.
 	if err == nil && changed && elem != nil && dirtyTag != nil {
-		elem.Jaws.Broadcast(wire.Message{
+		jsvar.pending.queue(jsvar.setMu, elem.Jaws, jsPath, wire.Message{
 			Dest: dirtyTag,
 			What: what.Set,
 			Data: jsPath + "=" + string(data),
 		})
-		broadcasted = true
+		queued = true
 	}
 	return
 }
@@ -430,10 +423,10 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 	if strings.ContainsAny(jsPath, "\t\n\r=") {
 		return ErrIllegalJsVarPath
 	}
-	var broadcasted bool
+	var queued bool
 	var checkRejected bool
 	var pathSetter bool
-	broadcasted, checkRejected, pathSetter, err = jsvar.setPathLock(elem, jsPath, value, clientWrite)
+	queued, checkRejected, pathSetter, err = jsvar.setPathLock(elem, jsPath, value, clientWrite)
 	if clientWrite && pathSetter && err != nil && errors.Is(err, jaws.ErrValueUnchanged) {
 		err = nil
 	}
@@ -444,7 +437,7 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 			elem.Request.Cancel(cause)
 		}
 	}
-	if err == nil && broadcasted {
+	if err == nil && queued {
 		if sp, ok := any(jsvar.Ptr).(SetPather); ok {
 			sp.JawsPathSet(elem, jsPath, value)
 		}
@@ -452,7 +445,8 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 	return
 }
 
-// JawsSetPath sets the value at jsPath and broadcasts the change when possible.
+// JawsSetPath sets the value at jsPath and queues its broadcast.
+//
 // It is a programmatic server-side write, so it does not invoke
 // [JsVar.ClientCheck].
 //
@@ -462,9 +456,9 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // JsVar has acquired a dirty tag from rendering also produces no broadcast; its
 // initial render seeds the value via the data-jawsdata attribute.
 //
-// The broadcast targets matching active requests only. It is not replayed to a
-// page between its initial render and its broadcast subscription; see [JsVar]
-// for the synchronization model.
+// The broadcast reaches matching active requests when its batch is sent. It is
+// not replayed to a page between its initial render and its broadcast
+// subscription; see [JsVar] for the synchronization model.
 //
 // The browser receives the JSON encoding of value, not a re-encoding of the
 // destination field after assignment. Applications using an encoded
@@ -482,7 +476,7 @@ func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any)
 	return jsvar.setPath(elem, jsPath, value, false)
 }
 
-// JawsSet replaces the root value and broadcasts the change.
+// JawsSet replaces the root value and queues its broadcast.
 //
 // It has the same delivery and marshaling semantics as [JsVar.JawsSetPath].
 func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
@@ -617,10 +611,11 @@ func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 // The pointer v may be nil; reads then return the zero value, rendering omits the
 // initial data, and writes return [github.com/linkdata/jq.ErrInvalidReceiver].
 // Create a fresh JsVar for each live [jaws.Element]; l and v may be shared by
-// distinct request-scoped JsVar values. Use [JsVarMaker] when construction
-// depends on the current request or the maker is stored in shared handler data.
+// distinct request-scoped JsVar values. Each call uses a private pending batch.
+// Use [NewJsVarStore] when writes through distinct bindings over v should share
+// one pending path batch.
 func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
+	return NewJsVarStore(l, v).NewJsVar()
 }
 
 func isNilUI(ui jaws.UI) (yes bool) {
@@ -639,26 +634,19 @@ func isNilUI(ui jaws.UI) (yes bool) {
 // See [JsVar] for the bidirectional binding and synchronization semantics,
 // including how a name shared by several live bindings is routed.
 //
-// It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
+// It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved, and
+// [ErrJsVarArgumentType] if jsvar is nil.
 //
-// A directly supplied [JsVar] must be scoped to rw.Request. You can instead pass
-// a [JsVarMaker], which is useful when the maker is stored in handler or template
-// data shared by multiple requests.
-func (rw RequestWriter) JsVar(jsvarName string, jsvar any, params ...any) (err error) {
+// Create a fresh [JsVar] for rw.Request, for example with
+// [JsVarStore.NewJsVar] when the backing state is shared across requests.
+func (rw RequestWriter) JsVar(jsvarName string, jsvar jaws.UI, params ...any) (err error) {
 	if _, err = validateJsVarName([]any{jsvarName}); err == nil {
-		if jvm, ok := jsvar.(JsVarMaker); ok {
-			jsvar, err = jvm.JawsMakeJsVar(rw.Request)
-		}
-		if err == nil {
-			err = ErrJsVarArgumentType
-			if ui, ok := jsvar.(jaws.UI); ok {
-				if !isNilUI(ui) {
-					var newparams []any
-					newparams = append(newparams, jsvarName)
-					newparams = append(newparams, params...)
-					err = rw.NewUI(ui, newparams...)
-				}
-			}
+		err = ErrJsVarArgumentType
+		if !isNilUI(jsvar) {
+			var newparams []any
+			newparams = append(newparams, jsvarName)
+			newparams = append(newparams, params...)
+			err = rw.NewUI(jsvar, newparams...)
 		}
 	}
 	return

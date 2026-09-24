@@ -1119,7 +1119,7 @@ func TestJsVarPathSetterUnchangedErrorInspectedOutsideLocks(t *testing.T) {
 	var mu sync.Mutex
 	state := jsVarErrorPathSetter{}
 	jsvar := NewJsVar(&mu, &state)
-	probe := &jsVarIsLockProbeError{mu: &mu, setMu: &jsvar.setMu, match: jaws.ErrValueUnchanged}
+	probe := &jsVarIsLockProbeError{mu: &mu, setMu: jsvar.setMu, match: jaws.ErrValueUnchanged}
 	state.err = probe
 
 	if err := jsvar.JawsInput(nil, `value=1`); err != nil {
@@ -1134,7 +1134,7 @@ func TestJsVarClientCheckSizeErrorInspectedOutsideLocks(t *testing.T) {
 	var mu sync.Mutex
 	state := jsVarCheckedState{Value: "old"}
 	jsvar := NewJsVar(&mu, &state)
-	probe := &jsVarIsLockProbeError{mu: &mu, setMu: &jsvar.setMu, match: ErrJsVarTooLarge}
+	probe := &jsVarIsLockProbeError{mu: &mu, setMu: jsvar.setMu, match: ErrJsVarTooLarge}
 	jsvar.ClientCheck = func(*jsVarCheckedState, string) error {
 		return probe
 	}
