@@ -467,9 +467,6 @@ func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, cli
 // page between its initial render and its broadcast subscription; see [JsVar]
 // for the synchronization model.
 //
-// [jaws.Jaws.Broadcast] batches path updates by destination and path; see
-// [JsVar] for the timing and ordering rules.
-//
 // The browser receives the JSON encoding of value, not a re-encoding of the
 // destination field after assignment. Applications using an encoded
 // representation such as decimal strings must pass that representation in value.

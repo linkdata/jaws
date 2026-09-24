@@ -314,10 +314,8 @@ Several bindings may share a name. A browser write fans out to every live
 binding of that name; a removed binding stops receiving it. If several bindings
 share one non-idempotent backing value, that write is applied once per binding.
 
-Each accepted write changes Go state immediately. JaWS batches outbound path
-updates up to its 100 ms update tick. Each batch sends the latest value for each
-destination and path. Distinct paths remain partial updates. Applicable generic
-browser writes still run ClientCheck individually.
+See [JsVar](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#JsVar) for
+delivery timing, partial updates, and client checks.
 
 The server rejects the exact top-level name `__proto__`; the browser rejects that
 exact component anywhere in a dotted `jawsVar` path. Names share the page global

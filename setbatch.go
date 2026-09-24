@@ -40,6 +40,17 @@ func sameSetDest(a, b []any) bool {
 	return true
 }
 
+func sameSetMessageDest(a, b any) bool {
+	if tags, ok := a.([]any); ok {
+		other, ok := b.([]any)
+		return ok && sameSetDest(tags, other)
+	}
+	if _, ok := b.([]any); ok {
+		return false
+	}
+	return a == b
+}
+
 func (batch *setBatch) add(msg wire.Message) (batched bool) {
 	path, _, batched := strings.Cut(msg.Data, "=")
 	if !batched {
@@ -75,8 +86,29 @@ func (batch *setBatch) flush(send func(wire.Message)) {
 	slices.SortFunc(batch.entries, func(a, b setBatchEntry) int {
 		return cmp.Compare(a.order, b.order)
 	})
-	for _, entry := range batch.entries {
-		send(entry.msg)
+	for i := 0; i < len(batch.entries); {
+		msg := batch.entries[i].msg
+		j := i + 1
+		dataLen := len(msg.Data)
+		for j < len(batch.entries) && sameSetMessageDest(msg.Dest, batch.entries[j].msg.Dest) {
+			dataLen += 1 + len(batch.entries[j].msg.Data)
+			j++
+		}
+		if j > i+1 {
+			var data strings.Builder
+			data.Grow(dataLen)
+			for k := i; k < j; k++ {
+				if k > i {
+					data.WriteByte('\n')
+				}
+				data.WriteString(batch.entries[k].msg.Data)
+			}
+			// Newlines separate Sets only inside the server. handleBroadcast
+			// splits them back into individual WebSocket messages.
+			msg.Data = data.String()
+		}
+		send(msg)
+		i = j
 	}
 	batch.index = nil
 	batch.entries = nil

@@ -195,6 +195,14 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			}
 		case what.Update:
 			elem.JawsUpdate()
+		case what.Set:
+			for data := range strings.SplitSeq(tagmsg.Data, "\n") {
+				rq.queue(wire.WsMsg{
+					Data: data,
+					Jid:  elem.Jid(),
+					What: what.Set,
+				})
+			}
 		default:
 			rq.queue(wire.WsMsg{
 				Data: tagmsg.Data,
