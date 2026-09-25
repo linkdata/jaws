@@ -365,9 +365,10 @@ func (jw *Jaws) RequestCount() (n int) {
 //
 // Log is safe for concurrent use, including with [Jaws.Close]. A nil receiver or
 // nil err is not counted or delivered. Log always returns err. The queue holds at
-// most 4096 pending reports. Once it drains, the Logger receives a summary of
-// reports dropped while it was full. Callers must not mutate state exposed by err
-// concurrently after passing it; accepted errors are retained for delivery.
+// most 4096 pending reports. After the reports already pending when dropping
+// began are delivered, the Logger receives a summary of dropped reports. Callers
+// must not mutate state exposed by err concurrently after passing it; accepted
+// errors are retained for delivery.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil {
 		jw.reportedErrors.Add(1)

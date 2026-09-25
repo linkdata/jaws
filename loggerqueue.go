@@ -24,6 +24,7 @@ type loggerQueue struct {
 	depth         int
 	dropped       uint64
 	droppedLogger Logger
+	summaryAfter  int // queued reports ahead of the first drop
 	doneCh        chan struct{}
 	closed        bool
 }
@@ -47,6 +48,7 @@ func (q *loggerQueue) enqueue(logger Logger, err error) {
 	if q.depth >= maxQueuedLogs {
 		if q.dropped == 0 {
 			q.droppedLogger = logger
+			q.summaryAfter = q.depth
 		}
 		q.dropped++
 		q.mu.Unlock()
@@ -78,18 +80,20 @@ func (q *loggerQueue) pop() (entry *queuedLog) {
 	for q.head == nil && q.dropped == 0 && !q.closed {
 		q.ready.Wait()
 	}
-	entry = q.head
-	if entry != nil {
-		q.head = entry.next
-		entry.next = nil
-		q.depth--
-		if q.head == nil {
-			q.tail = nil
-		}
-	} else if q.dropped > 0 {
+	if q.dropped > 0 && q.summaryAfter == 0 {
 		entry = &queuedLog{logger: q.droppedLogger, err: fmt.Errorf("jaws: %d diagnostics dropped", q.dropped)}
 		q.dropped = 0
 		q.droppedLogger = nil
+	} else if entry = q.head; entry != nil {
+		q.head = entry.next
+		entry.next = nil
+		q.depth--
+		if q.summaryAfter > 0 {
+			q.summaryAfter--
+		}
+		if q.head == nil {
+			q.tail = nil
+		}
 	}
 	q.mu.Unlock()
 	return

@@ -99,3 +99,67 @@ func TestJawsLogBoundsQueueAndReportsDrops(t *testing.T) {
 		})
 	}
 }
+
+type steppedQueueLogger struct {
+	started chan error
+	release chan struct{}
+}
+
+func (*steppedQueueLogger) Info(string, ...any) {}
+func (*steppedQueueLogger) Warn(string, ...any) {}
+
+func (l *steppedQueueLogger) Error(_ string, args ...any) {
+	l.started <- loggerError(args)
+	<-l.release
+}
+
+func TestJawsLogReportsDropsBeforeLaterAcceptedReports(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := &steppedQueueLogger{
+		started: make(chan error, maxQueuedLogs+3),
+		release: make(chan struct{}),
+	}
+	jw.Logger = logger
+	released := false
+	defer func() {
+		if !released {
+			close(logger.release)
+		}
+		jw.Close()
+		<-jw.loggerQueue.doneCh
+	}()
+
+	first := errors.New("in flight")
+	_ = jw.Log(first)
+	if got := <-logger.started; got != first {
+		t.Fatalf("first Logger.Error = %v, want %v", got, first)
+	}
+	queued := make([]error, maxQueuedLogs)
+	for i := range queued {
+		queued[i] = fmt.Errorf("queued %d", i)
+		_ = jw.Log(queued[i])
+	}
+	_ = jw.Log(errors.New("discarded"))
+	logger.release <- struct{}{}
+	if got := <-logger.started; got != queued[0] {
+		t.Fatalf("queued Logger.Error[0] = %v, want %v", got, queued[0])
+	}
+	later := errors.New("accepted after drop")
+	_ = jw.Log(later)
+	close(logger.release)
+	released = true
+	for i, want := range queued[1:] {
+		if got := <-logger.started; got != want {
+			t.Fatalf("queued Logger.Error[%d] = %v, want %v", i+1, got, want)
+		}
+	}
+	if got := <-logger.started; got == nil || got.Error() != "jaws: 1 diagnostics dropped" {
+		t.Fatalf("drop summary = %v", got)
+	}
+	if got := <-logger.started; got != later {
+		t.Fatalf("later Logger.Error = %v, want %v", got, later)
+	}
+}
