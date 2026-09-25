@@ -20,22 +20,18 @@ import (
 // Broadcast queues msg for delivery to [Request] and [Element] values selected
 // by [wire.Message.Dest].
 //
-// [what.Set] messages containing a path and value are batched up to the next
-// [DefaultUpdateInterval] tick. Each batch sends the latest value for each
-// expanded destination and path, with different paths in last-write order.
-// A non-Set broadcast flushes pending Sets first.
+// [what.Set] messages with path=value data are batched until the next
+// [DefaultUpdateInterval] tick or queued non-Set message. Each batch keeps the
+// last Set for each expanded destination selection and path, in last-write order.
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
 // [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
-// A [wire.Message.What] of [what.Replace] or [what.Remove] is rejected (as
-// [ErrReplaceNotBroadcastable] or [ErrRemoveNotBroadcastable]) via reportMisuse and
-// nothing is sent: each mutates a specific element's node in a way the broadcast path
-// cannot keep in sync with the server-side registry, stranding the matched [Element]
-// values with no reachable DOM node. Use [Element.Replace], or [Jaws.Delete] / [Element.Remove],
-// for the identity-preserving forms.
+// [what.Replace] and [what.Remove] are reported as [ErrReplaceNotBroadcastable]
+// and [ErrRemoveNotBroadcastable], and are not sent. Use [Element.Replace],
+// [Jaws.Delete], or [Element.Remove] instead.
 //
 // A nil [wire.Message.Dest] targets every active Request; a [key.Key] Dest targets
 // the active Request with that identity key, and a zero key is dropped. Any other

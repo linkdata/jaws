@@ -394,10 +394,6 @@ aliases, and capacity may require a domain-specific check.
 Configure equivalent policies and the same locker on every binding exposing the
 same Ptr or reachable mutable state. One unchecked binding bypasses the policy.
 
-Concurrent writes to one JsVar serialize, and resulting broadcasts retain that
-order. Transport backpressure can delay later writes but does not hold the
-application locker.
-
 ## Container-family widgets
 
 `NewContainer`, `NewTbody`, and `NewSelect` return immutable definition values.

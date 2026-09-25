@@ -40,7 +40,6 @@ func (group setGroup) forRequest(rq *Request) (selected setGroup) {
 }
 
 // setBatch keeps the last Set for each destination and path until a flush.
-// It is owned by the Serve loop, which also owns broadcast order.
 type setBatch struct {
 	entries []setBatchEntry
 	index   map[setBatchKey]int
