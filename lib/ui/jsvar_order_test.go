@@ -7,6 +7,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -106,73 +107,50 @@ func readJsVarSet(t *testing.T, tr *jawstest.TestRequest) (data string) {
 }
 
 func TestJsVarConcurrentBroadcastsKeepLatestMutation(t *testing.T) {
-	jsvar, elem, tr := newOrderedJsVar(t)
+	synctest.Test(t, func(t *testing.T) {
+		jsvar, elem, tr := newOrderedJsVar(t)
 
-	firstEntered := make(chan struct{})
-	releaseFirst := make(chan struct{})
-	firstErr := make(chan error, 1)
-	go func() {
-		firstErr <- jsvar.JawsSetPath(elem, "value", orderedMarshalValue{
-			Text:    "first",
-			Entered: firstEntered,
-			Release: releaseFirst,
-		})
-	}()
-	select {
-	case <-t.Context().Done():
+		firstEntered := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		setErr := make(chan error, 2)
+		go func() {
+			setErr <- jsvar.JawsSetPath(elem, "value", orderedMarshalValue{
+				Text:    "first",
+				Entered: firstEntered,
+				Release: releaseFirst,
+			})
+		}()
+		<-firstEntered
+
+		secondStarted := make(chan struct{})
+		go func() {
+			close(secondStarted)
+			setErr <- jsvar.JawsSetPath(elem, "value", orderedMarshalValue{Text: "second"})
+		}()
+		<-secondStarted
 		close(releaseFirst)
-		t.Fatal("timed out waiting for the first value to enter JSON marshaling")
-	case <-firstEntered:
-	}
 
-	secondErr := make(chan error, 1)
-	go func() {
-		secondErr <- jsvar.JawsSetPath(elem, "value", orderedMarshalValue{Text: "second"})
-	}()
-
-	secondCompleted := false
-	timer := time.NewTimer(100 * time.Millisecond)
-	select {
-	case err := <-secondErr:
-		if err != nil {
-			t.Fatal(err)
-		}
-		secondCompleted = true
-	case <-timer.C:
-	}
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	close(releaseFirst)
-
-	select {
-	case <-t.Context().Done():
-		t.Fatal("timed out waiting for the first JsVar set")
-	case err := <-firstErr:
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if !secondCompleted {
-		select {
-		case <-t.Context().Done():
-			t.Fatal("timed out waiting for the second JsVar set")
-		case err := <-secondErr:
-			if err != nil {
+		for range 2 {
+			if err := <-setErr; err != nil {
 				t.Fatal(err)
 			}
 		}
-	}
 
-	if got := readJsVarSet(t, tr); got != `value="second"` {
-		t.Fatalf("broadcast = %q, want latest mutation", got)
-	}
-	if current := jsvar.JawsGet(elem).Value; current != "second" {
-		t.Fatalf("bound value = %q, want latest mutation %q", current, "second")
-	}
+		synctest.Wait()
+		time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
+		synctest.Wait()
+		if got := readJsVarSet(t, tr); got != `value="second"` {
+			t.Fatalf("broadcast = %q, want latest mutation", got)
+		}
+		select {
+		case msg := <-tr.OutCh:
+			t.Fatalf("unexpected extra broadcast: %#v", msg)
+		default:
+		}
+		if current := jsvar.JawsGet(elem).Value; current != "second" {
+			t.Fatalf("bound value = %q, want latest mutation %q", current, "second")
+		}
+	})
 }
 
 func TestJsVarMarshalErrorReleasesSetterOrder(t *testing.T) {
