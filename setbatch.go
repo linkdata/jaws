@@ -19,7 +19,7 @@ type setBatchEntry struct {
 	order uint64
 }
 
-// setGroup is one internal broadcast carrying ordered Sets for one Request.
+// setGroup carries one flush's Sets in write order; forRequest selects one Request's share.
 type setGroup []wire.Message
 
 func (group setGroup) forRequest(rq *Request) (selected setGroup) {
