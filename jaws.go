@@ -154,7 +154,8 @@ type Jaws struct {
 	// which is the default. Existing Sessions remain usable at the limit;
 	// [Jaws.SessionMiddleware] returns HTTP 429 for new ones unless the global
 	// cap is also reached. The bucket uses the client IP selected by
-	// [Jaws.TrustForwardedHeaders].
+	// [Jaws.TrustForwardedHeaders]. [Jaws.NewSession] needs a free slot to replace
+	// an existing Session in the bucket.
 	MaxSessionsPerIP int
 	// MaxPendingRequestsPerIP limits unclaimed Requests per client address bucket.
 	//

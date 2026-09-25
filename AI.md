@@ -295,6 +295,8 @@ cleanup.
 Sessions per client address bucket. Set it below `MaxSessions` to reserve
 capacity for other buckets. A full bucket makes `SessionMiddleware` return HTTP
 429 while existing Sessions remain usable; the global 503 takes precedence.
+`NewSession` needs a free slot under each enabled cap to replace a Session;
+rotation at a full bucket returns nil and keeps the old Session.
 Without this cap, one client making cookie-less requests can fill `MaxSessions`.
 Clients in one bucket share the cap, and clients using multiple addresses
 can still exhaust the global cap. Rate-limit Session-creating routes at the proxy.

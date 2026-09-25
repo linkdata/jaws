@@ -664,6 +664,51 @@ func TestSession_MaxSessionsPerIP(t *testing.T) {
 	}
 }
 
+func TestSession_MaxSessionsPerIPRotationNeedsSlot(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.MaxSessions = 3
+	jw.MaxSessionsPerIP = 2
+	serveDone := make(chan struct{})
+	go func() {
+		jw.Serve()
+		close(serveDone)
+	}()
+	t.Cleanup(func() {
+		jw.Close()
+		<-serveDone
+	})
+	waitForServeLoop(t, jw)
+
+	newRequest := func() *http.Request {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/login", nil)
+		r.RemoteAddr = "192.0.2.1:1234"
+		return r
+	}
+	first := jw.NewSession(nil, newRequest())
+	second := jw.NewSession(nil, newRequest())
+	if first == nil || second == nil {
+		t.Fatalf("Sessions before cap: first=%p, second=%p", first, second)
+	}
+	first.Set("login", "kept")
+	rotation := newRequest()
+	rotation.AddCookie(first.Cookie())
+	if got := jw.NewSession(nil, rotation); got != nil {
+		t.Fatalf("rotation at per-IP cap = %p, want nil", got)
+	}
+	if got := jw.GetSession(rotation); got != first || got.Get("login") != "kept" {
+		t.Fatalf("Session after refused rotation = %p, value %v", got, got.Get("login"))
+	}
+
+	first.Close()
+	if got := jw.NewSession(nil, newRequest()); got == nil || jw.SessionCount() != 2 {
+		t.Fatalf("NewSession after Close = %p, sessions=%d", got, jw.SessionCount())
+	}
+}
+
 func TestSession_MaxSessionsPerIPBuckets(t *testing.T) {
 	tests := []struct {
 		name, first, same, other string

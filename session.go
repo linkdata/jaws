@@ -400,6 +400,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
 // publication fails; w may be nil.
 //
+// Replacing a Session requires a free slot under each enabled limit until the
+// new cookie is published and the old Session is closed.
+//
 // It panics if the [crypto/rand.Reader] captured by [New] returns an error while
 // generating the session ID. Go's default reader does not return errors.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
