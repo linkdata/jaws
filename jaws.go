@@ -241,10 +241,10 @@ func New() (jw *Jaws, err error) {
 // Calls to [Jaws.NewRequest] after shutdown begins return Requests with
 // already-canceled contexts that [Jaws.UseRequest] cannot claim. Broadcasts and
 // sends may be discarded after Done closes. Close stops accepting errors for
-// Logger delivery. Accepted errors continue draining asynchronously; later
-// [Jaws.Log] calls are counted but not delivered. On normal return after shutdown,
-// [Jaws.Serve] and [Jaws.ServeWithTimeout] wait for the drain. Subsequent calls to
-// Close have no effect.
+// Logger delivery. Accepted errors and any pending drop summary continue draining
+// asynchronously; later [Jaws.Log] calls are counted but not delivered. On normal
+// return after shutdown, [Jaws.Serve] and [Jaws.ServeWithTimeout] wait for the
+// drain. Subsequent calls to Close have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()
 	select {
@@ -356,18 +356,19 @@ func (jw *Jaws) RequestCount() (n int) {
 
 // Log reports an error and returns err.
 //
-// Each non-nil err increments [Jaws.ErrorCount]. A nil Logger or a report after
-// [Jaws.Done] closes prevents delivery but not counting. Reports accepted for
-// Logger delivery are dispatched asynchronously and FIFO-serialized for each
-// Jaws instance. Logger.Error runs without JaWS core locks and may re-enter the
+// Each non-nil err increments [Jaws.ErrorCount]. A nil Logger, a full queue, or a
+// report after [Jaws.Done] closes prevents delivery but not counting. Reports
+// accepted for Logger delivery are dispatched asynchronously in FIFO order for
+// each Jaws instance. Logger.Error runs without JaWS core locks and may re-enter the
 // same Jaws subject to the normal lifecycle rules. A panic from Logger.Error is
 // recovered by the logging dispatcher.
 //
 // Log is safe for concurrent use, including with [Jaws.Close]. A nil receiver or
-// nil err is not counted or delivered. Log always returns err. The queue applies
-// no capacity backpressure, so errors accumulate in memory when Logger.Error does
-// not keep pace. Log retains err for delivery; callers must not mutate state
-// exposed by err concurrently after passing it.
+// nil err is not counted or delivered. Log always returns err. The queue holds at
+// most 4096 pending reports. After the reports already pending when dropping
+// began are delivered, the Logger receives a summary of dropped reports. Callers
+// must not mutate state exposed by err concurrently after passing it; accepted
+// errors are retained for delivery.
 func (jw *Jaws) Log(err error) error {
 	if err != nil && jw != nil {
 		jw.reportedErrors.Add(1)

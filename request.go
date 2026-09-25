@@ -647,7 +647,7 @@ func (rq *Request) cancelLocked(err error) (cause error) {
 	return
 }
 
-// cancel locks rq.mu, cancels the context, and queues the cancellation cause
+// cancel locks rq.mu, cancels the context, and reports the cancellation cause
 // ([Jaws.Log] is a no-op on a nil cause).
 func (rq *Request) cancel(err error) {
 	rq.mu.Lock()
@@ -657,7 +657,7 @@ func (rq *Request) cancel(err error) {
 
 // Cancel aborts the Request.
 //
-// It cancels the Request's context with the given cause (queued via [Jaws.Log]);
+// It cancels the Request's context with the given cause (reported via [Jaws.Log]);
 // the WebSocket processing loop and its goroutines observe the cancelled context and
 // shut down asynchronously. Cancel returns immediately and does not wait for teardown
 // or logging.
@@ -704,7 +704,7 @@ func (rq *Request) Alert(level, msg string) {
 	}
 }
 
-// AlertError queues err via [Jaws.Log] and, if it is non-nil, also shows it to
+// AlertError reports err via [Jaws.Log] and, if it is non-nil, also shows it to
 // the current request as a danger-level [Request.Alert].
 func (rq *Request) AlertError(err error) {
 	if rq.Jaws.Log(err) != nil {

@@ -60,10 +60,9 @@ func (jw *Jaws) getWebSocketTimeout() (t time.Duration) {
 // for probe scheduling.
 //
 // It is intended to run on its own goroutine and returns when [Jaws.Close] is
-// called. Errors reported through [Jaws.Log] are queued without waiting for
-// Logger.Error. On a normal return after shutdown, ServeWithTimeout waits for
-// every log entry accepted before [Jaws.Close] to finish. A blocked Logger.Error
-// callback therefore delays that return.
+// called. [Jaws.Log] does not wait for Logger.Error. On a normal return after
+// shutdown, ServeWithTimeout waits for accepted log entries and any drop summary
+// to finish. A blocked Logger.Error callback therefore delays that return.
 func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	if !jw.serving.CompareAndSwap(false, true) {
 		jw.reportMisuse(ErrServeAlreadyRunning)
