@@ -4161,6 +4161,7 @@ func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
 		{"HTTP page", "http", "", false},
 		{"HTTPS scheme on both requests", "https", "https", true},
 		{"HTTPS scheme only on page", "https", "", true},
+		{"HTTPS scheme only on upgrade", "http", "https", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			jw, err := New()
