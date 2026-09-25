@@ -197,15 +197,15 @@ type errTooManyPendingRequests struct {
 }
 
 func (e errTooManyPendingRequests) Error() string {
-	return fmt.Sprintf("too many pending requests from %v (limit %d)", e.Addr, e.Limit)
+	return fmt.Sprintf("too many pending requests in bucket %v (limit %d)", e.Addr, e.Limit)
 }
 
 func (e errTooManyPendingRequests) Is(target error) bool {
 	return target == ErrTooManyPendingRequests
 }
 
-func newErrTooManyPendingRequests(remoteIP netip.Addr, limit int) error {
-	return errTooManyPendingRequests{Addr: remoteIP, Limit: limit}
+func newErrTooManyPendingRequests(bucketKey netip.Addr, limit int) error {
+	return errTooManyPendingRequests{Addr: bucketKey, Limit: limit}
 }
 
 // ErrNoWebSocketRequest is reported when [Jaws.ServeWithTimeout] retires a

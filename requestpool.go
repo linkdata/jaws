@@ -40,9 +40,9 @@ import (
 // processing starts; [Jaws.Serve] uses [DefaultWebSocketTimeout].
 //
 // When [Jaws.MaxPendingRequestsPerIP] is positive and a bucket is full,
-// NewRequest retires the oldest idle pending Request from that IPv4 address or
-// IPv6 /64. If every pending Request was created or written recently, it retires
-// the least recently written one so the maximum is never exceeded.
+// NewRequest retires the oldest idle pending Request from that bucket. If every
+// pending Request was created or written recently, it retires the least recently
+// written one so the maximum is never exceeded.
 //
 // Clients in the same bucket share the limit and eviction pool, including those
 // behind a shared NAT or a proxy without [Jaws.TrustForwardedHeaders].
@@ -65,9 +65,16 @@ func (jw *Jaws) NewRequest(w http.ResponseWriter, r *http.Request) *Request {
 	return jw.newRequest(r)
 }
 
-// pendingBucketKey uses the IPv4 address or the IPv6 /64 of addr.
+var wellKnownNAT64Prefix = netip.MustParsePrefix("64:ff9b::/96")
+
+// pendingBucketKey uses the embedded IPv4 address for the well-known NAT64 prefix.
+// Other IPv6 addresses share a /64; IPv4 addresses use their full address.
 func pendingBucketKey(addr netip.Addr) netip.Addr {
 	addr = addr.Unmap()
+	if wellKnownNAT64Prefix.Contains(addr) {
+		a := addr.As16()
+		return netip.AddrFrom4([4]byte(a[12:]))
+	}
 	if addr.Is6() {
 		return netip.PrefixFrom(addr, 64).Masked().Addr()
 	}
@@ -76,6 +83,7 @@ func pendingBucketKey(addr netip.Addr) netip.Addr {
 
 func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
+	bucketKey := pendingBucketKey(remoteIP)
 
 	func() {
 		jw.mu.Lock()
@@ -90,7 +98,7 @@ func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 		case <-jw.closeCh:
 			closed = true
 		default:
-			jw.limitPendingRequestsLocked(remoteIP)
+			jw.limitPendingRequestsLocked(bucketKey)
 		}
 		for rq == nil {
 			jawsKey := jw.nonZeroRandomLocked()
@@ -101,7 +109,6 @@ func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 				} else {
 					jw.requests[jawsKey] = rq
 					jw.requestCount++
-					bucketKey := pendingBucketKey(rq.remoteIP)
 					jw.pending[bucketKey] = append(jw.pending[bucketKey], rq)
 					jw.markStatusDirty(StatusMetricPendingRequests)
 				}
@@ -126,20 +133,19 @@ func (jw *Jaws) refreshRuntimeSeconds() {
 	jw.runtimeSeconds.Store(int32(time.Since(jw.created) / time.Second)) // #nosec G115 -- intentional relative-time counter
 }
 
-// limitPendingRequestsLocked evicts pending Requests from remoteIP's bucket until
+// limitPendingRequestsLocked evicts pending Requests from bucketKey until
 // the cap is satisfied. Caller must hold jw.mu.
-func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
+func (jw *Jaws) limitPendingRequestsLocked(bucketKey netip.Addr) {
 	// Evicting rather than refusing a newcomer keeps a stalled client from
 	// blocking the bucket until timeout. See "Pending-cap availability tradeoff"
 	// in AI.md.
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
-		bucketKey := pendingBucketKey(remoteIP)
 		nowSeconds := jw.runtimeSeconds.Load()
 		for len(jw.pending[bucketKey]) >= limit {
 			before := len(jw.pending[bucketKey])
 			victim := jw.pendingEvictionVictimLocked(bucketKey, nowSeconds)
-			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
+			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(bucketKey, limit)); cause != nil {
 				_ = jw.Log(cause)
 			}
 			if len(jw.pending[bucketKey]) >= before {

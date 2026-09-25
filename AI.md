@@ -379,19 +379,23 @@ registered or still-reachable retired Requests are not reassigned; reuse after a
 retired Request becomes unreachable has no timing guarantee.
 
 Unclaimed Requests retire periodically, after 10 seconds by default. JaWS also
-limits them per IPv4 address or IPv6 /64. `MaxPendingRequestsPerIP` defaults to
-100; a non-positive value disables the cap. At the cap, a new Request evicts
-the oldest idle pending Request for that bucket, or the least recently written
-one when all are fresh. The evicted key cannot be claimed.
+limits them by IPv4 address or IPv6 /64. Addresses in the well-known NAT64
+prefix `64:ff9b::/96` use their embedded IPv4 address.
+`MaxPendingRequestsPerIP` defaults to 100; a non-positive value disables the cap.
+At the cap, a new Request evicts the oldest idle pending Request for that bucket,
+or the least recently written one when all are fresh. The evicted key cannot be
+claimed.
 
 #### Pending-cap availability tradeoff
 
 The pending cap is a resource and admission-liveness policy, not logical-client
-isolation. Its bucket key is the IPv4 address or IPv6 /64 derived from `clientIP`:
+isolation. Its bucket key comes from `clientIP`:
 users behind the same NAT or CGNAT share a bucket, as do IPv6 clients in one /64
 and users behind a reverse proxy when `TrustForwardedHeaders` is disabled. A
 controlled proxy should supply sanitized forwarding headers and enable that
-option; it cannot separate users who share an accounted bucket.
+option; it cannot separate users who share an accounted bucket. A translator
+using a network-specific IPv6 prefix needs a proxy that supplies the original
+IPv4 address, since JaWS cannot infer it from the prefix.
 
 Evicting an existing pending Request instead of refusing the newcomer is
 deliberate. A JavaScript-capable client normally claims its key immediately after
