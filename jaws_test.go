@@ -2738,6 +2738,11 @@ func TestJaws_clientIP(t *testing.T) {
 			mustIP("198.51.100.4"),
 		},
 		{
+			"trailing comma does not walk left", true, "203.0.113.9:443",
+			http.Header{"X-Forwarded-For": {"198.51.100.7,"}},
+			mustIP("203.0.113.9"),
+		},
+		{
 			"trusted falls back to RemoteAddr when headers invalid", true, "203.0.113.9:443",
 			http.Header{"X-Forwarded-For": {"not-an-ip"}, "X-Real-Ip": {"garbage"}},
 			mustIP("203.0.113.9"),

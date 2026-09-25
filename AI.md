@@ -479,6 +479,9 @@ header line, or the rightmost address in the last `X-Real-IP` line when
 `X-Forwarded-For` is absent or invalid. If both valid addresses identify
 different IPs, JaWS uses the transport peer.
 
+The proxy must set or remove both headers; if it controls only one, a client
+can choose between its own address and the proxy's.
+
 ### Authorization
 
 Templates rendered through `ui.With` receive an `Auth` value. `Jaws.MakeAuth`
