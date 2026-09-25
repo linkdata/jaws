@@ -144,6 +144,9 @@ type InputHandler interface {
 	// The bundled client sends input and set messages only while its WebSocket is
 	// open and does not queue them for later delivery. Native changes that emit
 	// neither input nor change do not invoke JawsInput.
+	//
+	// [ErrEventUnhandled] tries the next handler. Other non-nil errors are logged
+	// and queued as danger alerts when possible during Request event processing.
 	JawsInput(elem *Element, value string) (err error)
 }
 

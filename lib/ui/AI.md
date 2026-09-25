@@ -376,7 +376,13 @@ mutate or retain tentative state, re-enter the JsVar, call a path setter, acquir
 the same locker, or return/wrap `jaws.ErrEventUnhandled`. A nil result commits;
 an error rolls back without a broadcast. The browser already changed locally,
 so an ordinary rejection can leave it divergent until application
-resynchronization. A check using `jq.Get` cannot inspect an explicitly named
+resynchronization.
+
+Generic setter errors use a generic browser alert and retain
+detail in the operator log; any alert for a `ClientCheck` or `PathSetter` error
+retains its text.
+
+A check using `jq.Get` cannot inspect an explicitly named
 unexported anonymous struct at its own endpoint after a tentative write beneath
 it; inspect a longer exported-field path or the Go value directly.
 

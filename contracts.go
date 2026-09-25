@@ -139,6 +139,9 @@ type ClickHandler interface {
 	// found while walking from the event target up through its ancestors. If none
 	// is found it falls back to the event target's HTML id, so it is empty only
 	// when the target has no id either.
+	//
+	// [ErrEventUnhandled] tries the next handler. Other non-nil errors are logged
+	// and queued as danger alerts when possible during Request event processing.
 	JawsClick(elem *Element, click Click) (err error)
 }
 
@@ -153,6 +156,9 @@ type ContextMenuHandler interface {
 	//
 	// Events that occur while the bundled client's WebSocket is not open are not
 	// forwarded or replayed.
+	//
+	// [ErrEventUnhandled] tries the next handler. Other non-nil errors are logged
+	// and queued as danger alerts when possible during Request event processing.
 	JawsContextMenu(elem *Element, click Click) (err error)
 }
 

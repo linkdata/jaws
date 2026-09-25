@@ -233,7 +233,8 @@ func newErrNoWebSocketRequest(rq *Request) error {
 //
 // Match it with [errors.Is]. When the recovered panic value is itself an error it is
 // available via Unwrap (and thus [errors.As] / [errors.Is]); a non-error panic value
-// appears only in the formatted message.
+// appears only in the formatted message. Request event processing logs the full
+// error and queues a generic browser alert.
 var ErrEventHandlerPanic errEventHandlerPanic
 
 type errEventHandlerPanic struct {
@@ -246,6 +247,11 @@ type errEventHandlerPanic struct {
 
 func (e errEventHandlerPanic) Error() string {
 	return fmt.Sprintf("jaws: %v panic: %v", e.Type, e.Value)
+}
+
+// JawsClientAlert returns the browser message for a recovered handler panic.
+func (errEventHandlerPanic) JawsClientAlert() string {
+	return "event handler failed"
 }
 
 func (errEventHandlerPanic) Is(target error) bool {

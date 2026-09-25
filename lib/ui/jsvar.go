@@ -366,6 +366,9 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 	} else {
 		changed, err = jq.Set(jsvar.Ptr, jsPath, value)
 	}
+	if clientWrite && err != nil && !checkRejected && !pathSetter {
+		err = errJsVarClientWrite{err}
+	}
 	if err == nil && !changed && !clientWrite {
 		err = jaws.ErrValueUnchanged
 	}
@@ -595,6 +598,10 @@ func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
 // ClientCheck validates the tentative Go state. An accepted broadcast still
 // carries the decoded browser value, which may differ after jq conversion or
 // map-to-struct field selection; see [JsVarCheck].
+//
+// During Request event processing, generic setter failures are logged with
+// detail but queued as "invalid JsVar update" browser alerts. Errors returned by
+// ClientCheck or [PathSetter] retain their text in any queued alert.
 func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
 	err = jaws.ErrEventUnhandled
 	if jsPath, jsValue, found := strings.Cut(value, "="); found {

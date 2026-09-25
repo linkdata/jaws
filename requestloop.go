@@ -198,7 +198,7 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			// client as an alert message.
 			if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
 				var m wire.WsMsg
-				m.FillAlert(err)
+				m.FillAlert(eventAlertError(err))
 				m.Jid = elem.Jid()
 				rq.queue(m)
 			}
@@ -550,7 +550,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 		}
 		if err := rq.Jaws.Log(call.invoke()); err != nil {
 			var m wire.WsMsg
-			m.FillAlert(err)
+			m.FillAlert(eventAlertError(err))
 			// This error alert is best-effort: unlike queueEvent, which cancels the
 			// Request with ErrRequestOverloaded when its channel fills (dropping a
 			// queued event could desync browser and backend state), a dropped alert
@@ -564,6 +564,20 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			}
 		}
 	}
+}
+
+// clientAlertError is an internal marker for library errors with safe browser text.
+type clientAlertError interface {
+	JawsClientAlert() string
+}
+
+// eventAlertError limits browser alerts for library errors that carry internal detail.
+func eventAlertError(err error) error {
+	var safe clientAlertError
+	if errors.As(err, &safe) {
+		return errors.New(safe.JawsClientAlert())
+	}
+	return err
 }
 
 // onConnect calls the [Request]'s [ConnectFn] if it is not nil, and returns the error from it.

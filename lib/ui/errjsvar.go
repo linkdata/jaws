@@ -42,3 +42,20 @@ var ErrJsVarTooLarge = errors.New("jsvar: JSON size check failed")
 // return, or equals sign, without applying or broadcasting the change.
 // [JsVar.JawsInput] applies the same check to incoming browser writes.
 var ErrIllegalJsVarPath = errors.New("jsvar: path contains illegal protocol byte (tab, newline, carriage return or equals)")
+
+type errJsVarClientWrite struct {
+	cause error
+}
+
+func (e errJsVarClientWrite) Error() string {
+	return e.cause.Error()
+}
+
+func (e errJsVarClientWrite) Unwrap() error {
+	return e.cause
+}
+
+// JawsClientAlert returns the browser message for a generic JsVar write failure.
+func (errJsVarClientWrite) JawsClientAlert() string {
+	return "invalid JsVar update"
+}
