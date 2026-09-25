@@ -188,7 +188,7 @@ func newErrWebSocketIPMismatchLocked(rq *Request, actual netip.Addr) error {
 }
 
 // ErrTooManyPendingRequests indicates an older pending Request was evicted
-// because its client IP had reached [Jaws.MaxPendingRequestsPerIP].
+// because its client's pending bucket reached [Jaws.MaxPendingRequestsPerIP].
 var ErrTooManyPendingRequests errTooManyPendingRequests
 
 type errTooManyPendingRequests struct {

@@ -2,7 +2,7 @@ package jaws
 
 // This file manages server-side Request lifecycles: NewRequest creates a pending
 // Request with a fresh, never-reused identity and reusable buffers, UseRequest
-// claims it when the WebSocket connects, the per-IP pending limit retires the
+// claims it when the WebSocket connects, the pending cap retires the
 // oldest unclaimed Request, the random helpers mint identity keys, and
 // recycle/cancelIfCurrent finish completed Requests, returning only their buffers
 // to the pool.
@@ -39,20 +39,19 @@ import (
 // [Jaws.ServeWithTimeout] periodically retires idle Requests before WebSocket
 // processing starts; [Jaws.Serve] uses [DefaultWebSocketTimeout].
 //
-// When [Jaws.MaxPendingRequestsPerIP] is positive and already reached,
-// NewRequest retires the oldest idle pending Request from the same IP. If every
-// pending Request was created or written recently, it retires the least recently
-// written one so the configured maximum is never exceeded.
+// When [Jaws.MaxPendingRequestsPerIP] is positive and a bucket is full,
+// NewRequest retires the oldest idle pending Request from that IPv4 address or
+// IPv6 /64. If every pending Request was created or written recently, it retires
+// the least recently written one so the maximum is never exceeded.
 //
-// Clients whose initial HTTP requests resolve to the same IP share the limit and
-// eviction pool, including clients behind a shared NAT and clients behind a proxy
-// unless [Jaws.TrustForwardedHeaders] is enabled.
+// Clients in the same bucket share the limit and eviction pool, including those
+// behind a shared NAT or a proxy without [Jaws.TrustForwardedHeaders].
 //
 // A Request created after [Jaws.Close] has an already-canceled context and cannot
 // be claimed by [Jaws.UseRequest].
 //
 // Every call returns a distinct Request identity that is never reused for another
-// connection. When timeout maintenance or the per-IP pending limit retires an
+// connection. When timeout maintenance or the pending cap retires an
 // unclaimed Request, its key remains unavailable for assignment to another Request
 // while the retired Request is reachable; no deadline is guaranteed for later key
 // reuse.
@@ -64,6 +63,15 @@ func (jw *Jaws) NewRequest(w http.ResponseWriter, r *http.Request) *Request {
 	// cache reuses the consumed key and prevents another WebSocket connection.
 	w.Header().Set("Cache-Control", headerCacheControlNoStore)
 	return jw.newRequest(r)
+}
+
+// pendingBucketKey uses the IPv4 address or the IPv6 /64 of addr.
+func pendingBucketKey(addr netip.Addr) netip.Addr {
+	addr = addr.Unmap()
+	if addr.Is6() {
+		return netip.PrefixFrom(addr, 64).Masked().Addr()
+	}
+	return addr
 }
 
 func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
@@ -93,7 +101,8 @@ func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 				} else {
 					jw.requests[jawsKey] = rq
 					jw.requestCount++
-					jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+					bucketKey := pendingBucketKey(rq.remoteIP)
+					jw.pending[bucketKey] = append(jw.pending[bucketKey], rq)
 					jw.markStatusDirty(StatusMetricPendingRequests)
 				}
 			}
@@ -117,24 +126,23 @@ func (jw *Jaws) refreshRuntimeSeconds() {
 	jw.runtimeSeconds.Store(int32(time.Since(jw.created) / time.Second)) // #nosec G115 -- intentional relative-time counter
 }
 
-// limitPendingRequestsLocked evicts pending Requests for remoteIP until the cap is
-// satisfied. Caller must hold jw.mu.
+// limitPendingRequestsLocked evicts pending Requests from remoteIP's bucket until
+// the cap is satisfied. Caller must hold jw.mu.
 func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
-	// Evicting instead of refusing the newcomer is deliberate: refusal lets a
-	// stalled or non-JavaScript client fill the bucket and deny every later same-IP
-	// page until entries expire. The IP bucket is a resource bound, not a principal
-	// identity, so shared-address users can evict one another only during the
-	// pending pre-claim window. See "Pending-cap availability tradeoff" in AI.md.
+	// Evicting rather than refusing a newcomer keeps a stalled client from
+	// blocking the bucket until timeout. See "Pending-cap availability tradeoff"
+	// in AI.md.
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
+		bucketKey := pendingBucketKey(remoteIP)
 		nowSeconds := jw.runtimeSeconds.Load()
-		for len(jw.pending[remoteIP]) >= limit {
-			before := len(jw.pending[remoteIP])
-			victim := jw.pendingEvictionVictimLocked(remoteIP, nowSeconds)
+		for len(jw.pending[bucketKey]) >= limit {
+			before := len(jw.pending[bucketKey])
+			victim := jw.pendingEvictionVictimLocked(bucketKey, nowSeconds)
 			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(remoteIP, limit)); cause != nil {
 				_ = jw.Log(cause)
 			}
-			if len(jw.pending[remoteIP]) >= before {
+			if len(jw.pending[bucketKey]) >= before {
 				// Retirement declines a running Request or one that lost registry
 				// identity. Neither can be pending, but if that invariant ever broke
 				// the loop would reselect the same victim forever while holding jw.mu,
@@ -145,13 +153,13 @@ func (jw *Jaws) limitPendingRequestsLocked(remoteIP netip.Addr) {
 	}
 }
 
-// pendingEvictionVictimLocked returns the pending [Request] for remoteIP to
+// pendingEvictionVictimLocked returns the pending [Request] for bucketKey to
 // retire when the pending cap is reached: the oldest one that was not written
 // recently, or the least recently written one when every pending Request is
 // fresh. nowSeconds is the reference instant ([Jaws.runtimeSeconds]), passed in
 // so all candidates are judged against the same instant. Caller must hold jw.mu,
-// and jw.pending[remoteIP] must be non-empty.
-func (jw *Jaws) pendingEvictionVictimLocked(remoteIP netip.Addr, nowSeconds int32) (victim *Request) {
+// and jw.pending[bucketKey] must be non-empty.
+func (jw *Jaws) pendingEvictionVictimLocked(bucketKey netip.Addr, nowSeconds int32) (victim *Request) {
 	// A recently written Request is skipped while an idle eviction victim exists.
 	// RequestWriter.Write records the current second on every write via
 	// Request.MarkWritten, so a Request is treated as possibly rendering while its
@@ -175,7 +183,7 @@ func (jw *Jaws) pendingEvictionVictimLocked(remoteIP netip.Addr, nowSeconds int3
 		spareWindow = time.Second // floor: the seconds counter advances at most once per second
 	}
 	var victimElapsed int32
-	for _, rq := range jw.pending[remoteIP] {
+	for _, rq := range jw.pending[bucketKey] {
 		// Compare as durations (elapsed whole seconds vs the window) to avoid a
 		// lossy time.Duration conversion. A write timestamp newer than this scan's
 		// nowSeconds is fresh; that can happen when a render records a write while
@@ -194,13 +202,14 @@ func (jw *Jaws) pendingEvictionVictimLocked(remoteIP netip.Addr, nowSeconds int3
 }
 
 func (jw *Jaws) removePendingRequestLocked(rq *Request) {
-	pending := jw.pending[rq.remoteIP]
+	bucketKey := pendingBucketKey(rq.remoteIP)
+	pending := jw.pending[bucketKey]
 	if i := slices.Index(pending, rq); i >= 0 {
 		pending = slices.Delete(pending, i, i+1)
 		if len(pending) == 0 {
-			delete(jw.pending, rq.remoteIP)
+			delete(jw.pending, bucketKey)
 		} else {
-			jw.pending[rq.remoteIP] = pending
+			jw.pending[bucketKey] = pending
 		}
 		jw.markStatusDirty(StatusMetricPendingRequests)
 	}
