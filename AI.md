@@ -278,6 +278,10 @@ creation patterns:
 * Enable `Jaws.AutoSession` to create an anonymous session during a successful
   WebSocket upgrade when the Request has none.
 
+`SessionMiddleware` sends `Cache-Control: no-store` on responses carrying
+`Set-Cookie`; responses without one keep the handler's cache policy. Callers
+using `NewSession` directly must prevent shared caching when they send its cookie.
+
 Create or retrieve the session before `NewRequest` when initial rendering or
 authentication depends on it. Later Requests with the same valid cookie and IP
 can access the Session. `Request.Get` returns nil and `Request.Set` is a no-op
@@ -351,8 +355,8 @@ entries and the final drain.
 
 Register `Jaws.ServeHTTP` for the `/jaws/` prefix. It owns these routes:
 
-* `/jaws/.jaws.<hash>.css` -- built-in stylesheet; cache indefinitely.
-* `/jaws/.jaws.<hash>.js` -- built-in client; cache indefinitely.
+* `/jaws/.jaws.<hash>.css` -- built-in stylesheet; publicly cacheable by default.
+* `/jaws/.jaws.<hash>.js` -- built-in client; publicly cacheable by default.
 * `/jaws/<key>` and `/jaws/<key>/noscript` -- single-use Request callback. The
   key must parse to a nonzero value through `key.Parse`; parsing is
   case-insensitive, while generated URLs use canonical lowercase base 32. A

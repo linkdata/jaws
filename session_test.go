@@ -395,6 +395,139 @@ func TestSessionMiddleware_CloseDuringResponseHeader(t *testing.T) {
 	}
 }
 
+func TestSessionMiddlewareCookieAssetCacheControl(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	h := jw.SessionMiddleware(jw.SecureHeadersMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		jw.ServeHTTP(w, r)
+	})))
+
+	for _, tc := range []struct{ name, path string }{
+		{"JavaScript", jw.serveJS.Name},
+		{"CSS", jw.serveCSS.Name},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			response := w.Result()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("asset status = %d, want 200", response.StatusCode)
+			}
+			if got := response.Header.Get("Cache-Control"); got != "no-store" {
+				t.Fatalf("cookie response Cache-Control = %q, want no-store", got)
+			}
+			cookies := response.Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("cookie response has %d cookies, want 1", len(cookies))
+			}
+
+			r := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			r.AddCookie(cookies[0])
+			w = httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			response = w.Result()
+			if got := response.Header.Get("Cache-Control"); !strings.Contains(got, "public") {
+				t.Fatalf("existing session asset Cache-Control = %q, want public", got)
+			}
+			if cookies := response.Cookies(); len(cookies) != 0 {
+				t.Fatalf("existing session asset has %d cookies, want none", len(cookies))
+			}
+		})
+	}
+}
+
+func TestSessionMiddlewareCookieCacheControlOnCommit(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		commit func(http.ResponseWriter) error
+	}{
+		{"Write", func(w http.ResponseWriter) error {
+			_, err := w.Write([]byte("ok"))
+			return err
+		}},
+		{"Flush", func(w http.ResponseWriter) error {
+			return http.NewResponseController(w).Flush()
+		}},
+		{"Flusher", func(w http.ResponseWriter) error {
+			w.(http.Flusher).Flush()
+			return nil
+		}},
+		{"Return", func(http.ResponseWriter) error { return nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(jw.Close)
+			h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Cache-Control", "public, max-age=3600")
+				if err := tc.commit(w); err != nil {
+					t.Error(err)
+				}
+			}))
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+			response := w.Result()
+			if got := response.Header.Get("Cache-Control"); got != "no-store" {
+				t.Fatalf("Cache-Control = %q, want no-store", got)
+			}
+			if cookies := response.Cookies(); len(cookies) != 1 {
+				t.Fatalf("response has %d cookies, want 1", len(cookies))
+			}
+			if tc.name == "Write" && response.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+				t.Fatalf("implicit Write lost content type: %q", response.Header.Get("Content-Type"))
+			}
+		})
+	}
+}
+
+func TestSessionMiddlewareWebSocketUpgrade(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	release := make(chan struct{})
+	accepted := make(chan error, 1)
+	h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		accepted <- err
+		if err == nil {
+			<-release
+			if err := conn.CloseNow(); err != nil {
+				t.Error(err)
+			}
+		}
+	}))
+	server := httptest.NewServer(h)
+	t.Cleanup(server.Close)
+	defer close(release)
+
+	conn, response, err := websocket.Dial(t.Context(), server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := conn.CloseNow(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := <-accepted; err != nil {
+		t.Fatal(err)
+	}
+	if got := response.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("upgrade Cache-Control = %q, want no-store", got)
+	}
+	if cookies := response.Cookies(); len(cookies) != 1 {
+		t.Fatalf("upgrade has %d cookies, want 1", len(cookies))
+	}
+}
+
 func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	jw, err := New()
 	if err != nil {
