@@ -474,10 +474,10 @@ and `Forwarded`, so the proxy must sanitize all of them. Without trusted scheme
 forwarding, a TLS-terminating proxy that talks plain HTTP to JaWS causes
 HTTPS-page WebSocket upgrades to fail with `ErrWebsocketOriginWrongScheme`.
 
-For IP binding, JaWS uses the rightmost `X-Forwarded-For` address across all
-header lines, or the last `X-Real-IP` value when that address is absent or
-invalid. If both valid addresses identify different IPs, JaWS uses the
-transport peer.
+For IP binding, JaWS uses the rightmost address in the last `X-Forwarded-For`
+header line, or the rightmost address in the last `X-Real-IP` line when
+`X-Forwarded-For` is absent or invalid. If both valid addresses identify
+different IPs, JaWS uses the transport peer.
 
 ### Authorization
 

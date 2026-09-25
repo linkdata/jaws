@@ -2733,6 +2733,11 @@ func TestJaws_clientIP(t *testing.T) {
 			mustIP("198.51.100.4"),
 		},
 		{
+			"trusted uses rightmost X-Real-IP address", true, "127.0.0.1:1234",
+			http.Header{"X-Real-Ip": {"203.0.113.9, 198.51.100.4"}},
+			mustIP("198.51.100.4"),
+		},
+		{
 			"trusted falls back to RemoteAddr when headers invalid", true, "203.0.113.9:443",
 			http.Header{"X-Forwarded-For": {"not-an-ip"}, "X-Real-Ip": {"garbage"}},
 			mustIP("203.0.113.9"),

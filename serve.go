@@ -288,32 +288,30 @@ func (jw *Jaws) clientIP(r *http.Request) (ip netip.Addr) {
 
 // forwardedClientIP extracts the client IP from proxy-supplied headers.
 // It uses the rightmost X-Forwarded-For address across all header lines, falling
-// back to the last X-Real-IP value. Conflicting valid addresses yield no forwarded IP.
-func forwardedClientIP(h http.Header) (netip.Addr, bool) {
-	var xffIP netip.Addr
-	if xff := h.Values("X-Forwarded-For"); len(xff) > 0 {
-		last := xff[len(xff)-1]
-		last = last[strings.LastIndexByte(last, ',')+1:]
-		if ip, err := netip.ParseAddr(textproto.TrimString(last)); err == nil {
-			xffIP = ip
+// back to X-Real-IP. Conflicting valid addresses yield no forwarded IP.
+func forwardedClientIP(h http.Header) (ip netip.Addr, ok bool) {
+	xff := lastHeaderIP(h.Values("X-Forwarded-For"))
+	xrip := lastHeaderIP(h.Values("X-Real-Ip"))
+	switch {
+	case xff.IsValid() && xrip.IsValid() && xff.Unmap() != xrip.Unmap():
+		return
+	case xff.IsValid():
+		ip, ok = xff, true
+	case xrip.IsValid():
+		ip, ok = xrip, true
+	}
+	return
+}
+
+// lastHeaderIP parses the rightmost comma-separated element of the last value.
+func lastHeaderIP(values []string) (ip netip.Addr) {
+	if len(values) > 0 {
+		last := values[len(values)-1]
+		if parsed, err := netip.ParseAddr(textproto.TrimString(last[strings.LastIndexByte(last, ',')+1:])); err == nil {
+			ip = parsed
 		}
 	}
-	var realIP netip.Addr
-	if xrip := h.Values("X-Real-Ip"); len(xrip) > 0 {
-		if ip, err := netip.ParseAddr(textproto.TrimString(xrip[len(xrip)-1])); err == nil {
-			realIP = ip
-		}
-	}
-	if xffIP.IsValid() {
-		if realIP.IsValid() && xffIP.Unmap() != realIP.Unmap() {
-			return netip.Addr{}, false
-		}
-		return xffIP, true
-	}
-	if realIP.IsValid() {
-		return realIP, true
-	}
-	return netip.Addr{}, false
+	return
 }
 
 // The setup subsystem turns resource extras into handler registrations and head
