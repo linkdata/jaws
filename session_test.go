@@ -542,15 +542,8 @@ func TestSession_MaxSessionsRefusesWithoutEviction(t *testing.T) {
 		t.Fatal(err)
 	}
 	jw.MaxSessions = 1
-	serveDone := make(chan struct{})
-	go func() {
-		jw.Serve()
-		close(serveDone)
-	}()
-	t.Cleanup(func() {
-		jw.Close()
-		<-serveDone
-	})
+	go jw.Serve()
+	t.Cleanup(jw.Close)
 	waitForServeLoop(t, jw)
 
 	firstRequest := httptest.NewRequest(http.MethodGet, "/first", nil)
@@ -599,15 +592,8 @@ func TestSession_MaxSessionsPerIP(t *testing.T) {
 	}
 	jw.MaxSessions = 2
 	jw.MaxSessionsPerIP = 1
-	serveDone := make(chan struct{})
-	go func() {
-		jw.Serve()
-		close(serveDone)
-	}()
-	t.Cleanup(func() {
-		jw.Close()
-		<-serveDone
-	})
+	go jw.Serve()
+	t.Cleanup(jw.Close)
 	waitForServeLoop(t, jw)
 
 	newRequest := func(ip string) *http.Request {
@@ -671,15 +657,8 @@ func TestSession_MaxSessionsPerIPRotationNeedsSlot(t *testing.T) {
 	}
 	jw.MaxSessions = 3
 	jw.MaxSessionsPerIP = 2
-	serveDone := make(chan struct{})
-	go func() {
-		jw.Serve()
-		close(serveDone)
-	}()
-	t.Cleanup(func() {
-		jw.Close()
-		<-serveDone
-	})
+	go jw.Serve()
+	t.Cleanup(jw.Close)
 	waitForServeLoop(t, jw)
 
 	newRequest := func() *http.Request {

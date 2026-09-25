@@ -148,12 +148,11 @@ type Jaws struct {
 	MaxSessions int
 	// MaxSessionsPerIP limits registered Sessions per client address bucket.
 	//
-	// Buckets are those of [Jaws.MaxPendingRequestsPerIP] and use the client IP
-	// selected by [Jaws.TrustForwardedHeaders]. All registered Sessions count,
-	// including active ones and those awaiting cleanup. A non-positive value
-	// disables the cap, which is the default. Existing Sessions remain usable at
-	// the limit; [Jaws.SessionMiddleware] returns HTTP 429 for new ones unless
-	// the global cap is also reached.
+	// Buckets match [Jaws.MaxPendingRequestsPerIP] and use the client IP selected
+	// by [Jaws.TrustForwardedHeaders]. A non-positive value disables the cap,
+	// which is the default. Existing Sessions remain usable at the limit;
+	// [Jaws.SessionMiddleware] returns HTTP 429 for new ones if global capacity
+	// remains.
 	MaxSessionsPerIP int
 	// MaxPendingRequestsPerIP limits unclaimed Requests per client address bucket.
 	//

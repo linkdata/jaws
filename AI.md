@@ -284,22 +284,22 @@ can access the Session. `Request.Get` returns nil and `Request.Set` is a no-op
 when no Session exists. `Jaws.Close` invalidates every Session, clears its data,
 and prevents new Session creation.
 
-Maintenance removes expired Sessions every tenth pass. `MaxSessions` limits
-registered Sessions; zero disables it. When admission hits the global limit,
-`NewSession` returns nil and `SessionMiddleware` responds with HTTP 503 without
-calling its handler. `AutoSession` may leave the Request without one; use
-`SessionMiddleware` when a session is required. Expired Sessions count until
-cleanup.
+Maintenance checks Session expiry every tenth pass; expired Sessions count
+until cleanup. `MaxSessions` caps registered Sessions globally, while
+`MaxSessionsPerIP` caps them per client address bucket. Both default to zero
+(disabled). Set the per-IP cap below the global cap to reserve capacity for
+other buckets. `SessionMiddleware` skips its handler and returns HTTP 429 at
+the per-IP cap while global capacity remains, or HTTP 503 at the global cap
+or on other creation failure.
+Existing Sessions remain usable. `NewSession` returns nil when creation fails;
+`AutoSession` may leave a Request without one, so use the middleware when a
+Session is required. Rotation needs a free slot under each enabled cap and
+preserves the old Session on refusal.
 
-`MaxSessionsPerIP` defaults to zero (disabled) and counts all registered
-Sessions per client address bucket. Set it below `MaxSessions` to reserve
-capacity for other buckets. A full bucket makes `SessionMiddleware` return HTTP
-429 while existing Sessions remain usable; the global 503 takes precedence.
-`NewSession` needs a free slot under each enabled cap to replace a Session;
-rotation at a full bucket returns nil and keeps the old Session.
-Without this cap, one client making cookie-less requests can fill `MaxSessions`.
-Clients in one bucket share the cap, and clients using multiple addresses
-can still exhaust the global cap. Rate-limit Session-creating routes at the proxy.
+One client making cookie-less requests can fill `MaxSessions`; a per-IP cap
+limits one bucket, but shared addresses share that limit and clients using
+multiple addresses can still exhaust the global cap. Rate-limit
+Session-creating routes at the proxy.
 
 Loopback addresses are treated as the same client so a loopback reverse proxy
 does not break binding. If all traffic reaches JaWS from loopback, binding is
