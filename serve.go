@@ -616,6 +616,8 @@ func (jw *Jaws) serveTailScript(w http.ResponseWriter, r *http.Request) (handled
 			// and finishing the Request both need the write lock.
 			jw.mu.RLock()
 			rq := jw.requests[jawsKey]
+			// Match the WebSocket's client-IP binding so a leaked key cannot
+			// consume another client's one-shot tail.
 			if rq != nil && (!equalIP(remoteIP, rq.remoteIP) || rq.loadState() == reqRunning) {
 				rq = nil
 			}
