@@ -372,7 +372,7 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // through Jaws session lookups.
 func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 	jw := rq.Jaws
-	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
+	secure := secureheaders.RequestIsSecure(rq.Initial(), jw.TrustForwardedHeaders)
 	remoteIP := jw.clientIP(r)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()

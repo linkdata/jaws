@@ -4151,6 +4151,64 @@ func TestWS_AutoSessionCreatesSession(t *testing.T) {
 	}
 }
 
+func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		pageScheme    string
+		upgradeScheme string
+		wantSecure    bool
+	}{
+		{"HTTP page", "http", "", false},
+		{"HTTPS scheme on both requests", "https", "https", true},
+		{"HTTPS scheme only on page", "https", "", true},
+		{"HTTPS scheme only on upgrade", "http", "https", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			jw.AutoSession = true
+			jw.TrustForwardedHeaders = true
+			go jw.Serve()
+			t.Cleanup(jw.Close)
+			server := httptest.NewServer(jw)
+			t.Cleanup(server.Close)
+			u, err := url.Parse(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			page := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
+			page.Header.Set("X-Forwarded-For", "203.0.113.9")
+			page.Header.Set("X-Forwarded-Proto", tc.pageScheme)
+			rq := jw.NewRequest(httptest.NewRecorder(), page)
+			header := http.Header{}
+			header.Set("Origin", tc.pageScheme+"://"+u.Host)
+			header.Set("X-Forwarded-For", "203.0.113.9")
+			if tc.upgradeScheme != "" {
+				header.Set("X-Forwarded-Proto", tc.upgradeScheme)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
+			defer cancel()
+			conn, resp, err := websocket.Dial(ctx, server.URL+"/jaws/"+rq.JawsKeyString(), &websocket.DialOptions{HTTPHeader: header})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = conn.CloseNow() }()
+			if resp.StatusCode != http.StatusSwitchingProtocols {
+				t.Fatalf("status = %d, want 101", resp.StatusCode)
+			}
+			cookies := resp.Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("AutoSession cookies = %v, want one", cookies)
+			}
+			if cookies[0].Secure != tc.wantSecure {
+				t.Fatalf("AutoSession cookie Secure = %v, want %v", cookies[0].Secure, tc.wantSecure)
+			}
+		})
+	}
+}
+
 func TestWS_AutoSessionDoesNotCreateAfterJawsClose(t *testing.T) {
 	jw, err := New()
 	if err != nil {
