@@ -21,9 +21,8 @@ func TestSetBatchKeepsLastValueInLastWriteOrder(t *testing.T) {
 			t.Fatalf("valid Set was not batched: %#v", msg)
 		}
 	}
-	var got []wire.Message
-	batch.flush(func(msg wire.Message) { got = append(got, msg) })
-	want := []wire.Message{
+	got := batch.take()
+	want := setGroup{
 		{Dest: tag.Tag("state"), What: what.Set, Data: "child=2"},
 		{Dest: tag.Tag("other"), What: what.Set, Data: "child=3"},
 		{Dest: tag.Tag("state"), What: what.Set, Data: "root=4"},
@@ -34,8 +33,7 @@ func TestSetBatchKeepsLastValueInLastWriteOrder(t *testing.T) {
 	if batch.add(wire.Message{Dest: tag.Tag("state"), What: what.Set, Data: "missing-equals"}) {
 		t.Fatal("malformed Set was batched")
 	}
-	got = nil
-	batch.flush(func(msg wire.Message) { got = append(got, msg) })
+	got = batch.take()
 	if len(got) != 0 {
 		t.Fatalf("second flush = %#v, want no messages", got)
 	}
@@ -53,9 +51,8 @@ func TestSetBatchMatchesMultiTagDestinationsByIdentity(t *testing.T) {
 			t.Fatalf("valid Set was not batched: %#v", msg)
 		}
 	}
-	var got []wire.Message
-	batch.flush(func(msg wire.Message) { got = append(got, msg) })
-	want := []wire.Message{
+	got := batch.take()
+	want := setGroup{
 		{Dest: []any{b, tag.Tag("state")}, What: what.Set, Data: "x=2"},
 		{Dest: []any{tag.Tag("state"), a}, What: what.Set, Data: "x=3"},
 	}

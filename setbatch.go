@@ -19,6 +19,26 @@ type setBatchEntry struct {
 	order uint64
 }
 
+// setGroup is one internal broadcast carrying ordered Sets for one Request.
+type setGroup []wire.Message
+
+func (group setGroup) forRequest(rq *Request) (selected setGroup) {
+	selected = group
+	for i := range group {
+		if group[i].Dest == nil || rq.wantMessage(&group[i]) {
+			continue
+		}
+		selected = append(setGroup(nil), group[:i]...)
+		for j := i + 1; j < len(group); j++ {
+			if group[j].Dest == nil || rq.wantMessage(&group[j]) {
+				selected = append(selected, group[j])
+			}
+		}
+		break
+	}
+	return
+}
+
 // setBatch keeps the last Set for each destination and path until a flush.
 // It is owned by the Serve loop, which also owns broadcast order.
 type setBatch struct {
@@ -38,17 +58,6 @@ func sameSetDest(a, b []any) bool {
 		}
 	}
 	return true
-}
-
-func sameSetMessageDest(a, b any) bool {
-	if tags, ok := a.([]any); ok {
-		other, ok := b.([]any)
-		return ok && sameSetDest(tags, other)
-	}
-	if _, ok := b.([]any); ok {
-		return false
-	}
-	return a == b
 }
 
 func (batch *setBatch) add(msg wire.Message) (batched bool) {
@@ -82,35 +91,18 @@ func (batch *setBatch) add(msg wire.Message) (batched bool) {
 	return
 }
 
-func (batch *setBatch) flush(send func(wire.Message)) {
+func (batch *setBatch) take() (msgs setGroup) {
 	slices.SortFunc(batch.entries, func(a, b setBatchEntry) int {
 		return cmp.Compare(a.order, b.order)
 	})
-	for i := 0; i < len(batch.entries); {
-		msg := batch.entries[i].msg
-		j := i + 1
-		dataLen := len(msg.Data)
-		for j < len(batch.entries) && sameSetMessageDest(msg.Dest, batch.entries[j].msg.Dest) {
-			dataLen += 1 + len(batch.entries[j].msg.Data)
-			j++
+	if len(batch.entries) > 0 {
+		msgs = make(setGroup, len(batch.entries))
+		for i := range batch.entries {
+			msgs[i] = batch.entries[i].msg
 		}
-		if j > i+1 {
-			var data strings.Builder
-			data.Grow(dataLen)
-			for k := i; k < j; k++ {
-				if k > i {
-					data.WriteByte('\n')
-				}
-				data.WriteString(batch.entries[k].msg.Data)
-			}
-			// Newlines separate Sets only inside the server. handleBroadcast
-			// splits them back into individual WebSocket messages.
-			msg.Data = data.String()
-		}
-		send(msg)
-		i = j
 	}
 	batch.index = nil
 	batch.entries = nil
 	batch.order = 0
+	return
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/linkdata/deadlock"
+	"github.com/linkdata/jaws/lib/tag"
 	"github.com/linkdata/jaws/lib/what"
 	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/staticserve"
@@ -52,11 +54,73 @@ func TestJaws_ServeBatchesSetBeforeRequiredMessage(t *testing.T) {
 		if got := len(msgCh); got != 2 {
 			t.Fatalf("queued messages = %d, want final Set and Alert", got)
 		}
-		if msg := <-msgCh; msg.What != what.Set || msg.Data != "value=39" {
-			t.Fatalf("first message = %#v, want final Set", msg)
+		if msg := <-msgCh; msg.What != what.Set {
+			t.Fatalf("first message = %#v, want grouped Set", msg)
+		} else if group, ok := msg.Dest.(setGroup); !ok || len(group) != 1 || group[0].What != what.Set || group[0].Data != "value=39" {
+			t.Fatalf("first group = %#v, want final Set", msg.Dest)
 		}
 		if msg := <-msgCh; msg.What != what.Alert || msg.Data != "required" {
 			t.Fatalf("second message = %#v, want Alert", msg)
+		}
+	})
+}
+
+func TestJaws_ServeSetGroupFiltersSubscribers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		serveDone := make(chan struct{})
+		go func() {
+			jw.ServeWithTimeout(time.Hour)
+			close(serveDone)
+		}()
+		defer func() {
+			jw.Close()
+			<-serveDone
+		}()
+		waitForServeLoop(t, jw)
+
+		a, b, c := tag.Tag("A"), tag.Tag("B"), tag.Tag("C")
+		tests := []struct {
+			tags []any
+			want []string
+			ch   chan wire.Message
+		}{
+			{tags: []any{a}, want: []string{"a=1", "both=3", "all=4"}},
+			{tags: []any{b}, want: []string{"b=2", "both=3", "all=4"}},
+			{tags: []any{a, b}, want: []string{"a=1", "b=2", "both=3", "all=4"}},
+			{tags: []any{c}, want: []string{"all=4"}},
+		}
+		for i := range tests {
+			rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+			rq.NewElement(&testUi{}).Tag(tests[i].tags...)
+			tests[i].ch = jw.subscribe(rq, 8)
+		}
+		jw.Broadcast(wire.Message{Dest: a, What: what.Set, Data: "a=1"})
+		jw.Broadcast(wire.Message{Dest: b, What: what.Set, Data: "b=2"})
+		jw.Broadcast(wire.Message{Dest: []any{b, a}, What: what.Set, Data: "both=3"})
+		jw.Broadcast(wire.Message{What: what.Set, Data: "all=4"})
+		jw.Broadcast(wire.Message{What: what.Alert, Data: "barrier"})
+		synctest.Wait()
+
+		for i := range tests {
+			msg := <-tests[i].ch
+			group, ok := msg.Dest.(setGroup)
+			if !ok || msg.What != what.Set {
+				t.Fatalf("subscriber %d first message = %#v, want Set group", i, msg)
+			}
+			var got []string
+			for _, set := range group {
+				got = append(got, set.Data)
+			}
+			if !slices.Equal(got, tests[i].want) {
+				t.Fatalf("subscriber %d Sets = %q, want %q", i, got, tests[i].want)
+			}
+			if msg = <-tests[i].ch; msg.What != what.Alert || msg.Data != "barrier" {
+				t.Fatalf("subscriber %d last message = %#v, want Alert", i, msg)
+			}
 		}
 	})
 }

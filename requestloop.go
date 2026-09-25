@@ -107,6 +107,15 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 			return
 		}
 
+		if group, grouped := tagmsg.Dest.(setGroup); grouped {
+			for _, msg := range group {
+				rq.handleBroadcast(msg, eventCallCh)
+				// Each Set keeps its position across Elements; getSendMsgs sorts
+				// within one send by Jid.
+				rq.sendQueue(outboundMsgCh)
+			}
+			continue
+		}
 		rq.handleBroadcast(tagmsg, eventCallCh)
 	}
 }
@@ -195,14 +204,6 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			}
 		case what.Update:
 			elem.JawsUpdate()
-		case what.Set:
-			for data := range strings.SplitSeq(tagmsg.Data, "\n") {
-				rq.queue(wire.WsMsg{
-					Data: data,
-					Jid:  elem.Jid(),
-					What: what.Set,
-				})
-			}
 		default:
 			rq.queue(wire.WsMsg{
 				Data: tagmsg.Data,
