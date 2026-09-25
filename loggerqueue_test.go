@@ -103,25 +103,12 @@ func TestJawsLogBoundsQueueAndReportsDrops(t *testing.T) {
 	}
 }
 
-type steppedQueueLogger struct {
-	started chan error
-	release chan struct{}
-}
-
-func (*steppedQueueLogger) Info(string, ...any) {}
-func (*steppedQueueLogger) Warn(string, ...any) {}
-
-func (l *steppedQueueLogger) Error(_ string, args ...any) {
-	l.started <- loggerError(args)
-	<-l.release
-}
-
 func TestJawsLogReportsDropsBeforeLaterAcceptedReports(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	logger := &steppedQueueLogger{
+	logger := &blockingQueueLogger{
 		started: make(chan error, maxQueuedLogs+3),
 		release: make(chan struct{}),
 	}
