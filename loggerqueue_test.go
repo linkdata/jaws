@@ -47,7 +47,10 @@ func TestJawsLogBoundsQueueAndReportsDrops(t *testing.T) {
 			}
 			jw.loggerQueue.mu.Lock()
 			depth := jw.loggerQueue.depth
-			dropped := jw.loggerQueue.dropped
+			dropped := uint64(0)
+			if jw.loggerQueue.dropEntry != nil {
+				dropped = jw.loggerQueue.dropEntry.dropped
+			}
 			jw.loggerQueue.mu.Unlock()
 			if depth != maxQueuedLogs || dropped != 3 {
 				t.Fatalf("queue depth = %d, dropped = %d; want %d, 3", depth, dropped, maxQueuedLogs)
