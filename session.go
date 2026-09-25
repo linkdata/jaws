@@ -171,8 +171,8 @@ func (sess *Session) Cookie() (cookie *http.Cookie) {
 	return
 }
 
-// addCookie adds sess's cookie to w and r while sess is current and live.
-func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
+// addCookie reports whether sess's live cookie was added to r and optionally w.
+func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) (added bool) {
 	var h http.Header
 	if w != nil {
 		// ResponseWriter.Header is caller code and may re-enter Jaws, including
@@ -197,7 +197,9 @@ func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		r.AddCookie(&cookie)
+		added = true
 	}
+	return
 }
 
 // Close invalidates and expires the [Session].
@@ -291,7 +293,8 @@ func (sess *Session) Broadcast(msg wire.Message) {
 
 // SessionCount returns the number of registered Sessions.
 //
-// It includes Sessions retained during their disconnect grace period.
+// It includes Sessions in their disconnect grace period and expired Sessions
+// awaiting maintenance cleanup.
 func (jw *Jaws) SessionCount() (n int) {
 	jw.mu.RLock()
 	n = len(jw.sessions)
@@ -376,10 +379,10 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 
 // NewSession creates a new [Session].
 //
-// All live pre-existing [Session] values referenced by matching cookies and
-// bound to the request's client IP are cleared and closed. Each is closed with
-// [Session.Close], so the JaWS processing loop ([Jaws.Serve] or
-// [Jaws.ServeWithTimeout]) must be running.
+// When creation succeeds, live pre-existing [Session] values referenced by
+// matching cookies and bound to the request's client IP are cleared and closed.
+// Each is closed with [Session.Close], so the JaWS processing loop ([Jaws.Serve]
+// or [Jaws.ServeWithTimeout]) must be running.
 //
 // Subsequent [Request] values created with [Jaws.NewRequest] that have the
 // cookie set and originate from the same IP will be able to access the [Session].
@@ -393,14 +396,20 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // of the same HTTP request. If a concurrent [Session.Close] wins first, neither
 // w nor r receives its live cookie.
 //
-// It returns nil and has no effect if r is nil or shutdown has begun; w may be
-// nil.
+// It returns nil without closing matching Sessions if r is nil, shutdown has
+// begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
+// publication fails; w may be nil.
+//
+// Replacing a Session requires a free slot under each enabled limit until the
+// new cookie is published and the old Session is closed.
 //
 // It panics if the [crypto/rand.Reader] captured by [New] returns an error while
 // generating the session ID. Go's default reader does not return errors.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
-		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
+		sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName)
+		sess, _ = jw.newSession(w, r)
+		if sess != nil && len(sessionIDs) > 0 {
 			remoteIP := jw.clientIP(r)
 			for _, sessionID := range sessionIDs {
 				jw.mu.RLock()
@@ -412,38 +421,45 @@ func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 				}
 			}
 		}
-		sess = jw.newSession(w, r)
 	}
 	return
 }
 
-func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
+func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Session, limitIP bool) {
 	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
 	remoteIP := jw.clientIP(r)
 	func() {
 		jw.mu.Lock()
 		defer jw.mu.Unlock()
-		sess = jw.newSessionLocked(remoteIP, secure)
+		sess, limitIP = jw.newSessionLocked(remoteIP, secure)
 		if sess != nil {
 			jw.registerSessionLocked(sess, false)
 		}
 	}()
-	if sess != nil {
-		sess.addCookie(w, r)
+	if sess != nil && !sess.addCookie(w, r) {
+		sess = nil
 	}
 	return
 }
 
 // newSessionLocked allocates a Session whose ID is absent from jw.sessions, or
-// returns nil after shutdown begins.
+// returns nil after shutdown begins or a Session limit is reached. limitIP
+// distinguishes the per-client limit for SessionMiddleware's HTTP response.
 //
 // The caller must hold jw.mu and publish any returned Session before releasing
 // it.
-func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session) {
+func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session, limitIP bool) {
 	select {
 	case <-jw.closeCh:
 		return
 	default:
+	}
+	if jw.MaxSessions > 0 && len(jw.sessions) >= jw.MaxSessions {
+		return
+	}
+	if jw.MaxSessionsPerIP > 0 && jw.sessionBucketCounts[clientBucketKey(remoteIP)] >= jw.MaxSessionsPerIP {
+		limitIP = true
+		return
 	}
 	// Retired IDs deliberately remain eligible for reuse. A natural 64-bit random
 	// collision can therefore make a stale cookie name a later Session. Preventing
@@ -464,6 +480,9 @@ func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Sessio
 // attached to a running Request. The caller must hold jw.mu.
 func (jw *Jaws) registerSessionLocked(sess *Session, active bool) {
 	jw.sessions[sess.sessionID] = sess
+	if jw.MaxSessionsPerIP > 0 {
+		jw.sessionBucketCounts[clientBucketKey(sess.remoteIP)]++
+	}
 	metrics := StatusMetricSessions
 	if active {
 		metrics |= StatusMetricActiveSessions
@@ -482,6 +501,7 @@ func (jw *Jaws) closeSessionsLocked() {
 		sess.mu.Unlock()
 	}
 	jw.sessions = nil
+	jw.sessionBucketCounts = nil
 }
 
 // deleteSessionIfCurrent unregisters sess only while it still owns its ID.
@@ -498,6 +518,13 @@ func (jw *Jaws) deleteSessionIfCurrent(sess *Session) {
 func (jw *Jaws) deleteSessionIfCurrentLocked(sess *Session) {
 	if jw.sessions[sess.sessionID] == sess {
 		delete(jw.sessions, sess.sessionID)
+		if jw.MaxSessionsPerIP > 0 {
+			bucket := clientBucketKey(sess.remoteIP)
+			jw.sessionBucketCounts[bucket]--
+			if jw.sessionBucketCounts[bucket] <= 0 {
+				delete(jw.sessionBucketCounts, bucket)
+			}
+		}
 		jw.markStatusDirty(StatusMetricSessions | StatusMetricActiveSessions)
 	}
 }
@@ -509,16 +536,24 @@ type sessioner struct {
 
 func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if sess.jw.GetSession(r) == nil {
-		sess.jw.newSession(w, r)
+		created, limitIP := sess.jw.newSession(w, r)
+		if created == nil {
+			status := http.StatusServiceUnavailable
+			if limitIP {
+				status = http.StatusTooManyRequests
+			}
+			http.Error(w, http.StatusText(status), status)
+			return
+		}
 	}
 	sess.h.ServeHTTP(w, r)
 }
 
 // SessionMiddleware returns a session-creating [http.Handler].
 //
-// Before invoking h, it creates a JaWS [Session] when the request has none. If
-// a concurrent [Session.Close] wins the new Session's cookie publication, h
-// runs without that Session or its live cookie.
+// Before invoking h, it creates a JaWS [Session] when the request has none.
+// A full per-client bucket returns HTTP 429 when global capacity remains;
+// other creation failures return HTTP 503. In either case it does not invoke h.
 //
 // It is distinct from the session accessors:
 // [Jaws.GetSession] and [Request.Session] look up an existing [Session], while

@@ -226,9 +226,14 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			jw.retireNonRunningRequestLocked(rq)
 		}
 	}
-	for _, sess := range jw.sessions {
-		if sess.isDead() {
-			jw.deleteSessionIfCurrentLocked(sess)
+	// Unattached Sessions cannot expire until their one-minute deadline.
+	jw.sessionSweep++
+	if jw.sessionSweep == 10 {
+		jw.sessionSweep = 0
+		for _, sess := range jw.sessions {
+			if sess.isDead() {
+				jw.deleteSessionIfCurrentLocked(sess)
+			}
 		}
 	}
 	jw.updateStatusLocked()

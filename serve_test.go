@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"path"
 	"slices"
@@ -421,6 +422,53 @@ func TestJaws_ServeOverloadLoggerCanBroadcastRepeatedly(t *testing.T) {
 		default:
 		}
 	})
+}
+
+// BenchmarkJawsMaintenanceSessions measures maintenance with 10,000 live Sessions.
+func BenchmarkJawsMaintenanceSessions(b *testing.B) {
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(jw.Close)
+	jw.mu.Lock()
+	for range 10_000 {
+		sess, _ := jw.newSessionLocked(netip.Addr{}, false)
+		jw.registerSessionLocked(sess, false)
+	}
+	jw.mu.Unlock()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		jw.maintenance(time.Hour)
+	}
+}
+
+func TestJawsMaintenanceSweepsSessionsEveryTenTicks(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	sess := jw.NewSession(nil, httptest.NewRequest(http.MethodGet, "/", nil))
+	if sess == nil {
+		t.Fatal("NewSession returned nil")
+	}
+	sess.mu.Lock()
+	sess.deadline = time.Now().Add(-time.Second)
+	sess.mu.Unlock()
+
+	for i := range 9 {
+		jw.maintenance(time.Hour)
+		if got := jw.SessionCount(); got != 1 {
+			t.Fatalf("session count after tick %d = %d, want 1", i+1, got)
+		}
+	}
+	jw.maintenance(time.Hour)
+	if got := jw.SessionCount(); got != 0 {
+		t.Fatalf("session count after tenth tick = %d, want 0", got)
+	}
 }
 
 func TestJaws_MaintenanceRetiresExpiredRequestOnce(t *testing.T) {

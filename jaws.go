@@ -83,11 +83,11 @@ type Jid = jid.Jid // convenience alias
 // Except for [Jaws.StatusMetrics], the exported configuration fields are ordinary
 // fields, not live synchronized settings. Several are consulted on each connection
 // or request (for example MaxPendingRequestsPerIP and WebSocketPingInterval), so set
-// them all before exposing handlers, creating Requests, or starting [Jaws.Serve] /
-// [Jaws.ServeWithTimeout]; mutating one after serving has begun is an unsynchronized
-// write and is not supported. StatusMetrics is atomic and may be changed while
-// serving. Methods document their own concurrency behavior and may be called
-// concurrently when stated.
+// them all before exposing handlers, creating Sessions or Requests, or starting
+// [Jaws.Serve] / [Jaws.ServeWithTimeout]; mutating one after serving has begun
+// is an unsynchronized write and is not supported. StatusMetrics is atomic and
+// may be changed while serving. Methods document their own concurrency behavior
+// and may be called concurrently when stated.
 type Jaws struct {
 	// CookieName is the name used for session cookies.
 	//
@@ -95,7 +95,7 @@ type Jaws struct {
 	// executable and falls back to "jaws". CookieName must be a valid, non-empty
 	// HTTP cookie name; see [http.Cookie.Valid].
 	CookieName  string
-	AutoSession bool // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
+	AutoSession bool // Create a session during a successful WebSocket upgrade when a Request has none and the Session limits allow it. Defaults to false.
 	// TrustForwardedHeaders enables trusted proxy header processing.
 	//
 	// It governs the session cookie Secure flag and WebSocket Origin scheme
@@ -140,6 +140,20 @@ type Jaws struct {
 	// It defaults to [DefaultWebSocketPingInterval] and must be positive;
 	// non-positive values do not disable probing.
 	WebSocketPingInterval time.Duration
+	// MaxSessions limits the number of registered Sessions.
+	//
+	// A non-positive value disables the cap, which is the default. Sessions
+	// waiting for expiry cleanup count toward it. At the limit, new Session
+	// creation returns nil without evicting existing Sessions.
+	MaxSessions int
+	// MaxSessionsPerIP limits registered Sessions per client address bucket.
+	//
+	// Buckets match [Jaws.MaxPendingRequestsPerIP] and use the client IP selected
+	// by [Jaws.TrustForwardedHeaders]. A non-positive value disables the cap,
+	// which is the default. Existing Sessions remain usable at the limit;
+	// [Jaws.SessionMiddleware] returns HTTP 429 for new ones if global capacity
+	// remains.
+	MaxSessionsPerIP int
 	// MaxPendingRequestsPerIP limits unclaimed Requests per client address bucket.
 	//
 	// IPv4 and NAT64 addresses in 64:ff9b::/96 use their IPv4 address; other
@@ -177,6 +191,8 @@ type Jaws struct {
 	requestCount            int                  // number of non-nil entries in requests
 	pending                 map[netip.Addr][]*Request
 	sessions                map[key.Key]*Session
+	sessionBucketCounts     map[netip.Addr]int
+	sessionSweep            uint8 // maintenance passes since the last Session expiry scan
 	dirty                   map[any]int
 	dirtOrder               int
 }
@@ -210,6 +226,7 @@ func New() (jw *Jaws, err error) {
 				requests:                make(map[key.Key]*Request),
 				pending:                 make(map[netip.Addr][]*Request),
 				sessions:                make(map[key.Key]*Session),
+				sessionBucketCounts:     make(map[netip.Addr]int),
 				dirty:                   make(map[any]int),
 				closeCh:                 make(chan struct{}),
 			}

@@ -3622,7 +3622,7 @@ func newBenchRequest(b *testing.B, n int) *Request {
 
 func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 	remoteIP := jw.clientIP(nil)
-	bucketKey := pendingBucketKey(remoteIP)
+	bucketKey := clientBucketKey(remoteIP)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	jw.limitPendingRequestsLocked(bucketKey)
