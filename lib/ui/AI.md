@@ -314,6 +314,9 @@ Several bindings may share a name. A browser write fans out to every live
 binding of that name; a removed binding stops receiving it. If several bindings
 share one non-idempotent backing value, that write is applied once per binding.
 
+See [JsVar](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#JsVar) for
+delivery timing, partial updates, and client checks.
+
 The server rejects the exact top-level name `__proto__`; the browser rejects that
 exact component anywhere in a dotted `jawsVar` path. Names share the page global
 namespace, so use an application-owned top-level symbol and dotted suffixes for
@@ -390,10 +393,6 @@ aliases, and capacity may require a domain-specific check.
 
 Configure equivalent policies and the same locker on every binding exposing the
 same Ptr or reachable mutable state. One unchecked binding bypasses the policy.
-
-Concurrent writes to one JsVar serialize, and resulting broadcasts retain that
-order. Transport backpressure can delay later writes but does not hold the
-application locker.
 
 ## Container-family widgets
 

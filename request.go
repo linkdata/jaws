@@ -41,9 +41,10 @@ const webSocketReadLimit = 32 * 1024
 // that rendered Elements depend on, use [Request.Dirty] to schedule their updates
 // for when message processing starts.
 //
-// Broadcasts for the Request are buffered while the function runs and are
-// processed after it returns nil. The buffer is bounded, so the function should
-// return promptly; normal [ErrRequestOverloaded] handling applies if it fills.
+// Broadcasts for the Request are buffered or coalesced while the function runs;
+// see [Jaws.Broadcast]. They are processed after it returns nil. The buffer is
+// bounded, so the function should return promptly; [ErrRequestOverloaded]
+// applies if it fills.
 //
 // Events before the WebSocket opens are not replayed. To prevent early
 // interaction, initially disable native controls or make the interactive region

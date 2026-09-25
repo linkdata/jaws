@@ -44,9 +44,9 @@ func validateJsVarName(value []any) (name string, err error) {
 	return
 }
 
-// PathSetter can set a nested JSON path value.
+// PathSetter can set a JSON path value.
 type PathSetter interface {
-	// JawsSetPath should set the JSON object member identified by jsPath to the given value.
+	// JawsSetPath should apply value at jsPath, which may be empty for the root.
 	//
 	// Browser writes pass [json.Unmarshal]'s generic any representation without
 	// the raw JSON bytes. Programmatic [JsVar.JawsSetPath] calls pass the
@@ -57,7 +57,7 @@ type PathSetter interface {
 	// does not apply generic jq validation. Successful broadcasts preserve jsPath
 	// and the requested value.
 	//
-	// If the member is already the given value, it should return [jaws.ErrValueUnchanged].
+	// If the target already has the requested value, it should return [jaws.ErrValueUnchanged].
 	//
 	// When a [JsVar]'s bound value (Ptr) implements PathSetter, the JsVar
 	// delegates to it while holding the JsVar write lock. Such an
@@ -74,15 +74,12 @@ type PathSetter interface {
 	JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error)
 }
 
-// SetPather is notified after a nested JSON path value has been set and
-// broadcast.
+// SetPather observes JsVar writes that request a broadcast.
 type SetPather interface {
-	// JawsPathSet notifies that a JSON object member identified by jsPath has been set
-	// to the given value and the change has been queued for broadcast.
+	// JawsPathSet receives the requested path and value after the JsVar requests a broadcast.
 	//
-	// Unlike [PathSetter.JawsSetPath], a [JsVar] calls this after releasing
-	// its lock, so locking the JsVar or calling its locked accessors is
-	// allowed here.
+	// jsPath may be empty for the root. The JsVar calls this after unlocking,
+	// so the callback may call its locked accessors.
 	JawsPathSet(elem *jaws.Element, jsPath string, value any)
 }
 
@@ -247,10 +244,9 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // simultaneously rendered bindings when its [PathSetter] is not idempotent (for
 // example one that appends).
 //
-// Unlike most JaWS UI values, a JsVar is a bidirectional channel and does not
-// imply that the Go value is always authoritative. Browser and Go updates may
-// each carry a complete value or individual paths. Any desired ownership,
-// conflict, or merge policy is the application's responsibility.
+// A JsVar is bidirectional; neither side is inherently authoritative. Browser
+// and Go updates may carry complete values or individual paths. The application
+// defines ownership, conflict, and merge policy.
 //
 // When Ptr is non-nil, [JsVar.JawsRender] serializes a snapshot of the bound Go
 // value to initialize the browser variable. A browser call to the JavaScript
@@ -261,11 +257,16 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // that require the two sides to converge after either can change the value
 // during that interval must reconcile it explicitly.
 //
+// Accepted writes change Go state immediately. Outgoing path Sets wait for the
+// next [jaws.DefaultUpdateInterval] tick or queued non-Set message. Writes to
+// the same destination and path in one batch coalesce to the last requested
+// value; other paths remain partial updates. [JsVar.ClientCheck] runs for each
+// applicable browser write before coalescing.
+//
 // It is safe for concurrent use when the locker passed to [NewJsVar] is safe
-// for concurrent use. Concurrent writes are applied one at a time. Any
-// broadcasts they produce preserve the order in which the writes modify the
-// bound value. This concurrency guarantee does not permit one JsVar to be
-// shared between requests.
+// for concurrent use. Writes through one JsVar serialize; surviving Sets retain
+// mutation order. Distinct JsVar values sharing Ptr have no cross-binding
+// broadcast order guarantee.
 //
 // Rendering and write broadcasts invoke JSON marshalers while the locker passed
 // to [NewJsVar] is held. Custom marshaling callbacks reached in either case,
@@ -566,11 +567,10 @@ func (jsvar *JsVar[T]) JawsGetTag() any {
 	return jsvar.dirtyTag
 }
 
-// JawsUpdate is a no-op because updates are broadcast by path setters.
+// JawsUpdate does not broadcast the bound value.
 //
-// Dirtying a JsVar therefore does not resend its root value. Use [JsVar.JawsSet]
-// or [JsVar.JawsSetPath], together with the application's synchronization
-// policy, to send changes.
+// Dirtying a JsVar does not resend its root value. Use [JsVar.JawsSet] or
+// [JsVar.JawsSetPath] to send changes.
 func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
 	_ = elem // no-op for JsVar[T]
 }

@@ -23,21 +23,10 @@ var ErrServeAlreadyRunning = errors.New("serve loop already running")
 // implementations share one error identity.
 var ErrValueUnchanged = errors.New("value unchanged")
 
-// ErrRequestOverloaded indicates a [Request] was torn down because it could not keep
-// up with the messages addressed to it.
+// ErrRequestOverloaded indicates that a [Request] could not keep up with its messages.
 //
-// A Request is overloaded when its buffered broadcast channel or its internal
-// event-call channel fills before it can drain them. Rather than silently dropping
-// messages, which could leave the browser and backend in inconsistent and
-// nonreproducible states, the Request is cancelled. The one exception is the
-// internal periodic dirty-render tick (a nil-destination Update broadcast): the
-// dirty work has already been moved into the Request's pending dirt, so the tick
-// is only a nudge and can be dropped when the channel is full. The dirt is still
-// rendered — a running Request is woken by the already-buffered message and drains
-// it on the next pass, and one still starting up drains it on its first processing
-// pass — so no work is lost. The cancellation cause reachable via [context.Cause]
-// on [Request.Context] wraps this sentinel, so it can be matched with [errors.Is];
-// the wrapped text identifies which channel overflowed.
+// The cancellation cause reachable via [context.Cause] on [Request.Context]
+// wraps this sentinel, so callers can match it with [errors.Is].
 var ErrRequestOverloaded = errors.New("request overloaded")
 
 // ErrValueNotFinite indicates that a [Request] was cancelled by a non-finite UI value.

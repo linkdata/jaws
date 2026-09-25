@@ -107,6 +107,15 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 			return
 		}
 
+		if group, grouped := tagmsg.Dest.(setGroup); grouped {
+			for _, msg := range group {
+				rq.handleBroadcast(msg, eventCallCh)
+				// Each Set keeps its position across Elements; getSendMsgs sorts
+				// within one send by Jid.
+				rq.sendQueue(outboundMsgCh)
+			}
+			continue
+		}
 		rq.handleBroadcast(tagmsg, eventCallCh)
 	}
 }
