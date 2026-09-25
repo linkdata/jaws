@@ -278,9 +278,9 @@ creation patterns:
 * Enable `Jaws.AutoSession` to create an anonymous session during a successful
   WebSocket upgrade when the Request has none.
 
-`SessionMiddleware` sends `Cache-Control: no-store` on responses carrying
-`Set-Cookie`; responses without one keep the handler's cache policy. Callers
-using `NewSession` directly must prevent shared caching when they send its cookie.
+`SessionMiddleware` sends `Cache-Control: no-store` when it creates a Session;
+other responses keep the handler's cache policy. Callers using `NewSession`
+directly must prevent shared caching when they send its cookie.
 
 Create or retrieve the session before `NewRequest` when initial rendering or
 authentication depends on it. Later Requests with the same valid cookie and IP

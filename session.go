@@ -2,7 +2,6 @@ package jaws
 
 import (
 	"bufio"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -399,8 +398,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // of the same HTTP request. If a concurrent [Session.Close] wins first, neither
 // w nor r receives its live cookie.
 //
-// Callers that send the cookie must prevent shared caching of the response;
-// [Jaws.SessionMiddleware] applies Cache-Control: no-store automatically.
+// Callers that send the cookie must prevent shared caching of the response.
+// [Jaws.SessionMiddleware] applies Cache-Control: no-store when it creates the
+// Session itself.
 //
 // It returns nil without closing matching Sessions if r is nil, shutdown has
 // begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
@@ -540,6 +540,7 @@ type sessioner struct {
 	h  http.Handler
 }
 
+// sessionCacheWriter protects a newly created Session's cookie at header commit.
 type sessionCacheWriter struct {
 	http.ResponseWriter
 	committed bool
@@ -555,16 +556,9 @@ func (w *sessionCacheWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err 
 	return
 }
 
-func (w *sessionCacheWriter) protectCookie() {
-	h := w.Header()
-	if len(h.Values("Set-Cookie")) > 0 {
-		h.Set("Cache-Control", headerCacheControlNoStore)
-	}
-}
-
 func (w *sessionCacheWriter) commit() {
 	if !w.committed {
-		w.protectCookie()
+		w.Header().Set("Cache-Control", headerCacheControlNoStore)
 		w.committed = true
 	}
 }
@@ -579,14 +573,6 @@ func (w *sessionCacheWriter) WriteHeader(statusCode int) {
 func (w *sessionCacheWriter) Write(p []byte) (int, error) {
 	w.commit()
 	return w.ResponseWriter.Write(p)
-}
-
-func (w *sessionCacheWriter) ReadFrom(r io.Reader) (int64, error) {
-	w.commit()
-	if readerFrom, ok := w.ResponseWriter.(io.ReaderFrom); ok {
-		return readerFrom.ReadFrom(r)
-	}
-	return io.Copy(w.ResponseWriter, r)
 }
 
 func (w *sessionCacheWriter) FlushError() error {
@@ -604,22 +590,22 @@ func (w *sessionCacheWriter) WriteHeaderNow() {
 }
 
 func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sw := &sessionCacheWriter{ResponseWriter: w}
 	if sess.jw.GetSession(r) == nil {
-		created, limitIP := sess.jw.newSession(sw, r)
+		created, limitIP := sess.jw.newSession(w, r)
 		if created == nil {
 			status := http.StatusServiceUnavailable
 			if limitIP {
 				status = http.StatusTooManyRequests
 			}
-			http.Error(sw, http.StatusText(status), status)
+			http.Error(w, http.StatusText(status), status)
 			return
 		}
+		sw := &sessionCacheWriter{ResponseWriter: w}
+		sess.h.ServeHTTP(sw, r)
+		sw.commit() // net/http can send an implicit 200 after the handler returns.
+		return
 	}
-	sess.h.ServeHTTP(sw, r)
-	if !sw.committed {
-		sw.protectCookie() // net/http can send an implicit 200 after the handler returns.
-	}
+	sess.h.ServeHTTP(w, r)
 }
 
 // SessionMiddleware returns a session-creating [http.Handler].
@@ -627,7 +613,7 @@ func (sess sessioner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Before invoking h, it creates a JaWS [Session] when the request has none.
 // A full per-client bucket returns HTTP 429 when global capacity remains;
 // other creation failures return HTTP 503. In either case it does not invoke h.
-// Responses carrying Set-Cookie receive Cache-Control: no-store when written;
+// Responses for which it creates a Session receive Cache-Control: no-store;
 // other responses keep the wrapped handler's cache policy.
 //
 // It is distinct from the session accessors:

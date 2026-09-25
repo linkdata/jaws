@@ -440,6 +440,52 @@ func TestSessionMiddlewareCookieAssetCacheControl(t *testing.T) {
 	}
 }
 
+func TestSessionMiddlewareExistingSessionUsesOriginalWriter(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	var want http.ResponseWriter
+	h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if want != nil && w != want {
+			t.Fatal("existing Session received a wrapped ResponseWriter")
+		}
+	}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("new Session response has %d cookies, want 1", len(cookies))
+	}
+	w = httptest.NewRecorder()
+	want = w
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.AddCookie(cookies[0])
+	h.ServeHTTP(w, r)
+}
+
+func BenchmarkSessionMiddlewareExistingSession(b *testing.B) {
+	jw, err := New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(jw.Close)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	if jw.NewSession(nil, r) == nil {
+		b.Fatal("session creation failed")
+	}
+	w := httptest.NewRecorder()
+	h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		h.ServeHTTP(w, r)
+	}
+}
+
 func TestSessionMiddlewareCookieCacheControlOnCommit(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -486,6 +532,32 @@ func TestSessionMiddlewareCookieCacheControlOnCommit(t *testing.T) {
 	}
 }
 
+type sessionHeaderNowRecorder struct {
+	*httptest.ResponseRecorder
+	cacheControlAtCall string
+}
+
+func (w *sessionHeaderNowRecorder) WriteHeaderNow() {
+	w.cacheControlAtCall = w.Header().Get("Cache-Control")
+}
+
+func TestSessionMiddlewareWriteHeaderNow(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jw.Close)
+	h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.(interface{ WriteHeaderNow() }).WriteHeaderNow()
+	}))
+	w := &sessionHeaderNowRecorder{ResponseRecorder: httptest.NewRecorder()}
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.cacheControlAtCall != "no-store" {
+		t.Fatalf("Cache-Control at WriteHeaderNow = %q, want no-store", w.cacheControlAtCall)
+	}
+}
+
 func TestSessionMiddlewareWebSocketUpgrade(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -495,6 +567,10 @@ func TestSessionMiddlewareWebSocketUpgrade(t *testing.T) {
 	release := make(chan struct{})
 	accepted := make(chan error, 1)
 	h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+			accepted <- err
+			return
+		}
 		conn, err := websocket.Accept(w, r, nil)
 		accepted <- err
 		if err == nil {
