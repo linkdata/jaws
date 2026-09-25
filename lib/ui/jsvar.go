@@ -375,23 +375,6 @@ func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value an
 	return
 }
 
-type errJsVarClientWrite struct {
-	cause error
-}
-
-func (e errJsVarClientWrite) Error() string {
-	return e.cause.Error()
-}
-
-func (e errJsVarClientWrite) Unwrap() error {
-	return e.cause
-}
-
-// JawsClientAlert returns the browser message for a generic JsVar write failure.
-func (errJsVarClientWrite) JawsClientAlert() string {
-	return "invalid JsVar update"
-}
-
 // setPathAndMarshal applies a mutation and prepares any broadcast payload while
 // the bound value remains locked. A setter may retain a composite value directly
 // in Ptr, so value can alias the shared state after a successful set.

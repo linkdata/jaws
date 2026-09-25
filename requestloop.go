@@ -566,6 +566,7 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 	}
 }
 
+// clientAlertError is an internal marker for library errors with safe browser text.
 type clientAlertError interface {
 	JawsClientAlert() string
 }
