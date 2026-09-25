@@ -3367,6 +3367,64 @@ func TestServeHTTP_TailScript_EndpointIsPerRequest(t *testing.T) {
 	is.Equal(w.Code, http.StatusNoContent)
 }
 
+func TestServeHTTP_TailScript_RunningRequestDoesNotDrain(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	defer jw.Close()
+	server := httptest.NewServer(jw)
+	defer server.Close()
+
+	initial := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
+	initial.RemoteAddr = "127.0.0.1:1"
+	rq := jw.NewRequest(httptest.NewRecorder(), initial)
+	elem := rq.NewElement(&testUi{})
+	ready := make(chan struct{})
+	resume := make(chan struct{})
+	rq.SetConnectFn(func(*Request) error {
+		close(ready)
+		<-resume
+		return nil
+	})
+	conn := dialJawsRequest(t, server.URL, rq)
+	defer func() {
+		close(resume)
+		if err := conn.CloseNow(); err != nil {
+			t.Error(err)
+		}
+	}()
+	select {
+	case <-ready:
+	case <-time.After(testTimeout):
+		t.Fatal("WebSocket did not reach ConnectFn")
+	}
+
+	elem.SetClass("cls")
+	res, err := server.Client().Get(server.URL + "/jaws/.tail/" + rq.JawsKeyString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := res.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("tail status = %d, want 404", res.StatusCode)
+	}
+	resume <- struct{}{}
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
+	defer cancel()
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := (&wire.WsMsg{Jid: elem.Jid(), What: what.SClass, Data: "cls"}).Format()
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("WebSocket frame %q lacks %q", data, want)
+	}
+}
+
 // TestServeHTTP_TailScript_RejectsRecycledKey covers the finished-request behavior
 // of the /jaws/.tail endpoint: completion reserves the key with a nil tombstone in
 // jw.requests, so a tail fetch for the old key finds no live Request and returns

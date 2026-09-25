@@ -588,10 +588,11 @@ func (*Request) writeTailResponse(w http.ResponseWriter, b []byte, sent bool) (e
 	return
 }
 
-// TailHTML writes optional HTML code at the end of the page's BODY section that
-// will immediately apply HTML attribute and class updates made during initial
-// rendering, which minimizes flicker without having to write the correct
-// value in templates or during [Renderer.JawsRender].
+// TailHTML writes optional HTML code at the end of the page's BODY section.
+//
+// It can apply queued attribute and class updates before the WebSocket starts,
+// reducing flicker without requiring their values in templates or
+// [Renderer.JawsRender].
 //
 // It also adds a <noscript> tag that warns of reduced functionality.
 func (rq *Request) TailHTML(w io.Writer) (err error) {
@@ -604,29 +605,20 @@ func (rq *Request) TailHTML(w io.Writer) (err error) {
 }
 
 // serveTailScript handles a GET /jaws/.tail/<key> fetch, draining the one-shot
-// attribute/class updates queued for the matching Request and writing them. It
+// attribute/class updates queued for a non-running Request and writing them. It
 // reports whether it produced a response; a false return means the path was not a
 // handled tail fetch and [Jaws.ServeHTTP] should keep dispatching.
 func (jw *Jaws) serveTailScript(w http.ResponseWriter, r *http.Request) (handled bool) {
 	if jawsKeyString, ok := strings.CutPrefix(r.URL.Path, "/jaws/.tail/"); ok {
 		if jawsKey, tail := key.Parse(jawsKeyString); tail == "" {
 			remoteIP := jw.clientIP(r)
-			// Hold jw.mu (read) across both the lookup and the drain: finishing needs
-			// the jw.mu write lock, so rq cannot be unregistered while we drain its
-			// queue. A stale key either misses the map (404) or drains its own genuine
-			// content. The network write is done after releasing jw.mu so a slow client
-			// cannot stall completion or the Serve loop.
+			// Hold jw.mu across the state check and drain; starting the WebSocket
+			// and finishing the Request both need the write lock.
 			jw.mu.RLock()
 			rq := jw.requests[jawsKey]
-			// Bind the tail fetch to the client like the WebSocket claim path
-			// (Request.claim): the one-shot tail is drained only when the fetch comes from
-			// the same client IP the initial request was issued to (loopback-aware, see
-			// equalIP). rq.remoteIP is stable here because finishing requires the jw.mu
-			// write lock. A mismatch is treated as not found, so a leaked key cannot drain
-			// (and thereby deny) another client's tail. The WebSocket carries all live
-			// data, so this only closes the cross-IP read of the already-rendered
-			// attribute/class fragments and the cross-IP one-shot race.
-			if rq != nil && !equalIP(remoteIP, rq.remoteIP) {
+			// Match the WebSocket's client-IP binding so a leaked key cannot
+			// consume another client's one-shot tail.
+			if rq != nil && (!equalIP(remoteIP, rq.remoteIP) || rq.loadState() == reqRunning) {
 				rq = nil
 			}
 			var b []byte
