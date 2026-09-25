@@ -967,7 +967,9 @@ func TestJaws_SessionCountTag(t *testing.T) {
 	expired.mu.Lock()
 	expired.deadline = time.Now().Add(-time.Second)
 	expired.mu.Unlock()
-	jw.maintenance(time.Hour)
+	for range 10 {
+		jw.maintenance(time.Hour)
+	}
 	if got := jw.SessionCount(); got != 0 {
 		t.Fatalf("SessionCount() = %d, want 0", got)
 	}

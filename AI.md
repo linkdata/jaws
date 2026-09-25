@@ -284,6 +284,13 @@ can access the Session. `Request.Get` returns nil and `Request.Set` is a no-op
 when no Session exists. `Jaws.Close` invalidates every Session, clears its data,
 and prevents new Session creation.
 
+Maintenance removes expired Sessions every tenth pass. `MaxSessions` can limit
+registered Sessions; its default value of zero leaves the limit disabled. At
+the limit, `NewSession` returns nil and `SessionMiddleware` responds with HTTP
+503 without calling its handler. `AutoSession` may leave the Request without one;
+use `SessionMiddleware` when a session is required. Expired Sessions count until
+cleanup.
+
 Loopback addresses are treated as the same client so a loopback reverse proxy
 does not break binding. If all traffic reaches JaWS from loopback, binding is
 effectively disabled unless trusted forwarding is configured behind a single

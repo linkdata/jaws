@@ -95,7 +95,7 @@ type Jaws struct {
 	// executable and falls back to "jaws". CookieName must be a valid, non-empty
 	// HTTP cookie name; see [http.Cookie.Valid].
 	CookieName  string
-	AutoSession bool // Create and associate a session during a successful WebSocket upgrade when a Request has none. Defaults to false.
+	AutoSession bool // Create a session during a successful WebSocket upgrade when a Request has none and [Jaws.MaxSessions] allows it. Defaults to false.
 	// TrustForwardedHeaders enables trusted proxy header processing.
 	//
 	// It governs the session cookie Secure flag and WebSocket Origin scheme
@@ -140,6 +140,12 @@ type Jaws struct {
 	// It defaults to [DefaultWebSocketPingInterval] and must be positive;
 	// non-positive values do not disable probing.
 	WebSocketPingInterval time.Duration
+	// MaxSessions limits the number of registered Sessions.
+	//
+	// A non-positive value disables the cap, which is the default. Sessions
+	// waiting for expiry cleanup count toward it. At the limit, new Session
+	// creation returns nil without evicting existing Sessions.
+	MaxSessions int
 	// MaxPendingRequestsPerIP limits unclaimed Requests per client address bucket.
 	//
 	// IPv4 and NAT64 addresses in 64:ff9b::/96 use their IPv4 address; other
@@ -177,6 +183,7 @@ type Jaws struct {
 	requestCount            int                  // number of non-nil entries in requests
 	pending                 map[netip.Addr][]*Request
 	sessions                map[key.Key]*Session
+	sessionSweep            uint8 // maintenance passes since the last Session expiry scan
 	dirty                   map[any]int
 	dirtOrder               int
 }

@@ -289,7 +289,9 @@ func TestSession_AddCookieRejectsUnavailableSession(t *testing.T) {
 
 			rw := httptest.NewRecorder()
 			hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-			sess.addCookie(rw, hr)
+			if sess.addCookie(rw, hr) {
+				t.Error("unavailable Session published a cookie")
+			}
 			for _, cookie := range hr.Cookies() {
 				if cookie.Name == jw.CookieName {
 					t.Errorf("request contains unavailable session cookie: %v", cookie)
@@ -318,6 +320,25 @@ func (w *closingSessionResponseWriter) Header() http.Header {
 	return w.ResponseRecorder.Header()
 }
 
+func TestSession_NewSessionCloseDuringResponseHeaderReturnsNil(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	waitForServeLoop(t, jw)
+	t.Cleanup(jw.Close)
+
+	rw := &closingSessionResponseWriter{ResponseRecorder: httptest.NewRecorder(), jw: jw}
+	r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	if sess := jw.NewSession(rw, r); sess != nil {
+		t.Fatalf("NewSession after concurrent Close = %p, want nil", sess)
+	}
+	if got := jw.SessionCount(); got != 0 {
+		t.Fatalf("SessionCount() = %d, want 0", got)
+	}
+}
+
 func TestSessionMiddleware_CloseDuringResponseHeader(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -331,57 +352,41 @@ func TestSessionMiddleware_CloseDuringResponseHeader(t *testing.T) {
 		jw:               jw,
 	}
 	hr := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
-	type result struct {
-		rq             *Request
-		requestCookies []*http.Cookie
-		handlerCalled  bool
-		panicValue     any
-	}
-	done := make(chan result, 1)
+	called := false
+	done := make(chan any, 1)
 	go func() {
-		var got result
-		defer func() {
-			got.panicValue = recover()
-			done <- got
-		}()
-		h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			got.handlerCalled = true
-			got.requestCookies = r.Cookies()
-			got.rq = jw.newRequest(r)
+		defer func() { done <- recover() }()
+		h := jw.SessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
 			w.WriteHeader(http.StatusNoContent)
 		}))
 		h.ServeHTTP(rw, hr)
 	}()
 
-	var got result
+	var panicValue any
 	select {
-	case got = <-done:
+	case panicValue = <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("SessionMiddleware deadlocked while ResponseWriter.Header closed the Session")
 	}
 	t.Cleanup(jw.Close)
-	if got.panicValue != nil {
-		t.Fatalf("SessionMiddleware panicked while ResponseWriter.Header closed the Session: %v", got.panicValue)
+	if panicValue != nil {
+		t.Fatalf("SessionMiddleware panicked while ResponseWriter.Header closed the Session: %v", panicValue)
 	}
-	if !got.handlerCalled {
-		t.Fatal("SessionMiddleware did not invoke the wrapped handler")
+	if called {
+		t.Fatal("SessionMiddleware invoked the wrapped handler without a Session")
 	}
 	if rw.closedSession == nil {
 		t.Fatal("ResponseWriter.Header did not observe a published Session")
 	}
-	if sess := got.rq.Session(); sess != nil {
-		t.Errorf("new Request Session() = %v, want nil", sess)
+	if status := rw.Code; status != http.StatusServiceUnavailable {
+		t.Errorf("response status = %d, want 503", status)
 	}
 	if requests := rw.closedSession.Requests(); len(requests) != 0 {
 		t.Errorf("closed Session Requests() = %v, want none", requests)
 	}
 	if count := jw.SessionCount(); count != 0 {
 		t.Errorf("SessionCount() = %d, want 0", count)
-	}
-	for _, cookie := range got.requestCookies {
-		if cookie.Name == jw.CookieName {
-			t.Errorf("wrapped handler request contains closed session cookie: %v", cookie)
-		}
 	}
 	for _, cookie := range rw.Result().Cookies() {
 		if cookie.Name == jw.CookieName && cookie.MaxAge >= 0 {
@@ -528,6 +533,62 @@ func TestSession_NewSessionReplacesDuplicateCookieSessions(t *testing.T) {
 	}
 	if got := responseCookies[0]; got.Name != jw.CookieName || got.Value != fresh.CookieValue() {
 		t.Fatalf("replacement cookie = %s=%s, want %s=%s", got.Name, got.Value, jw.CookieName, fresh.CookieValue())
+	}
+}
+
+func TestSession_MaxSessionsRefusesWithoutEviction(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.MaxSessions = 1
+	serveDone := make(chan struct{})
+	go func() {
+		jw.Serve()
+		close(serveDone)
+	}()
+	t.Cleanup(func() {
+		jw.Close()
+		<-serveDone
+	})
+	waitForServeLoop(t, jw)
+
+	firstRequest := httptest.NewRequest(http.MethodGet, "/first", nil)
+	first := jw.NewSession(httptest.NewRecorder(), firstRequest)
+	if first == nil {
+		t.Fatal("first NewSession returned nil")
+	}
+	first.Set("value", "kept")
+	secondResponse := httptest.NewRecorder()
+	if got := jw.NewSession(secondResponse, httptest.NewRequest(http.MethodGet, "/second", nil)); got != nil {
+		t.Fatalf("NewSession at cap = %p, want nil", got)
+	}
+	if cookies := secondResponse.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("NewSession at cap set cookies: %v", cookies)
+	}
+	if got := jw.GetSession(firstRequest); got != first || got.Get("value") != "kept" {
+		t.Fatalf("original Session after refusal = %p, value %v", got, got.Get("value"))
+	}
+	rotation := httptest.NewRequest(http.MethodGet, "/rotate", nil)
+	rotation.AddCookie(first.Cookie())
+	if got := jw.NewSession(httptest.NewRecorder(), rotation); got != nil {
+		t.Fatalf("NewSession rotation at cap = %p, want nil", got)
+	}
+	if got := jw.GetSession(rotation); got != first || got.Get("value") != "kept" {
+		t.Fatalf("original Session after refused rotation = %p, value %v", got, got.Get("value"))
+	}
+
+	called := false
+	wrapped := jw.SessionMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	middlewareResponse := httptest.NewRecorder()
+	wrapped.ServeHTTP(middlewareResponse, httptest.NewRequest(http.MethodGet, "/wrapped", nil))
+	if called || middlewareResponse.Code != http.StatusServiceUnavailable || len(middlewareResponse.Result().Cookies()) != 0 {
+		t.Fatalf("middleware at cap: called=%v, status=%d, cookies=%v", called, middlewareResponse.Code, middlewareResponse.Result().Cookies())
+	}
+
+	first.Close()
+	if got := jw.NewSession(nil, httptest.NewRequest(http.MethodGet, "/later", nil)); got == nil {
+		t.Fatal("NewSession after Close returned nil")
 	}
 }
 
