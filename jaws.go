@@ -57,8 +57,7 @@ const (
 	// DefaultWebSocketTimeout is the timeout [Jaws.Serve] passes to [Jaws.ServeWithTimeout].
 	DefaultWebSocketTimeout = time.Second * 10
 
-	// DefaultMaxPendingRequestsPerIP is the default maximum number of unclaimed
-	// Requests allowed for each client IP.
+	// DefaultMaxPendingRequestsPerIP is the default pending Request limit per client bucket.
 	DefaultMaxPendingRequestsPerIP = 100
 )
 
@@ -140,8 +139,13 @@ type Jaws struct {
 	//
 	// It defaults to [DefaultWebSocketPingInterval] and must be positive;
 	// non-positive values do not disable probing.
-	WebSocketPingInterval   time.Duration
-	MaxPendingRequestsPerIP int           // Maximum number of unclaimed Requests per client IP. Defaults to DefaultMaxPendingRequestsPerIP. Set <=0 to disable the cap.
+	WebSocketPingInterval time.Duration
+	// MaxPendingRequestsPerIP limits unclaimed Requests per client address bucket.
+	//
+	// IPv4 and NAT64 addresses in 64:ff9b::/96 use their IPv4 address; other
+	// IPv6 addresses use a /64. A non-positive value disables the cap. The
+	// default is [DefaultMaxPendingRequestsPerIP].
+	MaxPendingRequestsPerIP int
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith
 	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	created                 time.Time     // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds

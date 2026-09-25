@@ -1274,6 +1274,129 @@ func TestJaws_MaxPendingRequestsPerIPKeepsDifferentIPs(t *testing.T) {
 	}
 }
 
+func TestJaws_MaxPendingRequestsPerIPGroupsIPv6Prefixes(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		forwardedHeaders bool
+	}{
+		{"transport peer", false},
+		{"trusted forwarded header", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			jw.MaxPendingRequestsPerIP = 2
+			jw.TrustForwardedHeaders = tt.forwardedHeaders
+
+			request := func(ip string) *http.Request {
+				r := newPendingLimitRequest("[" + ip + "]:1000")
+				if tt.forwardedHeaders {
+					r.RemoteAddr = "127.0.0.1:1000"
+					r.Header.Set("X-Forwarded-For", ip)
+				}
+				return r
+			}
+			oldReq := request("2001:db8:1:2::1")
+			oldRq := jw.NewRequest(httptest.NewRecorder(), oldReq)
+			keepReq := request("2001:db8:1:2::2")
+			keepRq := jw.NewRequest(httptest.NewRecorder(), keepReq)
+			newReq := request("2001:db8:1:2::3")
+			newRq := jw.NewRequest(httptest.NewRecorder(), newReq)
+
+			if got := jw.Pending(); got != 2 {
+				t.Fatalf("Pending() in one /64 = %d, want 2", got)
+			}
+			otherReq := request("2001:db8:1:3::1")
+			otherRq := jw.NewRequest(httptest.NewRecorder(), otherReq)
+			if got := jw.Pending(); got != 3 {
+				t.Fatalf("Pending() across two /64s = %d, want 3", got)
+			}
+			if claimed := jw.UseRequest(oldRq.JawsKey, oldReq); claimed != nil {
+				t.Fatalf("evicted request claim = %v, want nil", claimed)
+			}
+			if claimed := jw.UseRequest(keepRq.JawsKey, request("2001:db8:1:2::99")); claimed != nil {
+				t.Fatalf("same-prefix peer claimed another address's request: %v", claimed)
+			}
+			if claimed := jw.UseRequest(keepRq.JawsKey, keepReq); claimed != keepRq {
+				t.Fatalf("kept request claim = %v, want %v", claimed, keepRq)
+			}
+			if got := jw.Pending(); got != 2 {
+				t.Fatalf("Pending() after claim = %d, want 2", got)
+			}
+			if claimed := jw.UseRequest(newRq.JawsKey, newReq); claimed != newRq {
+				t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+			}
+			if claimed := jw.UseRequest(otherRq.JawsKey, otherReq); claimed != otherRq {
+				t.Fatalf("other-prefix request claim = %v, want %v", claimed, otherRq)
+			}
+		})
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPUnmapsIPv4(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	plainReq := newPendingLimitRequest("203.0.113.9:1000")
+	plainRq := jw.NewRequest(httptest.NewRecorder(), plainReq)
+	mappedReq := newPendingLimitRequest("[::ffff:203.0.113.9]:1000")
+	mappedRq := jw.NewRequest(httptest.NewRecorder(), mappedReq)
+
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("Pending() = %d, want 1", got)
+	}
+	if claimed := jw.UseRequest(plainRq.JawsKey, plainReq); claimed != nil {
+		t.Fatalf("evicted IPv4 request claim = %v, want nil", claimed)
+	}
+	if claimed := jw.UseRequest(mappedRq.JawsKey, mappedReq); claimed != mappedRq {
+		t.Fatalf("mapped IPv4 request claim = %v, want %v", claimed, mappedRq)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPSeparatesNAT64Clients(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.MaxPendingRequestsPerIP = 1
+
+	firstReq := newPendingLimitRequest("[64:ff9b::cb00:7109]:1000")
+	firstRq := jw.NewRequest(httptest.NewRecorder(), firstReq)
+	secondReq := newPendingLimitRequest("[64:ff9b::c633:6401]:1000")
+	secondRq := jw.NewRequest(httptest.NewRecorder(), secondReq)
+	if got := jw.Pending(); got != 2 {
+		t.Fatalf("Pending() for different embedded IPv4 addresses = %d, want 2", got)
+	}
+	if claimed := jw.UseRequest(firstRq.JawsKey, firstReq); claimed != firstRq {
+		t.Fatalf("first request claim = %v, want %v", claimed, firstRq)
+	}
+	if claimed := jw.UseRequest(secondRq.JawsKey, secondReq); claimed != secondRq {
+		t.Fatalf("second request claim = %v, want %v", claimed, secondRq)
+	}
+
+	translatedReq := newPendingLimitRequest("[64:ff9b::cb00:7109]:1001")
+	translatedRq := jw.NewRequest(httptest.NewRecorder(), translatedReq)
+	ipv4Req := newPendingLimitRequest("203.0.113.9:1000")
+	ipv4Rq := jw.NewRequest(httptest.NewRecorder(), ipv4Req)
+	if got := jw.Pending(); got != 1 {
+		t.Fatalf("Pending() for one embedded IPv4 address = %d, want 1", got)
+	}
+	if claimed := jw.UseRequest(translatedRq.JawsKey, translatedReq); claimed != nil {
+		t.Fatalf("evicted translated request claim = %v, want nil", claimed)
+	}
+	if claimed := jw.UseRequest(ipv4Rq.JawsKey, ipv4Req); claimed != ipv4Rq {
+		t.Fatalf("IPv4 request claim = %v, want %v", claimed, ipv4Rq)
+	}
+}
+
 func TestJaws_MaxPendingRequestsPerIPIgnoresClaimedRequests(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1394,7 +1517,32 @@ func TestJaws_MaxPendingRequestsPerIPEvictionCause(t *testing.T) {
 	if limitErr.Limit != 1 || limitErr.Addr.Compare(parseIP(oldReq.RemoteAddr)) != 0 {
 		t.Fatalf("eviction detail = %#v, want limit 1 and IP %v", limitErr, parseIP(oldReq.RemoteAddr))
 	}
-	if got, want := limitErr.Error(), "too many pending requests from 192.0.2.1 (limit 1)"; got != want {
+	if got, want := limitErr.Error(), "too many pending requests in bucket 192.0.2.1 (limit 1)"; got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestJaws_MaxPendingRequestsPerIPEvictionCauseNamesIPv6Bucket(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
+	jw.MaxPendingRequestsPerIP = 1
+
+	jw.newRequest(newPendingLimitRequest("[2001:db8:1:2::1]:1000"))
+	jw.newRequest(newPendingLimitRequest("[2001:db8:1:2::3]:1000"))
+
+	var limitErr errTooManyPendingRequests
+	if loggedErr := logger.next(t); !errors.As(loggedErr, &limitErr) {
+		t.Fatalf("logged error = %v, want errTooManyPendingRequests", loggedErr)
+	}
+	if want := netip.MustParseAddr("2001:db8:1:2::"); limitErr.Addr != want {
+		t.Fatalf("eviction address = %v, want bucket %v", limitErr.Addr, want)
+	}
+	if got, want := limitErr.Error(), "too many pending requests in bucket 2001:db8:1:2:: (limit 1)"; got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
 }
@@ -3474,9 +3622,10 @@ func newBenchRequest(b *testing.B, n int) *Request {
 
 func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 	remoteIP := jw.clientIP(nil)
+	bucketKey := pendingBucketKey(remoteIP)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
-	jw.limitPendingRequestsLocked(remoteIP)
+	jw.limitPendingRequestsLocked(bucketKey)
 	for rq == nil {
 		jawsKey := jw.nonZeroRandomLocked()
 		if _, ok := jw.requests[jawsKey]; !ok {
@@ -3493,7 +3642,7 @@ func newUnpooledBenchRequest(jw *Jaws) (rq *Request) {
 			rq.mu.Unlock()
 			jw.requests[jawsKey] = rq
 			jw.requestCount++
-			jw.pending[rq.remoteIP] = append(jw.pending[rq.remoteIP], rq)
+			jw.pending[bucketKey] = append(jw.pending[bucketKey], rq)
 		}
 	}
 	return

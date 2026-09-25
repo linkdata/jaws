@@ -155,7 +155,7 @@ down a Request while its initial renderer is still running, already-rendered
 elements and tags may be forgotten, but the renderer remains race-safe and IDs
 are not reused or duplicated.
 
-Maintenance or the per-IP cap may instead retire a non-running Request. Its
+Maintenance or the pending cap may instead retire a non-running Request. Its
 context is canceled, its key becomes unclaimable, and it leaves `Pending` and
 `RequestCount`, while its identity, Elements, and buffers remain available to an
 initial HTTP handler that still holds it. A Request created after `Jaws.Close` is
@@ -379,35 +379,39 @@ registered or still-reachable retired Requests are not reassigned; reuse after a
 retired Request becomes unreachable has no timing guarantee.
 
 Unclaimed Requests retire periodically, after 10 seconds by default. JaWS also
-limits them per client IP. `MaxPendingRequestsPerIP` defaults to 100; a
-non-positive value disables the cap. At the cap, a new Request evicts the oldest
-idle pending Request for that IP, or the least recently written one when all are
-fresh. The evicted key cannot be claimed.
+limits them by IPv4 address or IPv6 /64. Addresses in the well-known NAT64
+prefix `64:ff9b::/96` use their embedded IPv4 address.
+`MaxPendingRequestsPerIP` defaults to 100; a non-positive value disables the cap.
+At the cap, a new Request evicts the oldest idle pending Request for that bucket,
+or the least recently written one when all are fresh. The evicted key cannot be
+claimed.
 
 #### Pending-cap availability tradeoff
 
-The per-IP cap is a resource and admission-liveness policy, not logical-client
-isolation. Its bucket key is the address returned by `clientIP`: users behind the
-same NAT or CGNAT share a bucket, as do all users behind a reverse proxy when
-`TrustForwardedHeaders` is disabled. A controlled proxy should supply sanitized
-forwarding headers and enable that option; it cannot separate users whose public
-address is already shared.
+The pending cap is a resource and admission-liveness policy, not logical-client
+isolation. Its bucket key comes from `clientIP`:
+users behind the same NAT or CGNAT share a bucket, as do IPv6 clients in one /64
+and users behind a reverse proxy when `TrustForwardedHeaders` is disabled. A
+controlled proxy should supply sanitized forwarding headers and enable that
+option; it cannot separate users who share an accounted bucket. A translator
+using a network-specific IPv6 prefix needs a proxy that supplies the original
+IPv4 address, since JaWS cannot infer it from the prefix.
 
 Evicting an existing pending Request instead of refusing the newcomer is
 deliberate. A JavaScript-capable client normally claims its key immediately after
 rendering, removing it from the pending bucket, so healthy occupancy is roughly
 the page-arrival rate multiplied by the render-to-WebSocket-claim latency rather
 than the number of connected clients. Refusing newcomers at the cap would let a
-non-JavaScript or malicious client fill the bucket and keep later same-IP page
-loads out by replenishing expired entries. With the defaults, keeping the bucket
-full after the initial 100 GETs requires roughly 100 replacements per 10-second
-timeout.
+non-JavaScript or malicious client fill the bucket and keep later page loads
+from that bucket out by replenishing expired entries. With the defaults,
+keeping the bucket full after the initial 100 GETs requires roughly 100
+replacements per 10-second timeout.
 
-The chosen policy consequently lets a malicious client sharing the accounted IP
-retire another client's key during the short interval before that key is claimed.
-The cap never evicts claimed or active Requests. This bounded same-address effect
-is the accepted cost of admitting new clients instead of turning the pending cap
-into a cheap admission-denial mechanism.
+The chosen policy consequently lets a malicious client sharing the accounted
+bucket retire another client's key during the short interval before that key is
+claimed. The cap never evicts claimed or active Requests. This bounded eviction
+within one bucket is the accepted cost of admitting new clients without turning
+the pending cap into a cheap admission-denial mechanism.
 
 Random eviction inside the shared bucket changes only the probability; a
 sustained flood still wins, and fully random selection also discards the useful
@@ -416,13 +420,13 @@ connections, and anonymous cookies do not provide a trustworthy client identity;
 a malicious client can change or omit them. An authenticated application session
 can support an application-specific fairness policy, but cannot solve the
 unauthenticated case. Rate-limit public page GETs at the trusted proxy when
-stronger abuse resistance is needed. Disabling the cap removes same-address
-eviction but also removes this pending-Request resource bound.
+stronger abuse resistance is needed. Disabling the cap prevents bucket eviction
+but also removes this pending-Request resource bound.
 
-Security reviews should not report documented same-address pending eviction by
-itself as a new cross-client isolation defect. A defect requires behavior outside
-this tradeoff, such as eviction across distinct accounted IPs, effects on a
-claimed or active Request, or a way around the configured cap.
+Security reviews should not report eviction of pending Requests within one
+bucket as a new cross-client isolation defect. A defect requires behavior
+outside this tradeoff, such as eviction across distinct accounted buckets,
+effects on a claimed or active Request, or a way around the configured cap.
 
 Guessing a uniformly random pending key takes about 2^63 distinct guesses on
 average, and the attacker must succeed before the real browser claims the key or
