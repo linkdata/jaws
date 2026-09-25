@@ -148,14 +148,12 @@ type Jaws struct {
 	MaxSessions int
 	// MaxSessionsPerIP limits registered Sessions per client address bucket.
 	//
-	// IPv4 and NAT64 addresses in 64:ff9b::/96 use their IPv4 address; other
-	// IPv6 addresses use a /64. All registered Sessions count, including active
-	// ones and those awaiting cleanup. A non-positive value disables the cap,
-	// which is the default. Existing Sessions remain usable at the limit;
-	// [Jaws.SessionMiddleware] returns HTTP 429 for new ones unless the global
-	// cap is also reached. The bucket uses the client IP selected by
-	// [Jaws.TrustForwardedHeaders]. [Jaws.NewSession] needs a free slot to replace
-	// an existing Session in the bucket.
+	// Buckets are those of [Jaws.MaxPendingRequestsPerIP] and use the client IP
+	// selected by [Jaws.TrustForwardedHeaders]. All registered Sessions count,
+	// including active ones and those awaiting cleanup. A non-positive value
+	// disables the cap, which is the default. Existing Sessions remain usable at
+	// the limit; [Jaws.SessionMiddleware] returns HTTP 429 for new ones unless
+	// the global cap is also reached.
 	MaxSessionsPerIP int
 	// MaxPendingRequestsPerIP limits unclaimed Requests per client address bucket.
 	//
@@ -229,6 +227,7 @@ func New() (jw *Jaws, err error) {
 				requests:                make(map[key.Key]*Request),
 				pending:                 make(map[netip.Addr][]*Request),
 				sessions:                make(map[key.Key]*Session),
+				sessionBucketCounts:     make(map[netip.Addr]int),
 				dirty:                   make(map[any]int),
 				closeCh:                 make(chan struct{}),
 			}

@@ -481,9 +481,6 @@ func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Sessio
 func (jw *Jaws) registerSessionLocked(sess *Session, active bool) {
 	jw.sessions[sess.sessionID] = sess
 	if jw.MaxSessionsPerIP > 0 {
-		if jw.sessionBucketCounts == nil {
-			jw.sessionBucketCounts = make(map[netip.Addr]int)
-		}
 		jw.sessionBucketCounts[clientBucketKey(sess.remoteIP)]++
 	}
 	metrics := StatusMetricSessions
@@ -521,11 +518,10 @@ func (jw *Jaws) deleteSessionIfCurrent(sess *Session) {
 func (jw *Jaws) deleteSessionIfCurrentLocked(sess *Session) {
 	if jw.sessions[sess.sessionID] == sess {
 		delete(jw.sessions, sess.sessionID)
-		if jw.sessionBucketCounts != nil {
+		if jw.MaxSessionsPerIP > 0 {
 			bucket := clientBucketKey(sess.remoteIP)
-			if count := jw.sessionBucketCounts[bucket]; count > 1 {
-				jw.sessionBucketCounts[bucket] = count - 1
-			} else {
+			jw.sessionBucketCounts[bucket]--
+			if jw.sessionBucketCounts[bucket] <= 0 {
 				delete(jw.sessionBucketCounts, bucket)
 			}
 		}
