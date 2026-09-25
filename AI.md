@@ -289,7 +289,9 @@ registered Sessions; its default value of zero leaves the limit disabled. At
 the limit, `NewSession` returns nil and `SessionMiddleware` responds with HTTP
 503 without calling its handler. `AutoSession` may leave the Request without one;
 use `SessionMiddleware` when a session is required. Expired Sessions count until
-cleanup.
+cleanup. `MaxSessions` is a memory ceiling, not abuse protection. One client
+making cookie-less requests can fill it, denying new visitors Sessions until
+capacity is freed. Rate-limit Session-creating routes at the proxy.
 
 Loopback addresses are treated as the same client so a loopback reverse proxy
 does not break binding. If all traffic reaches JaWS from loopback, binding is

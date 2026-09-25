@@ -424,8 +424,7 @@ func TestJaws_ServeOverloadLoggerCanBroadcastRepeatedly(t *testing.T) {
 	})
 }
 
-// BenchmarkJawsMaintenanceSessions stresses maintenance scans and their lock
-// contention with 10,000 live Sessions.
+// BenchmarkJawsMaintenanceSessions measures maintenance with 10,000 live Sessions.
 func BenchmarkJawsMaintenanceSessions(b *testing.B) {
 	jw, err := New()
 	if err != nil {
@@ -441,11 +440,9 @@ func BenchmarkJawsMaintenanceSessions(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			jw.maintenance(time.Hour)
-		}
-	})
+	for b.Loop() {
+		jw.maintenance(time.Hour)
+	}
 }
 
 func TestJawsMaintenanceSweepsSessionsEveryTenTicks(t *testing.T) {
