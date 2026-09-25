@@ -97,8 +97,9 @@ type Jaws struct {
 	CookieName string
 	// AutoSession creates a [Session] on a successful WebSocket upgrade.
 	//
-	// It applies when the [Request] has none and Session limits allow it. The
-	// cookie's Secure flag follows the initial page request's scheme. Defaults to false.
+	// It applies when the [Request] has no Session and Session limits allow one.
+	// The cookie's Secure flag follows the initial page request's scheme, honoring
+	// [Jaws.TrustForwardedHeaders]. AutoSession defaults to false.
 	AutoSession bool
 	// TrustForwardedHeaders enables trusted proxy header processing.
 	//
