@@ -1,6 +1,11 @@
 package jaws
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
+
+const maxQueuedLogs = 4096
 
 type queuedLog struct {
 	logger Logger
@@ -8,16 +13,19 @@ type queuedLog struct {
 	next   *queuedLog
 }
 
-// loggerQueue decouples Logger.Error latency from producers without discarding
-// accepted errors. Its mutex is a leaf in the lock hierarchy, and its single
-// consumer releases it before invoking Logger.Error.
+// loggerQueue decouples Logger.Error latency from producers with a bounded FIFO.
+// Its mutex is a leaf in the lock hierarchy, and its single consumer releases
+// it before invoking Logger.Error.
 type loggerQueue struct {
-	mu     sync.Mutex
-	ready  *sync.Cond
-	head   *queuedLog
-	tail   *queuedLog
-	doneCh chan struct{}
-	closed bool
+	mu            sync.Mutex
+	ready         *sync.Cond
+	head          *queuedLog
+	tail          *queuedLog
+	depth         int
+	dropped       uint64
+	droppedLogger Logger
+	doneCh        chan struct{}
+	closed        bool
 }
 
 func newLoggerQueue() *loggerQueue {
@@ -36,6 +44,14 @@ func (q *loggerQueue) enqueue(logger Logger, err error) {
 		q.mu.Unlock()
 		return
 	}
+	if q.depth >= maxQueuedLogs {
+		if q.dropped == 0 {
+			q.droppedLogger = logger
+		}
+		q.dropped++
+		q.mu.Unlock()
+		return
+	}
 	entry := &queuedLog{logger: logger, err: err}
 	if q.tail == nil {
 		q.head = entry
@@ -43,6 +59,7 @@ func (q *loggerQueue) enqueue(logger Logger, err error) {
 		q.tail.next = entry
 	}
 	q.tail = entry
+	q.depth++
 	q.ready.Signal()
 	q.mu.Unlock()
 }
@@ -58,16 +75,21 @@ func (q *loggerQueue) close() {
 
 func (q *loggerQueue) pop() (entry *queuedLog) {
 	q.mu.Lock()
-	for q.head == nil && !q.closed {
+	for q.head == nil && q.dropped == 0 && !q.closed {
 		q.ready.Wait()
 	}
 	entry = q.head
 	if entry != nil {
 		q.head = entry.next
 		entry.next = nil
+		q.depth--
 		if q.head == nil {
 			q.tail = nil
 		}
+	} else if q.dropped > 0 {
+		entry = &queuedLog{logger: q.droppedLogger, err: fmt.Errorf("jaws: %d diagnostics dropped", q.dropped)}
+		q.dropped = 0
+		q.droppedLogger = nil
 	}
 	q.mu.Unlock()
 	return

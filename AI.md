@@ -321,11 +321,12 @@ Recovered panics retain detail in the log but use a generic alert; generic JsVar
 setter failures do the same.
 
 Errors accepted for Logger delivery are dispatched through `Logger.Error`
-serially and asynchronously. Callback panics are contained. `Close` stops
-accepting Logger deliveries; later reports still increment `ErrorCount` while
-accepted entries drain. `Serve` and `ServeWithTimeout` wait for the drain before
-returning normally. A blocked logger callback delays later entries and the final
-drain.
+serially and asynchronously. The queue holds at most 4096 pending reports;
+additional reports still increment `ErrorCount` and are summarized after it
+drains. Callback panics are contained. `Close` stops accepting Logger deliveries;
+later reports still increment `ErrorCount` while accepted entries drain. `Serve`
+and `ServeWithTimeout` wait for the drain before returning normally. A blocked
+logger callback delays later entries and the final drain.
 
 ## Routing
 
