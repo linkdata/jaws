@@ -67,9 +67,9 @@ func (jw *Jaws) NewRequest(w http.ResponseWriter, r *http.Request) *Request {
 
 var wellKnownNAT64Prefix = netip.MustParsePrefix("64:ff9b::/96")
 
-// pendingBucketKey uses the embedded IPv4 address for the well-known NAT64 prefix.
+// clientBucketKey uses the embedded IPv4 address for the well-known NAT64 prefix.
 // Other IPv6 addresses share a /64; IPv4 addresses use their full address.
-func pendingBucketKey(addr netip.Addr) netip.Addr {
+func clientBucketKey(addr netip.Addr) netip.Addr {
 	addr = addr.Unmap()
 	if wellKnownNAT64Prefix.Contains(addr) {
 		a := addr.As16()
@@ -83,7 +83,7 @@ func pendingBucketKey(addr netip.Addr) netip.Addr {
 
 func (jw *Jaws) newRequest(r *http.Request) (rq *Request) {
 	remoteIP := jw.clientIP(r)
-	bucketKey := pendingBucketKey(remoteIP)
+	bucketKey := clientBucketKey(remoteIP)
 
 	func() {
 		jw.mu.Lock()
@@ -208,7 +208,7 @@ func (jw *Jaws) pendingEvictionVictimLocked(bucketKey netip.Addr, nowSeconds int
 }
 
 func (jw *Jaws) removePendingRequestLocked(rq *Request) {
-	bucketKey := pendingBucketKey(rq.remoteIP)
+	bucketKey := clientBucketKey(rq.remoteIP)
 	pending := jw.pending[bucketKey]
 	if i := slices.Index(pending, rq); i >= 0 {
 		pending = slices.Delete(pending, i, i+1)

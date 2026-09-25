@@ -433,7 +433,7 @@ func BenchmarkJawsMaintenanceSessions(b *testing.B) {
 	b.Cleanup(jw.Close)
 	jw.mu.Lock()
 	for range 10_000 {
-		sess := jw.newSessionLocked(netip.Addr{}, false)
+		sess, _ := jw.newSessionLocked(netip.Addr{}, false)
 		jw.registerSessionLocked(sess, false)
 	}
 	jw.mu.Unlock()

@@ -3151,7 +3151,7 @@ func TestCoverage_PendingSubscribeMaintenanceAndParse(t *testing.T) {
 	}
 
 	// Dead session cleanup path.
-	sess := jw.newSession(nil, hr)
+	sess, _ := jw.newSession(nil, hr)
 	sess.mu.Lock()
 	sess.deadline = time.Now().Add(-time.Second)
 	sess.mu.Unlock()

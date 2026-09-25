@@ -592,6 +592,112 @@ func TestSession_MaxSessionsRefusesWithoutEviction(t *testing.T) {
 	}
 }
 
+func TestSession_MaxSessionsPerIP(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.MaxSessions = 2
+	jw.MaxSessionsPerIP = 1
+	serveDone := make(chan struct{})
+	go func() {
+		jw.Serve()
+		close(serveDone)
+	}()
+	t.Cleanup(func() {
+		jw.Close()
+		<-serveDone
+	})
+	waitForServeLoop(t, jw)
+
+	newRequest := func(ip string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = net.JoinHostPort(ip, "1234")
+		return r
+	}
+	first := jw.NewSession(nil, newRequest("192.0.2.1"))
+	if first == nil {
+		t.Fatal("first NewSession returned nil")
+	}
+	if got := jw.NewSession(nil, newRequest("192.0.2.1")); got != nil {
+		t.Fatalf("NewSession at per-IP limit = %p, want nil", got)
+	}
+
+	called := 0
+	wrapped := jw.SessionMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called++ }))
+	limited := httptest.NewRecorder()
+	wrapped.ServeHTTP(limited, newRequest("192.0.2.1"))
+	if limited.Code != http.StatusTooManyRequests || called != 0 || len(limited.Result().Cookies()) != 0 {
+		t.Fatalf("per-IP limit: status=%d, called=%d, cookies=%v", limited.Code, called, limited.Result().Cookies())
+	}
+
+	existingRequest := newRequest("192.0.2.1")
+	existingRequest.AddCookie(first.Cookie())
+	existing := httptest.NewRecorder()
+	wrapped.ServeHTTP(existing, existingRequest)
+	if existing.Code != http.StatusOK || called != 1 || jw.SessionCount() != 1 {
+		t.Fatalf("existing Session: status=%d, called=%d, sessions=%d", existing.Code, called, jw.SessionCount())
+	}
+
+	other := httptest.NewRecorder()
+	wrapped.ServeHTTP(other, newRequest("198.51.100.1"))
+	if other.Code != http.StatusOK || called != 2 || jw.SessionCount() != 2 {
+		t.Fatalf("other IP: status=%d, called=%d, sessions=%d", other.Code, called, jw.SessionCount())
+	}
+	globalLimit := httptest.NewRecorder()
+	wrapped.ServeHTTP(globalLimit, newRequest("192.0.2.1"))
+	if globalLimit.Code != http.StatusServiceUnavailable || called != 2 {
+		t.Fatalf("global limit: status=%d, called=%d", globalLimit.Code, called)
+	}
+
+	autoRequest := newRequest("192.0.2.1")
+	rq := jw.newRequest(autoRequest)
+	if got := rq.newAutoSession(autoRequest); got != nil || jw.SessionCount() != 2 {
+		t.Fatalf("AutoSession at per-IP limit = %p, sessions=%d", got, jw.SessionCount())
+	}
+
+	first.Close()
+	afterClose := httptest.NewRecorder()
+	wrapped.ServeHTTP(afterClose, newRequest("192.0.2.1"))
+	if afterClose.Code != http.StatusOK || called != 3 || jw.SessionCount() != 2 {
+		t.Fatalf("after Close: status=%d, called=%d, sessions=%d", afterClose.Code, called, jw.SessionCount())
+	}
+}
+
+func TestSession_MaxSessionsPerIPBuckets(t *testing.T) {
+	tests := []struct {
+		name, first, same, other string
+	}{
+		{"IPv4 mapped", "203.0.113.1", "::ffff:203.0.113.1", "203.0.113.2"},
+		{"IPv6 /64", "2001:db8:1:2::1", "2001:db8:1:2::2", "2001:db8:1:3::1"},
+		{"NAT64", "64:ff9b::cb00:7101", "64:ff9b::cb00:7101", "64:ff9b::c633:6401"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(jw.Close)
+			jw.MaxSessionsPerIP = 1
+			newRequest := func(ip string) *http.Request {
+				r := httptest.NewRequest(http.MethodGet, "/", nil)
+				r.RemoteAddr = net.JoinHostPort(ip, "1234")
+				return r
+			}
+			if sess := jw.NewSession(nil, newRequest(tt.first)); sess == nil {
+				t.Fatal("first NewSession returned nil")
+			}
+			if sess := jw.NewSession(nil, newRequest(tt.same)); sess != nil {
+				t.Fatalf("same bucket NewSession = %p, want nil", sess)
+			}
+			if sess := jw.NewSession(nil, newRequest(tt.other)); sess == nil {
+				t.Fatal("other bucket NewSession returned nil")
+			}
+		})
+	}
+}
+
 func TestSession_NewSessionIgnoresDeadMappedSession(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1870,13 +1976,13 @@ func TestSession_CloseDoesNotDeleteSameIDReplacement(t *testing.T) {
 	remoteIP := netip.MustParseAddr("192.0.2.1")
 	stale := newSession(jw, sessionID, remoteIP, false)
 	jw.mu.Lock()
-	jw.sessions[sessionID] = stale
+	jw.registerSessionLocked(stale, false)
 	jw.mu.Unlock()
 	jw.deleteSessionIfCurrent(stale)
 
 	replacement := newSession(jw, sessionID, remoteIP, false)
 	jw.mu.Lock()
-	jw.sessions[sessionID] = replacement
+	jw.registerSessionLocked(replacement, false)
 	jw.mu.Unlock()
 
 	if cookie := stale.Close(); cookie == nil || cookie.MaxAge != -1 {
