@@ -372,7 +372,8 @@ func (rq *Request) ensureAutoSession(w http.ResponseWriter, r *http.Request) {
 // through Jaws session lookups.
 func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 	jw := rq.Jaws
-	secure := secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders)
+	// The bundled client uses the page scheme, which Origin validation already checked.
+	secure := secureheaders.RequestIsSecure(rq.Initial(), jw.TrustForwardedHeaders)
 	remoteIP := jw.clientIP(r)
 	jw.mu.Lock()
 	defer jw.mu.Unlock()

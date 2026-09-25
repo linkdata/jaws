@@ -94,8 +94,12 @@ type Jaws struct {
 	// It defaults to [assets.DefaultCookieName], which is derived from the
 	// executable and falls back to "jaws". CookieName must be a valid, non-empty
 	// HTTP cookie name; see [http.Cookie.Valid].
-	CookieName  string
-	AutoSession bool // Create a session during a successful WebSocket upgrade when a Request has none and the Session limits allow it. Defaults to false.
+	CookieName string
+	// AutoSession creates a [Session] on a successful WebSocket upgrade.
+	//
+	// It applies when the [Request] has none and Session limits allow it. The
+	// cookie's Secure flag follows the initial page request's scheme. Defaults to false.
+	AutoSession bool
 	// TrustForwardedHeaders enables trusted proxy header processing.
 	//
 	// It governs the session cookie Secure flag and WebSocket Origin scheme
