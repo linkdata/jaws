@@ -1223,6 +1223,51 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 }
 
+func TestRequest_EventHandlerPanicAlertHidesDetails(t *testing.T) {
+	tj := newTestJaws()
+	t.Cleanup(tj.Close)
+	rq := newWrappedTestRequest(tj.Jaws, nil)
+	t.Cleanup(rq.Close)
+
+	const detail = "password authentication failed for billing_rw"
+	id := rq.Register(&testUi{}, func(*Element, string) error {
+		panic(detail)
+	})
+	rq.InCh <- wire.WsMsg{Jid: id, What: what.Input}
+
+	select {
+	case msg := <-rq.OutCh:
+		if msg.What != what.Alert || msg.Data != "danger\nevent handler failed" {
+			t.Fatalf("panic alert = %#v, want generic danger alert", msg)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("timed out waiting for panic alert")
+	}
+	awaitTestLoggerQueue(t, tj.Jaws)
+	if got := tj.log.String(); !strings.Contains(got, detail) {
+		t.Fatalf("operator log omitted panic detail: %q", got)
+	}
+}
+
+func TestRequest_HookHandlerPanicAlertHidesDetails(t *testing.T) {
+	rq := newTestRequest(t)
+	defer rq.Close()
+	ui := &testUi{}
+	rq.Register(ui, func(*Element, string) error {
+		panic("private panic detail")
+	})
+	rq.Jaws.Broadcast(wire.Message{Dest: ui, What: what.Hook})
+
+	select {
+	case msg := <-rq.OutCh:
+		if msg.What != what.Alert || msg.Data != "danger\nevent handler failed" {
+			t.Fatalf("hook panic alert = %#v, want generic danger alert", msg)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("timed out waiting for hook panic alert")
+	}
+}
+
 // TestRequest_EventFnQueue uses an event handler that deliberately blocks
 // (busy-waiting on sleepDone) to fill the event queue. That busy-wait is the
 // device under test and keeps re-arming the clock, so this test is not suited to

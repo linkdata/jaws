@@ -147,7 +147,7 @@ func TestJsVarPathSetterPanicReleasesValueLock(t *testing.T) {
 
 	// Send the exact what.Set frame that jaws.js emits for a browser-side write
 	// over the production HTTP-upgraded WebSocket. Request event dispatch calls
-	// CallEventHandlers, which recovers the panic and reports it to the browser
+	// CallEventHandlers, which recovers the panic and sends a generic alert
 	// without terminating the request loop.
 	incoming := wire.WsMsg{
 		Jid:  rendered.elem.Jid(),
@@ -165,8 +165,8 @@ func TestJsVarPathSetterPanicReleasesValueLock(t *testing.T) {
 		t.Fatalf("panic response type = %v, want text", messageType)
 	}
 	alert, ok := wire.Parse(raw)
-	if !ok || alert.What != what.Alert || !strings.Contains(alert.Data, errPathSetterPanic.Error()) {
-		t.Fatalf("recovered PathSetter panic frame = %q, want Alert containing %q", raw, errPathSetterPanic)
+	if !ok || alert.What != what.Alert || alert.Data != "danger\nevent handler failed" {
+		t.Fatalf("recovered PathSetter panic frame = %q, want generic danger alert", raw)
 	}
 
 	getDone := make(chan panicSafePathState, 1)

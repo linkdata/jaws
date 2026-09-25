@@ -278,6 +278,97 @@ func TestJsVarClientCheckContract(t *testing.T) {
 	}
 }
 
+func TestJsVarClientWriteAlertsHideOnlyGenericSetterErrors(t *testing.T) {
+	checkErr := errors.New("application validation failed")
+	setterErr := errors.New("application path denied")
+	for _, tt := range []struct {
+		name       string
+		data       string
+		makeVar    func() (IsJsVar, any)
+		wantAlert  string
+		wantCause  error
+		wantDetail string
+	}{
+		{
+			name: "missing field",
+			data: "nosuchfield=1",
+			makeVar: func() (IsJsVar, any) {
+				state := &jsVarCheckedState{}
+				return NewJsVar(new(sync.Mutex), state), state
+			},
+			wantAlert:  "invalid JsVar update",
+			wantCause:  jq.ErrPathNotFound,
+			wantDetail: "jsVarCheckedState",
+		},
+		{
+			name: "wrong value type",
+			data: "value=1",
+			makeVar: func() (IsJsVar, any) {
+				state := &jsVarCheckedState{}
+				return NewJsVar(new(sync.Mutex), state), state
+			},
+			wantAlert:  "invalid JsVar update",
+			wantCause:  jq.ErrTypeMismatch,
+			wantDetail: "expected string",
+		},
+		{
+			name: "client check",
+			data: `value="new"`,
+			makeVar: func() (IsJsVar, any) {
+				state := &jsVarCheckedState{}
+				jsvar := NewJsVar(new(sync.Mutex), state)
+				jsvar.ClientCheck = func(*jsVarCheckedState, string) error { return checkErr }
+				return jsvar, state
+			},
+			wantAlert: "application validation failed",
+			wantCause: checkErr,
+		},
+		{
+			name: "path setter",
+			data: "value=1",
+			makeVar: func() (IsJsVar, any) {
+				state := &jsVarErrorPathSetter{err: setterErr}
+				return NewJsVar(new(sync.Mutex), state), state
+			},
+			wantAlert: "application path denied",
+			wantCause: setterErr,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := &templateLogger{}
+			jw, err := jaws.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			jw.Logger = logger
+			t.Cleanup(jw.Close)
+			go jw.Serve()
+			tr := newJsVarTestRequest(t, jw)
+			jsvar, tag := tt.makeVar()
+			rw := RequestWriter{Request: tr.Request, Writer: io.Discard}
+			if err := rw.JsVar("state", jsvar); err != nil {
+				t.Fatal(err)
+			}
+			elems := tr.GetElements(tag)
+			if len(elems) != 1 {
+				t.Fatalf("rendered elements = %d, want 1", len(elems))
+			}
+			tr.InCh <- wire.WsMsg{Jid: elems[0].Jid(), What: what.Set, Data: tt.data}
+			msg := awaitJsVarOperation(t, "client write alert", tr.OutCh)
+			if msg.What != what.Alert || msg.Data != "danger\n"+tt.wantAlert {
+				t.Fatalf("client alert = %#v, want danger alert %q", msg, tt.wantAlert)
+			}
+			logged := logger.sync(t, jw)
+			if len(logged) != 1 || !errors.Is(logged[0], tt.wantCause) {
+				t.Fatalf("logged errors = %v, want one matching %v", logged, tt.wantCause)
+			}
+			if tt.wantDetail != "" && !strings.Contains(logged[0].Error(), tt.wantDetail) {
+				t.Fatalf("operator log omitted %q: %v", tt.wantDetail, logged[0])
+			}
+		})
+	}
+}
+
 func TestJsVarGenericPathsUseJavaScriptArrayIndices(t *testing.T) {
 	tr := newJsVarTestRequest(t, newJsVarTestJaws(t))
 	var err error

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -222,8 +221,8 @@ func TestJsVarRecoveredMarshalPanicReleasesSetterOrder(t *testing.T) {
 		What: what.Click,
 		Data: "0 0 0 set",
 	}
-	if alert := readJsVarMessage(t, tr, what.Alert); !strings.Contains(alert, errMarshalPanic.Error()) {
-		t.Fatalf("recovered panic alert = %q, want %q", alert, errMarshalPanic)
+	if alert := readJsVarMessage(t, tr, what.Alert); alert != "danger\nevent handler failed" {
+		t.Fatalf("recovered panic alert = %q, want generic danger alert", alert)
 	}
 
 	setErr := make(chan error, 1)
