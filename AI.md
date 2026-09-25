@@ -110,8 +110,8 @@ The normal page flow has two related HTTP requests:
 1. Before writing the response, a page handler calls `Jaws.NewRequest(w, r)`,
    which replaces `Cache-Control` with `no-store`. `HeadHTML` normally emits the
    configured resources and request-key metadata. `TailHTML` is optional;
-   placing it before `</body>` applies queued initial updates before the
-   WebSocket connects and can reduce flicker.
+   placing it before `</body>` can apply queued initial updates before the
+   WebSocket starts and reduce flicker.
 2. The bundled script connects to `/jaws/<key>`. `Jaws.ServeHTTP` decodes the
    key, claims the pending Request through `UseRequest`, upgrades the connection,
    and begins event and DOM-update processing.
