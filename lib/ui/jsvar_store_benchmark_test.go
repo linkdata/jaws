@@ -2,6 +2,9 @@ package ui
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -140,7 +143,7 @@ func BenchmarkJsVarStoreSnapshotPatches(b *testing.B) {
 	}
 }
 
-// BenchmarkJsVarStoreProposal measures a changed-leaf proposal in a plain store.
+// BenchmarkJsVarStoreProposal measures a changed-leaf proposal through a rendered binding.
 func BenchmarkJsVarStoreProposal(b *testing.B) {
 	for _, parallel := range []bool{false, true} {
 		name := "serial"
@@ -166,7 +169,11 @@ func BenchmarkJsVarStoreProposal(b *testing.B) {
 			}
 			store.ClientCheck = func(*jaws.Element, *map[string]map[string]map[string]int, string) error { return nil }
 			binding := store.Bind()
-			binding.active.Store(true)
+			rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+			elem := rq.NewElement(binding)
+			if err := elem.JawsRender(io.Discard, nil); err != nil {
+				b.Fatal(err)
+			}
 			data, err := json.Marshal(state)
 			if err != nil {
 				b.Fatal(err)
@@ -180,7 +187,7 @@ func BenchmarkJsVarStoreProposal(b *testing.B) {
 				b.RunParallel(func(pb *testing.PB) {
 					for pb.Next() {
 						value := float64(iteration.Add(1))
-						if _, err := binding.applyProposal(nil, "players.alice.x", value); err != nil {
+						if _, err := binding.applyProposal(elem, "players.alice.x", value); err != nil {
 							failed.Store(true)
 						}
 					}
@@ -190,7 +197,7 @@ func BenchmarkJsVarStoreProposal(b *testing.B) {
 				}
 			} else {
 				for i := range b.N {
-					if _, err := binding.applyProposal(nil, "players.alice.x", float64(i)); err != nil {
+					if _, err := binding.applyProposal(elem, "players.alice.x", float64(i)); err != nil {
 						b.Fatal(err)
 					}
 				}

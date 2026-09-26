@@ -113,11 +113,12 @@ type JsVarStore[T any] struct {
 	ClientCheck JsVarCheck[T] // nil denies browser proposals
 	ExtraTags   []any         // dirtied after each changed mutation
 
-	jaws    *jaws.Jaws
-	name    string
-	locker  bind.RWLocker
-	value   *T
-	partial bool // plain JSON tree with matching jq paths and safe partial patches
+	jaws      *jaws.Jaws
+	name      string
+	locker    bind.RWLocker
+	value     *T
+	partial   bool   // plain JSON tree with matching jq paths and safe partial patches
+	nextRoute uint64 // incremented under locker
 }
 
 // NewJsVarStore creates a store with an application-owned browser name.
@@ -128,7 +129,8 @@ type JsVarStore[T any] struct {
 //
 // The value and locker must remain valid for the store's lifetime. An invalid
 // name returns [ErrIllegalJsVarName], and a nil value returns
-// [github.com/linkdata/jq.ErrInvalidReceiver].
+// [github.com/linkdata/jq.ErrInvalidReceiver]. A binding rendered on a Request
+// owned by another Jaws returns an error.
 func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value *T) (store *JsVarStore[T], err error) {
 	if err = validateJsVarName(name); err == nil {
 		if value == nil {
@@ -281,26 +283,41 @@ type jsVarNameTag struct{ name string }
 
 type jsVarBindingRoute interface {
 	jsVarStore() any
-	Deactivate()
 }
 
 // JsVarBinding renders one browser route to a [JsVarStore].
 //
 // Bindings are one-use and request-scoped. Deactivate makes a provisional route
 // inert before a redirect; it is safe to call concurrently with input dispatch.
+// Among live bindings of the same store in one Request, only the latest rendered
+// route handles proposals and patches. If a failed render deletes that route,
+// an earlier binding can handle updates again unless explicitly deactivated.
 type JsVarBinding[T any] struct {
 	store    *JsVarStore[T]
 	rendered atomic.Bool
 	active   atomic.Bool
+	route    atomic.Uint64
 }
 
 func (binding *JsVarBinding[T]) jsVarStore() any { return binding.store }
 
-// Deactivate prevents this binding from handling proposals or sending patches.
-func (binding *JsVarBinding[T]) Deactivate() { binding.active.Store(false) }
+// Deactivate suppresses this binding's later proposal and patch work.
+//
+// Patch work already in progress may queue messages after Deactivate returns,
+// and queued messages may still be delivered.
+func (binding *JsVarBinding[T]) Deactivate() {
+	binding.active.Store(false)
+}
 
 // JawsRender writes the hidden browser route and its initial JSON value.
+//
+// A Request owned by a different [jaws.Jaws] returns an error without output.
 func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	if elem.Jaws != binding.store.jaws {
+		// The store publishes through exactly one Jaws; a foreign Request could
+		// render a route but would never receive its invalidations.
+		return fmt.Errorf("jsvar: binding rendered on a different Jaws instance")
+	}
 	if !binding.rendered.CompareAndSwap(false, true) {
 		return ErrJsVarBindingUsed
 	}
@@ -317,7 +334,7 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 	b = append(b, " hidden></div>"...)
 	_, err = w.Write(b)
 	if err == nil {
-		binding.activate(previous)
+		binding.activate()
 		if len(previous) > 0 {
 			store.jaws.DirtyPath(elem, "")
 		}
@@ -349,16 +366,31 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 	return
 }
 
-func (binding *JsVarBinding[T]) activate(previous []*jaws.Element) {
+func (binding *JsVarBinding[T]) activate() {
 	store := binding.store
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	for _, other := range previous {
-		if route, ok := other.UI().(jsVarBindingRoute); ok {
-			route.Deactivate()
+	store.nextRoute++
+	binding.route.Store(store.nextRoute)
+	binding.active.Store(true)
+}
+
+// isCurrent reports whether elem is the latest rendered route for its store in
+// this Request. A deactivated newer route still owns the browser name until its
+// Element is removed, so it must not expose an older route.
+func (binding *JsVarBinding[T]) isCurrent(elem *jaws.Element) bool {
+	if !binding.active.Load() {
+		return false
+	}
+	current := binding.route.Load()
+	for _, other := range elem.Request.GetElements(jsVarNameTag{binding.store.name}) {
+		if other != elem {
+			if route, ok := other.UI().(*JsVarBinding[T]); ok && route.store == binding.store && route.route.Load() > current {
+				return false
+			}
 		}
 	}
-	binding.active.Store(true)
+	return true
 }
 
 // JawsUpdate does not change a browser route without a path invalidation.
@@ -366,11 +398,13 @@ func (binding *JsVarBinding[T]) JawsUpdate(*jaws.Element) {}
 
 // JawsUpdatePaths sends current canonical state for invalidated paths.
 //
+// Only the current active route sends patches.
+//
 // Complex JSON shapes use a root patch. Plain value trees use partial patches
 // extracted from one full root encoding, preserving JSON tags and exact numbers.
 // A failed encoding cancels the Request.
 func (binding *JsVarBinding[T]) JawsUpdatePaths(elem *jaws.Element, paths []string) {
-	if !binding.active.Load() {
+	if !binding.isCurrent(elem) {
 		return
 	}
 	patches, err := binding.snapshotPatches(paths)
@@ -378,7 +412,7 @@ func (binding *JsVarBinding[T]) JawsUpdatePaths(elem *jaws.Element, paths []stri
 		elem.Request.Cancel(fmt.Errorf("jsvar: encode store %q: %w", binding.store.name, err))
 		return
 	}
-	if binding.active.Load() {
+	if binding.isCurrent(elem) {
 		for _, patch := range patches {
 			elem.Patch(patch)
 		}
@@ -458,12 +492,16 @@ func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visibl
 
 // JawsInput applies a browser proposal after checking the whole tentative value.
 //
+// A deactivated or superseded binding ignores proposals.
+//
 // A rejected, invalid, or unchanged proposal schedules a canonical correction
 // for its source binding. A changed accepted proposal invalidates every binding.
+// An unchanged proposal to a complex Go shape is rejected to avoid revealing
+// Go values hidden by its JSON encoding.
 // A panicking check rolls back and schedules a root correction before the panic
 // continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
 func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err error) {
-	if !binding.active.Load() {
+	if !binding.isCurrent(elem) {
 		return nil
 	}
 	defer func() {
@@ -507,7 +545,7 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 	store := binding.store
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	if !binding.active.Load() {
+	if !binding.isCurrent(elem) {
 		return
 	}
 	if store.ClientCheck == nil {
@@ -552,6 +590,11 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 		}
 		return store.ClientCheck(elem, store.value, path)
 	})
+	if err == nil && !changed {
+		// jq skips the callback for equal Go values. With a custom encoder,
+		// accepting that no-op could reveal a field absent from browser JSON.
+		err = ErrIllegalJsVarPath
+	}
 	return
 }
 

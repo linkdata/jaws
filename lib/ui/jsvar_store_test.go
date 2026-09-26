@@ -832,9 +832,9 @@ func TestJsVarStoreNameConflictAndDeactivation(t *testing.T) {
 	var mu sync.RWMutex
 	value := 1
 	first := newTestJsVarStore(t, jw, "client", &mu, &value)
-	binding1, _, _ := renderTestJsVar(t, rq, first)
-	binding2, _, _ := renderTestJsVar(t, rq, first)
-	if binding1.active.Load() || !binding2.active.Load() {
+	binding1, elem1, _ := renderTestJsVar(t, rq, first)
+	binding2, elem2, _ := renderTestJsVar(t, rq, first)
+	if binding1.isCurrent(elem1) || !binding2.isCurrent(elem2) {
 		t.Fatal("same-store replacement did not transfer the route")
 	}
 	other := newTestJsVarStore(t, jw, "client", &mu, &value)
@@ -844,8 +844,8 @@ func TestJsVarStoreNameConflictAndDeactivation(t *testing.T) {
 	}
 	rq.DeleteElement(elem)
 	binding2.Deactivate()
-	if binding2.active.Load() {
-		t.Fatal("Deactivate left route active")
+	if binding1.isCurrent(elem1) || binding2.isCurrent(elem2) {
+		t.Fatal("Deactivate left a browser route active")
 	}
 	for _, name := range []string{"__proto__", "constructor", "prototype", strings.Repeat("a", 4097)} {
 		if _, err := NewJsVarStore(jw, name, &mu, &value); !errors.Is(err, ErrIllegalJsVarName) {

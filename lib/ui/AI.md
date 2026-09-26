@@ -287,9 +287,9 @@ slider := ui.NewRange(binder)
 
 JsVarStore owns one application value and one browser name. Its Go value is
 authoritative. Create one store for shared state, then call Bind for each
-Request render; each binding is used once. The bundled client holds values in a
-private Map, so read or propose changes through jawsVar rather than window
-properties.
+Request render on the Jaws instance passed to NewJsVarStore; each binding is
+used once. The bundled client holds values in a private Map, so read or
+propose changes through jawsVar rather than window properties.
 
 ```go
 store, err := ui.NewJsVarStore(jw, "client", &mu, &client)
@@ -338,6 +338,9 @@ and encoded paths; for complex shapes, non-root proposals are checked against
 the encoded value and may change only their visible subtree. A Go field tagged
 json:"value" is addressed as value, not Value. JSON null is a value; DeletePath
 removes a string-keyed map entry.
+
+An unchanged proposal to a complex Go shape is rejected and corrected. Its Go
+equality could otherwise reveal a field hidden by the JSON encoding.
 
 The store reads and encodes current Go state when a Request handles a path
 invalidation, including one accumulated while its WebSocket was pending. It
