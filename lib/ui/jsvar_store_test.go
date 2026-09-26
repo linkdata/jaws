@@ -471,6 +471,322 @@ func TestJsVarStoreProjectionFallback(t *testing.T) {
 	}
 }
 
+func TestJsVarStoreOmittedParentUsesRootPatch(t *testing.T) {
+	type inner struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	}
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		S inner `json:"s,omitzero"`
+	}{}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	if store.partial {
+		t.Fatal("omittable parent permits descendant patches")
+	}
+	binding := store.Bind()
+	if changed, err := store.SetPath("s.y", 5); err != nil || !changed {
+		t.Fatalf("create s: (%t, %v)", changed, err)
+	}
+	patches, err := binding.snapshotPatches([]string{"s.y"})
+	if err != nil || !reflect.DeepEqual(patches, []string{`={"s":{"x":0,"y":5}}`}) {
+		t.Fatalf("create patch = %q, %v", patches, err)
+	}
+	if changed, err := store.SetPath("s.y", 0); err != nil || !changed {
+		t.Fatalf("omit s: (%t, %v)", changed, err)
+	}
+	patches, err = binding.snapshotPatches([]string{"s.y"})
+	if err != nil || !reflect.DeepEqual(patches, []string{`={}`}) {
+		t.Fatalf("omit patch = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreOmitEmptyMapUsesRootPatch(t *testing.T) {
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		S map[string]int `json:"s,omitempty"`
+	}{}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	if store.partial {
+		t.Fatal("omittable map permits descendant patches")
+	}
+	if changed, err := store.SetPath("s", map[string]int{"x": 1}); err != nil || !changed {
+		t.Fatalf("create s: (%t, %v)", changed, err)
+	}
+	patches, err := store.Bind().snapshotPatches([]string{"s.x"})
+	if err != nil || !reflect.DeepEqual(patches, []string{`={"s":{"x":1}}`}) {
+		t.Fatalf("create patch = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreOmittedScalarRejectsProposal(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Count int `json:"count,omitempty"`
+	}{}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	if store.partial {
+		t.Fatal("omitted scalar permits unchecked browser path")
+	}
+	checks := 0
+	store.ClientCheck = func(*jaws.Element, *struct {
+		Count int `json:"count,omitempty"`
+	}, string,
+	) error {
+		checks++
+		return nil
+	}
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if err := binding.JawsInput(elem, "count=1"); !errors.Is(err, ErrIllegalJsVarPath) || state.Count != 0 || checks != 0 {
+		t.Fatalf("omitted path proposal: state=%+v checks=%d err=%v", state, checks, err)
+	}
+	if changed, err := store.SetPath("count", 1); err != nil || !changed {
+		t.Fatalf("server create count: (%t, %v)", changed, err)
+	}
+	patches, err := binding.snapshotPatches([]string{"count"})
+	if err != nil || !reflect.DeepEqual(patches, []string{`={"count":1}`}) {
+		t.Fatalf("server create patch = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreDeduplicatesWidenedPatches(t *testing.T) {
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Grid [70]int `json:"grid"`
+	}{}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	if !store.partial {
+		t.Fatal("fixed array unexpectedly uses root patches")
+	}
+	paths := make([]string, 64)
+	for i := range paths {
+		paths[i] = "grid." + strconv.Itoa(i)
+	}
+	patches, err := store.Bind().snapshotPatches(paths)
+	encoded, encodeErr := json.Marshal(state.Grid)
+	if err != nil || encodeErr != nil || !reflect.DeepEqual(patches, []string{"grid=" + string(encoded)}) {
+		t.Fatalf("widened patches = %q, %v; encoding error = %v", patches, err, encodeErr)
+	}
+	patches, err = store.Bind().snapshotPatches([]string{"grid\nPatch\tother"})
+	root, encodeErr := json.Marshal(state)
+	if err != nil || encodeErr != nil || !reflect.DeepEqual(patches, []string{"=" + string(root)}) {
+		t.Fatalf("invalid path fallback = %q, %v; encoding error = %v", patches, err, encodeErr)
+	}
+}
+
+func TestJsVarStorePatchPreservesExactInteger(t *testing.T) {
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Value uint64 `json:"value"`
+	}{Value: ^uint64(0)}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	patches, err := store.Bind().snapshotPatches([]string{"value"})
+	if err != nil || !reflect.DeepEqual(patches, []string{"value=18446744073709551615"}) {
+		t.Fatalf("integer patch = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreRecursiveMapUsesRootPatch(t *testing.T) {
+	type tree map[string]tree
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := tree{"leaf": {}}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	if store.partial {
+		t.Fatal("recursive map permits descendant patches")
+	}
+}
+
+func TestDecodeJsVarJSONRejectsDuplicateMembers(t *testing.T) {
+	for _, data := range []string{
+		`{"x":1,"x":2}`,
+		`{"x":1,"\u0078":2}`,
+		`{"outer":{"x":1,"x":2}}`,
+		`[{"x":1,"x":2}]`,
+	} {
+		if _, err := decodeJsVarJSON([]byte(data)); err == nil {
+			t.Errorf("accepted duplicate members in %s", data)
+		}
+	}
+	if value, err := decodeJsVarJSON([]byte(`{"x":[1,2]}`)); err != nil || !reflect.DeepEqual(value, map[string]any{"x": []any{json.Number("1"), json.Number("2")}}) {
+		t.Fatalf("valid JSON = %#v, %v", value, err)
+	}
+}
+
+func TestJsVarStoreRejectsCollidingMapKeysOnRender(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := map[string]int{
+		string([]byte{0xff, 0xfe}): 1,
+		string([]byte{0x80, 0x81}): 2,
+	}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding := store.Bind()
+	elem := rq.NewElement(binding)
+	if _, _, err := binding.renderSnapshot(elem); err == nil {
+		t.Fatal("rendered colliding encoded map keys")
+	}
+}
+
+func TestJsVarStoreRejectsEncoderAlias(t *testing.T) {
+	type meta struct {
+		Owner string `json:"owner"`
+	}
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Meta meta `json:",embed"`
+		Temp int  `json:"temp°C"`
+	}{Meta: meta{Owner: "alice"}}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte(`"Meta"`)) {
+		t.Skip("encoder uses legacy field names")
+	}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	if store.partial {
+		t.Fatal("encoder aliases permit partial patches")
+	}
+	checks := 0
+	store.ClientCheck = func(*jaws.Element, *struct {
+		Meta meta `json:",embed"`
+		Temp int  `json:"temp°C"`
+	}, string,
+	) error {
+		checks++
+		return nil
+	}
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	for _, proposal := range []string{`Meta={"owner":"mallory"}`, `Meta.owner="mallory"`, `Temp=99`} {
+		if err := binding.JawsInput(elem, proposal); err == nil {
+			t.Errorf("accepted encoder alias %q", proposal)
+		}
+	}
+	if checks != 0 || state.Meta.Owner != "alice" || state.Temp != 0 {
+		t.Fatalf("alias changed state: %+v, checks=%d", state, checks)
+	}
+}
+
+func TestJsVarStoreRejectsEncoderAliasCollision(t *testing.T) {
+	type meta struct {
+		Owner string `json:"owner"`
+	}
+	type stateType struct {
+		Meta  meta              `json:",embed"`
+		Extra map[string]string `json:",embed"`
+	}
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := stateType{Meta: meta{Owner: "alice"}, Extra: map[string]string{"Meta": "decoy"}}
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible, err := decodeJsVarJSON(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	object, ok := visible.(map[string]any)
+	if !ok || object["owner"] != "alice" || object["Meta"] != "decoy" {
+		t.Skip("encoder does not flatten embedded fields")
+	}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	store.ClientCheck = func(*jaws.Element, *stateType, string) error { return nil }
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if err := binding.JawsInput(elem, `Meta={"owner":"mallory"}`); err == nil {
+		t.Fatal("accepted path to unrelated visible member")
+	}
+	if state.Meta.Owner != "alice" || state.Extra["Meta"] != "decoy" {
+		t.Fatalf("alias collision changed state: %+v", state)
+	}
+}
+
+func TestJsVarStoreVisibleArrayWrite(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Items []int `json:"items"`
+	}{Items: []int{1, 2}}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	checks := 0
+	store.ClientCheck = func(*jaws.Element, *struct {
+		Items []int `json:"items"`
+	}, string,
+	) error {
+		checks++
+		return nil
+	}
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if err := binding.JawsInput(elem, "items.1=3"); err != nil || !reflect.DeepEqual(state.Items, []int{1, 3}) || checks != 1 {
+		t.Fatalf("array item write: %+v, checks=%d, %v", state, checks, err)
+	}
+	if err := binding.JawsInput(elem, "items.2=4"); !errors.Is(err, jq.ErrPathNotFound) || !reflect.DeepEqual(state.Items, []int{1, 3}) {
+		t.Fatalf("array append: %+v, %v", state, err)
+	}
+}
+
+func TestJsVarStoreRejectsNonFiniteConversion(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Value float32 `json:"value"`
+	}{Value: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	store.ClientCheck = func(*jaws.Element, *struct {
+		Value float32 `json:"value"`
+	}, string,
+	) error {
+		return nil
+	}
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if err := binding.JawsInput(elem, "value=3.5e38"); err == nil || state.Value != 1 {
+		t.Fatalf("non-finite conversion: %v, %v", state.Value, err)
+	}
+}
+
+func TestJsVarStoreRejectsDuplicateEncoding(t *testing.T) {
+	type stateType struct {
+		Status string
+		Extra  map[string]string `json:",embed"`
+	}
+	duplicate := stateType{Status: "pending", Extra: map[string]string{"Status": "approved"}}
+	data, err := json.Marshal(duplicate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeJsVarJSON(data); err == nil {
+		t.Skip("encoder does not flatten embedded fallback map")
+	}
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := stateType{Status: "pending", Extra: map[string]string{}}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	store.ClientCheck = func(*jaws.Element, *stateType, string) error { return nil }
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if err := binding.JawsInput(elem, `={"Status":"pending","Extra":{"Status":"approved"}}`); err == nil {
+		t.Fatal("accepted duplicate encoding")
+	}
+	if state.Extra["Status"] != "" || state.Status != "pending" {
+		t.Fatalf("duplicate proposal retained: %+v", state)
+	}
+	state = duplicate
+	duplicateBinding := store.Bind()
+	duplicateElem := rq.NewElement(duplicateBinding)
+	if _, _, err := duplicateBinding.renderSnapshot(duplicateElem); err == nil {
+		t.Fatal("rendered duplicate JSON")
+	}
+	if _, err := binding.snapshotPatches([]string{""}); err == nil {
+		t.Fatal("patched duplicate JSON")
+	}
+}
+
 func TestJsVarStoreMarshalPanicReleasesLock(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	var mu sync.RWMutex

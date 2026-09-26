@@ -97,6 +97,7 @@ type Request struct {
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session          *Session                // session, if established
 	todoDirt         []any                   // pending dirty tags and exact Element targets
+	todoDirtSeen     map[any]struct{}        // membership for selectors retained across dirty passes
 	todoPaths        map[any]*dirtyPathSet   // pending path updates for live tagged Elements
 	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
 	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
@@ -445,6 +446,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	}
 	rq.buffers = nil
 	rq.todoDirt = nil
+	rq.todoDirtSeen = nil
 	rq.todoPaths = nil
 	rq.elems = nil
 	rq.deletedElems = 0
@@ -906,10 +908,11 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	return
 }
 
-// appendDirtyTags queues already-expanded selectors onto this request's pending-dirt
-// list. Exact Element targets are kept only by their owning Request. The Serve loop's
-// update tick later drains the list (see makeUpdateList) and re-renders the affected
-// elements. Takes rq.mu.
+// appendDirtyTags queues an already-expanded, unique selector list onto this
+// request's pending-dirt list. Exact Element targets are kept only by their
+// owning Request.
+// The Serve loop's update tick later drains the list (see makeUpdateList) and
+// re-renders the affected elements. Takes rq.mu.
 //
 // It may run after the caller's dirt snapshot was taken but before rq finished
 // (see distributeDirt). A finished Request is unregistered (registered is false), so
@@ -917,6 +920,13 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	if rq.loadState().registered() {
+		// distributeDirt supplies distinct map keys, so an empty queue needs no set.
+		if len(rq.todoDirt) > 0 && len(tags) > 0 && rq.todoDirtSeen == nil {
+			rq.todoDirtSeen = make(map[any]struct{}, len(rq.todoDirt)+len(tags))
+			for _, tagValue := range rq.todoDirt {
+				rq.todoDirtSeen[tagValue] = struct{}{}
+			}
+		}
 		for _, tagValue := range tags {
 			if elem, exact := tagValue.(*Element); exact {
 				if elem == nil || elem.Request != rq || elem.deleted.Load() {
@@ -925,9 +935,13 @@ func (rq *Request) appendDirtyTags(tags []any) {
 			}
 			// Pending Requests can cross many dirty passes before connecting.
 			// Keep each selector once while preserving late tag registration.
-			if !slices.Contains(rq.todoDirt, tagValue) {
-				rq.todoDirt = append(rq.todoDirt, tagValue)
+			if rq.todoDirtSeen != nil {
+				if _, exists := rq.todoDirtSeen[tagValue]; exists {
+					continue
+				}
+				rq.todoDirtSeen[tagValue] = struct{}{}
 			}
+			rq.todoDirt = append(rq.todoDirt, tagValue)
 		}
 	}
 	rq.mu.Unlock()

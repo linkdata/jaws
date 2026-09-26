@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +68,8 @@ func validateJsVarPath(path string) error {
 // after jq tentatively applies a changed value. It must only inspect next: jq
 // rolls the proposal back if the check returns an error or panics. The source
 // may be used to authorize a user or session; every binding sees the same value.
+// Validate the complete next value: a parent or root proposal can change many
+// fields, so a path-only denylist cannot protect descendants.
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -98,6 +102,7 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 //
 // All reads and writes of the bound value must use the supplied locker. Server
 // mutations must use SetPath, DeletePath, or WriteLocked to publish changes.
+// The JSON encoding must have unique object member names.
 // For partial map patches, the bound JSON tree must not share mutable pointers,
 // maps, or slices across different paths: changing one alias can change another
 // browser path. Complex Go types fall back to a root patch. Custom JSON methods
@@ -112,7 +117,7 @@ type JsVarStore[T any] struct {
 	name    string
 	locker  bind.RWLocker
 	value   *T
-	partial bool
+	partial bool // plain JSON tree with matching jq paths and safe partial patches
 }
 
 // NewJsVarStore creates a store with an application-owned browser name.
@@ -339,7 +344,7 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 		previous = append(previous, other)
 	}
 	if err == nil {
-		data, err = json.Marshal(store.value)
+		data, _, err = marshalJsVar(store.value)
 	}
 	return
 }
@@ -382,37 +387,54 @@ func (binding *JsVarBinding[T]) JawsUpdatePaths(elem *jaws.Element, paths []stri
 
 func (binding *JsVarBinding[T]) snapshotPatches(paths []string) (patches []string, err error) {
 	store := binding.store
-	store.locker.RLock()
-	defer store.locker.RUnlock()
 	var data []byte
-	data, err = json.Marshal(store.value)
+	store.ReadLocked(func(value *T) {
+		data, err = json.Marshal(value)
+	})
+	var visible any
+	if err == nil {
+		visible, err = decodeJsVarJSON(data)
+	}
 	if err == nil {
 		rootPatch := "=" + string(data)
+		seen := make(map[string]bool, len(paths))
 		for _, path := range paths {
-			patch := store.projectPatch(path, data)
+			patch := store.projectVisiblePatch(path, data, visible)
 			if patch == rootPatch {
 				patches = []string{rootPatch}
 				break
 			}
-			patches = append(patches, patch)
+			key, _, _ := strings.Cut(patch, "=")
+			if !seen[key] {
+				seen[key] = true
+				patches = append(patches, patch)
+			}
 		}
 	}
 	return
 }
 
 func (store *JsVarStore[T]) projectPatch(path string, data []byte) string {
-	if path == "" || !store.partial {
+	visible, err := decodeJsVarJSON(data)
+	if err != nil {
 		return "=" + string(data)
 	}
-	current := json.RawMessage(data)
+	return store.projectVisiblePatch(path, data, visible)
+}
+
+func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visible any) string {
+	if path == "" || !store.partial || validateJsVarPath(path) != nil {
+		return "=" + string(data)
+	}
+	current := visible
 	var prefix string
 	for component := range strings.SplitSeq(path, ".") {
-		var object map[string]json.RawMessage
-		if err := json.Unmarshal(current, &object); err != nil || object == nil {
+		object, ok := current.(map[string]any)
+		if !ok {
 			if prefix == "" {
 				return "=" + string(data)
 			}
-			return prefix + "=" + string(current)
+			break
 		}
 		if prefix != "" {
 			prefix += "."
@@ -424,7 +446,14 @@ func (store *JsVarStore[T]) projectPatch(path string, data []byte) string {
 		}
 		current = next
 	}
-	return path + "=" + string(current)
+	encoded, err := json.Marshal(current)
+	if err != nil {
+		return "=" + string(data)
+	}
+	if prefix == "" {
+		return "=" + string(data)
+	}
+	return prefix + "=" + string(encoded)
 }
 
 // JawsInput applies a browser proposal after checking the whole tentative value.
@@ -491,10 +520,132 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 			return
 		}
 	}
+	if store.partial {
+		// Plain trees have one-to-one jq/JSON paths and no duplicate members.
+		// Their changed subtree alone needs an encodability check.
+		changed, err = jq.SetChecked(store.value, path, value, func() error {
+			var next any = store.value
+			if path != "" {
+				var getErr error
+				if next, getErr = jq.Get(store.value, path); getErr != nil {
+					return getErr
+				}
+			}
+			if _, encodeErr := json.Marshal(next); encodeErr != nil {
+				return encodeErr
+			}
+			return store.ClientCheck(elem, store.value, path)
+		})
+		return
+	}
+	_, before, err := marshalJsVar(store.value)
+	if err != nil {
+		return false, err
+	}
 	changed, err = jq.SetChecked(store.value, path, value, func() error {
+		_, after, encodeErr := marshalJsVar(store.value)
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if path != "" && !visibleJsVarChange(before, after, path) {
+			return ErrIllegalJsVarPath
+		}
 		return store.ClientCheck(elem, store.value, path)
 	})
 	return
+}
+
+// marshalJsVar rejects ambiguous JSON before it reaches a browser or commits.
+func marshalJsVar(value any) (data []byte, visible any, err error) {
+	if data, err = json.Marshal(value); err == nil {
+		visible, err = decodeJsVarJSON(data)
+	}
+	return
+}
+
+func decodeJsVarJSON(data []byte) (visible any, err error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	return readJsVarJSON(decoder)
+}
+
+func readJsVarJSON(decoder *json.Decoder) (value any, err error) {
+	var token json.Token
+	if token, err = decoder.Token(); err != nil {
+		return
+	}
+	switch token {
+	case json.Delim('{'):
+		object := make(map[string]any)
+		for decoder.More() {
+			if token, err = decoder.Token(); err != nil {
+				return
+			}
+			name := token.(string)
+			if _, found := object[name]; found {
+				return nil, fmt.Errorf("jsvar: duplicate JSON member %q", name)
+			}
+			if object[name], err = readJsVarJSON(decoder); err != nil {
+				return
+			}
+		}
+		value = object
+	case json.Delim('['):
+		array := make([]any, 0)
+		for decoder.More() {
+			var item any
+			if item, err = readJsVarJSON(decoder); err != nil {
+				return
+			}
+			array = append(array, item)
+		}
+		value = array
+	default:
+		return token, nil
+	}
+	_, err = decoder.Token()
+	return
+}
+
+func visibleJsVarChange(before, after any, path string) bool {
+	if path == "" {
+		return !reflect.DeepEqual(before, after)
+	}
+	component, rest, _ := strings.Cut(path, ".")
+	switch current := before.(type) {
+	case map[string]any:
+		next, ok := after.(map[string]any)
+		if !ok || len(current) != len(next) {
+			return false
+		}
+		for key, value := range current {
+			if key != component {
+				other, found := next[key]
+				if !found || !reflect.DeepEqual(value, other) {
+					return false
+				}
+			}
+		}
+		value, found := current[component]
+		other, exists := next[component]
+		return found && exists && visibleJsVarChange(value, other, rest)
+	case []any:
+		next, ok := after.([]any)
+		if !ok || len(current) != len(next) {
+			return false
+		}
+		index, err := strconv.Atoi(component)
+		if err != nil || index < 0 || index >= len(current) || strconv.Itoa(index) != component {
+			return false
+		}
+		for i, value := range current {
+			if i != index && !reflect.DeepEqual(value, next[i]) {
+				return false
+			}
+		}
+		return visibleJsVarChange(current[index], next[index], rest)
+	}
+	return false
 }
 
 var (
@@ -502,36 +653,87 @@ var (
 	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
 )
 
-// plainJsVarType is conservative about custom encoding and reference aliases.
+// plainJsVarType is conservative about encoder paths and reference aliases.
 // Map branches are partial under the documented JSON-tree/no-alias contract.
 func plainJsVarType(t reflect.Type) bool {
+	return plainJsVarTypeSeen(t, make(map[reflect.Type]bool))
+}
+
+func plainJsVarScalar(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64, reflect.String:
+		return true
+	}
+	return false
+}
+
+func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	defer delete(seen, t)
 	if t.Implements(jsonMarshalerType) || t.Implements(textMarshalerType) {
+		return false
+	}
+	if _, found := t.MethodByName("MarshalJSONTo"); found {
 		return false
 	}
 	if t.Kind() != reflect.Pointer &&
 		(reflect.PointerTo(t).Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(textMarshalerType)) {
 		return false
 	}
-	switch t.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64, reflect.String:
+	if t.Kind() != reflect.Pointer {
+		if _, found := reflect.PointerTo(t).MethodByName("MarshalJSONTo"); found {
+			return false
+		}
+	}
+	if plainJsVarScalar(t) {
 		return true
+	}
+	switch t.Kind() {
 	case reflect.Struct:
+		names := make(map[string]bool, t.NumField())
 		for i := range t.NumField() {
 			field := t.Field(i)
 			if field.Anonymous {
 				return false
 			}
-			if field.IsExported() && field.Tag.Get("json") != "-" && !plainJsVarType(field.Type) {
+			if !field.IsExported() || field.Tag.Get("json") == "-" {
+				continue
+			}
+			name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
+			if name == "" {
+				name = field.Name
+			}
+			if !jsVarNameRx.MatchString(name) || names[name] {
+				return false
+			}
+			names[name] = true
+			for option := range strings.SplitSeq(options, ",") {
+				switch option {
+				case "":
+				case "string":
+					if !plainJsVarScalar(field.Type) {
+						return false
+					}
+				case "omitempty", "omitzero":
+					return false
+				default:
+					return false
+				}
+			}
+			if !plainJsVarTypeSeen(field.Type, seen) {
 				return false
 			}
 		}
 		return true
 	case reflect.Map:
-		return t.Key() == reflect.TypeFor[string]() && plainJsVarType(t.Elem())
+		return t.Key() == reflect.TypeFor[string]() && plainJsVarTypeSeen(t.Elem(), seen)
 	case reflect.Array:
-		return plainJsVarType(t.Elem())
+		return plainJsVarTypeSeen(t.Elem(), seen)
 	}
 	return false
 }

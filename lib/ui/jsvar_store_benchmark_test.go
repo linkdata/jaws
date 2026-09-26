@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws"
 )
@@ -66,6 +68,133 @@ func BenchmarkJsVarStoreChangedLeaf(b *testing.B) {
 			}
 			b.ReportMetric(float64(len(root)), "root_B")
 			b.ReportMetric(float64(len(jsVarBenchmarkPatch)), "patch_B")
+		})
+	}
+}
+
+// BenchmarkJsVarStoreSnapshotPatches measures multi-path projection and writer
+// lock wait while a Request encodes its current store value.
+func BenchmarkJsVarStoreSnapshotPatches(b *testing.B) {
+	for _, pathCount := range []int{1, 64} {
+		for _, parallel := range []bool{false, true} {
+			name := "paths=" + strconv.Itoa(pathCount)
+			if parallel {
+				name += "/parallel"
+			}
+			b.Run(name, func(b *testing.B) {
+				jw, err := jaws.New()
+				if err != nil {
+					b.Fatal(err)
+				}
+				b.Cleanup(jw.Close)
+				players := make(map[string]map[string]int, 1024)
+				for i := range 1024 {
+					players["player"+strconv.Itoa(i)] = map[string]int{"x": i}
+				}
+				players["alice"] = map[string]int{"x": -1}
+				state := map[string]map[string]map[string]int{"players": players}
+				var mu sync.Mutex
+				store, err := NewJsVarStore(jw, "players", &mu, &state)
+				if err != nil {
+					b.Fatal(err)
+				}
+				binding := store.Bind()
+				paths := make([]string, pathCount)
+				for i := range paths {
+					paths[i] = "players.absent" + strconv.Itoa(i)
+				}
+				b.ReportAllocs()
+				b.ResetTimer()
+				if parallel {
+					var iteration, waits, writes atomic.Uint64
+					var failed atomic.Bool
+					b.RunParallel(func(pb *testing.PB) {
+						for pb.Next() {
+							if iteration.Add(1)%8 == 0 {
+								start := time.Now()
+								mu.Lock()
+								waits.Add(uint64(time.Since(start).Nanoseconds()))
+								writes.Add(1)
+								players["alice"]["x"]++
+								mu.Unlock()
+							} else if _, err := binding.snapshotPatches(paths); err != nil {
+								failed.Store(true)
+							}
+						}
+					})
+					if failed.Load() {
+						b.Fatal("snapshotPatches failed")
+					}
+					if writes.Load() > 0 {
+						b.ReportMetric(float64(waits.Load())/float64(writes.Load()), "writer_wait_ns")
+					}
+				} else {
+					for range b.N {
+						if _, err := binding.snapshotPatches(paths); err != nil {
+							b.Fatal(err)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
+// BenchmarkJsVarStoreProposal measures a changed-leaf proposal in a plain store.
+func BenchmarkJsVarStoreProposal(b *testing.B) {
+	for _, parallel := range []bool{false, true} {
+		name := "serial"
+		if parallel {
+			name = "parallel"
+		}
+		b.Run(name, func(b *testing.B) {
+			jw, err := jaws.New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.Cleanup(jw.Close)
+			players := make(map[string]map[string]int, 1024)
+			for i := range 1024 {
+				players["player"+strconv.Itoa(i)] = map[string]int{"x": i}
+			}
+			players["alice"] = map[string]int{"x": -1}
+			state := map[string]map[string]map[string]int{"players": players}
+			var mu sync.Mutex
+			store, err := NewJsVarStore(jw, "players", &mu, &state)
+			if err != nil {
+				b.Fatal(err)
+			}
+			store.ClientCheck = func(*jaws.Element, *map[string]map[string]map[string]int, string) error { return nil }
+			binding := store.Bind()
+			binding.active.Store(true)
+			data, err := json.Marshal(state)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ReportMetric(float64(len(data)), "state_B")
+			b.ReportAllocs()
+			b.ResetTimer()
+			if parallel {
+				var iteration atomic.Uint64
+				var failed atomic.Bool
+				b.RunParallel(func(pb *testing.PB) {
+					for pb.Next() {
+						value := float64(iteration.Add(1))
+						if _, err := binding.applyProposal(nil, "players.alice.x", value); err != nil {
+							failed.Store(true)
+						}
+					}
+				})
+				if failed.Load() {
+					b.Fatal("applyProposal failed")
+				}
+			} else {
+				for i := range b.N {
+					if _, err := binding.applyProposal(nil, "players.alice.x", float64(i)); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
 		})
 	}
 }

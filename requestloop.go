@@ -462,6 +462,7 @@ func (rq *Request) purgeDeletedElementsLocked() {
 		elem, ok := tagValue.(*Element)
 		return ok && pred(elem)
 	})
+	rq.todoDirtSeen = nil
 	rq.elems = slices.DeleteFunc(rq.elems, pred)
 	for k := range rq.tagMap {
 		rq.tagMap[k] = slices.DeleteFunc(rq.tagMap[k], pred)
@@ -539,6 +540,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	}
 	clear(rq.todoDirt)
 	rq.todoDirt = rq.todoDirt[:0]
+	rq.todoDirtSeen = nil
 	rq.mu.Unlock()
 	slices.SortFunc(todo, func(a, b *Element) int { return cmp.Compare(a.Jid(), b.Jid()) })
 	return

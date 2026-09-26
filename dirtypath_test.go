@@ -144,10 +144,16 @@ func TestDirtyPendingRequestKeepsLateTagOnce(t *testing.T) {
 	if got := len(rq.todoDirt); got != 1 {
 		t.Fatalf("pending selectors = %d, want 1", got)
 	}
+	if rq.todoDirtSeen == nil {
+		t.Fatal("pending selectors have no membership set")
+	}
 	elem := rq.NewElement(pathUpdateUI{})
 	elem.Tag(selector)
 	if got := rq.makeUpdateList(); len(got) != 1 || got[0] != elem {
 		t.Fatalf("late tag updates = %#v, want Element", got)
+	}
+	if rq.todoDirtSeen != nil {
+		t.Fatal("drained selectors retain their membership set")
 	}
 }
 

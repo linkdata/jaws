@@ -314,7 +314,9 @@ calls ClientCheck once with the complete tentative value. An error or panic
 rolls that proposal back. The check must only inspect and must not acquire the
 same lock, mutate or retain tentative data, or call a store setter. The source
 Element can authorize a user or session, but all bindings receive the same
-JSON value. Put data with different visibility in separate stores.
+JSON value. Put data with different visibility in separate stores. Validate
+the complete value: a root or parent proposal can change multiple descendants,
+so a path-only denylist cannot make a field immutable.
 
 A browser call jawsVar("client.x", value) sends one Proposal when the socket is
 open, then changes its local value optimistically and returns true. A false
@@ -330,10 +332,12 @@ The empty path replaces the root; dotted paths have nonempty components.
 Names and components named __proto__, constructor, or prototype are reserved.
 Server paths are application-controlled; browser proposal paths are untrusted
 and must be authorized by ClientCheck. Paths are limited to 4096 UTF-8 bytes.
-Browser proposals replace existing paths only, so they cannot append slice
-elements one message at a time. jq's exact JSON field names apply; a Go field
-tagged json:"value" is addressed as value, not Value. JSON null is a value;
-DeletePath removes a string-keyed map entry.
+Browser proposals replace existing paths in the encoded JSON, so they cannot
+append slice elements one message at a time. Plain JSON trees have matching Go
+and encoded paths; for complex shapes, non-root proposals are checked against
+the encoded value and may change only their visible subtree. A Go field tagged
+json:"value" is addressed as value, not Value. JSON null is a value; DeletePath
+removes a string-keyed map entry.
 
 The store reads and encodes current Go state when a Request handles a path
 invalidation, including one accumulated while its WebSocket was pending. It
@@ -342,7 +346,11 @@ marshalers, promoted fields, slices, dynamic interfaces, and other complex
 shapes use root patches. Map trees receiving partial patches must have no
 shared mutable aliases between separately addressable paths; changing one
 aliased map can change another JSON path. Every bound value must remain JSON
-encodable. ExtraTags can dirty derived UI after changed writes.
+encodable with unique object member names. Changed browser proposals are checked
+for encodability; JSONSizeCheck can also bound their encoded size.
+Complex custom encoders may accept root proposals while rejecting a non-root
+proposal that changes another visible field. ExtraTags can dirty derived UI
+after changed writes.
 
 JavaScript numbers cannot exactly represent integers outside
 -9007199254740991 through 9007199254740991. Use built-in string fields and

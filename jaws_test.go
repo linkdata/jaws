@@ -3999,11 +3999,10 @@ func BenchmarkSubscriptionChannels(b *testing.B) {
 	}
 }
 
-// BenchmarkDistributeDirt guards the per-updateTicker fan-out path: under jw.mu it
-// snapshots and order-sorts the dirty tag set and appends it to every active
-// Request. The benchmark exists to catch an accidental O(n^2) or per-call
-// allocation regression as request, retired-key and dirty-tag counts grow. The
-// retired-key cases ensure tombstones affect scan time but not snapshot capacity.
+// BenchmarkDistributeDirt measures dirty-set sorting and Request-set scanning.
+// Its Requests are unregistered, so BenchmarkDistributeDirtRegistered measures
+// selector appends to live Requests. The retired-key cases ensure tombstones
+// affect scan time but not snapshot capacity.
 // The per-iteration setDirty repopulation and todoDirt reset are excluded from
 // the timer so only distributeDirt is measured.
 func BenchmarkDistributeDirt(b *testing.B) {
@@ -4051,6 +4050,67 @@ func BenchmarkDistributeDirt(b *testing.B) {
 				jw.setDirty(tags)
 				for _, rq := range reqs {
 					rq.todoDirt = rq.todoDirt[:0]
+				}
+				b.StartTimer()
+				jw.distributeDirt()
+			}
+		})
+	}
+}
+
+// BenchmarkDistributeDirtRegistered measures selector fan-out to live Requests,
+// including the deduplication needed when a pending Request retains selectors.
+func BenchmarkDistributeDirtRegistered(b *testing.B) {
+	for _, c := range []struct{ reqs, tags, pending int }{
+		{reqs: 100, tags: 100},
+		{reqs: 100, tags: 300},
+		{reqs: 100, tags: 100, pending: 1000},
+	} {
+		name := "reqs=" + strconv.Itoa(c.reqs) + "/tags=" + strconv.Itoa(c.tags) + "/pending=" + strconv.Itoa(c.pending)
+		b.Run(name, func(b *testing.B) {
+			jw, err := New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer func() {
+				clear(jw.requests)
+				jw.requestCount = 0
+				jw.Close()
+			}()
+
+			reqs := make([]*Request, c.reqs)
+			for i := range reqs {
+				rq := &Request{Jaws: jw}
+				if c.pending > 0 {
+					rq.storeState(reqPending)
+				} else {
+					rq.storeState(reqRunning)
+				}
+				reqs[i] = rq
+				jw.requests[key.Key(i+1)] = rq
+			}
+			jw.requestCount = len(reqs)
+
+			tags := make([]any, c.tags)
+			for i := range tags {
+				tags[i] = tag.Tag(strconv.Itoa(i))
+			}
+			pending := make([]any, c.pending)
+			for i := range pending {
+				pending[i] = tag.Tag("pending-" + strconv.Itoa(i))
+			}
+			for _, rq := range reqs {
+				rq.todoDirt = append(rq.todoDirt, pending...)
+			}
+
+			b.ReportAllocs()
+			for b.Loop() {
+				b.StopTimer()
+				jw.setDirty(tags)
+				if c.pending == 0 {
+					for _, rq := range reqs {
+						rq.todoDirt = rq.todoDirt[:0]
+					}
 				}
 				b.StartTimer()
 				jw.distributeDirt()
