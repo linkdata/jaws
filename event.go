@@ -141,7 +141,7 @@ type InputHandler interface {
 	// JawsInput is called when JaWS dispatches an input-like message for an
 	// [Element]. See [InputFn] for the message kinds.
 	//
-	// The bundled client sends input and set messages only while its WebSocket is
+	// The bundled client sends input and proposal messages only while its WebSocket is
 	// open and does not queue them for later delivery. Native changes that emit
 	// neither input nor change do not invoke JawsInput.
 	//
@@ -152,7 +152,7 @@ type InputHandler interface {
 
 // InputFn is the signature of an input handling function.
 //
-// JaWS calls it for an input or set message received from JavaScript over the
+// JaWS calls it for an input or proposal message received from JavaScript over the
 // WebSocket connection, and for a hook message, which tests use to invoke the
 // handler synchronously (see [what.Hook]).
 //
@@ -192,7 +192,7 @@ func callEventHandler(obj any, elem *Element, wht what.What, value string, clk C
 		} else if h, ok := obj.(ContextMenuHandler); ok {
 			err = h.JawsContextMenu(elem, clk)
 		}
-	case what.Input, what.Hook, what.Set:
+	case what.Input, what.Hook, what.Proposal:
 		err = callInputHandler(obj, elem, value)
 	}
 	return

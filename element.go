@@ -207,6 +207,16 @@ func (elem *Element) JawsUpdate() {
 	}
 }
 
+// Patch queues a JSON path update for this Element's browser binding.
+//
+// Data has the form path=json for a value or path= for deletion; an empty path
+// replaces the root and must have a JSON value. The caller supplies a validated
+// path and encoded value without raw tab or newline bytes. A deleted Element
+// ignores the patch. This low-level helper is intended for JsVar stores.
+func (elem *Element) Patch(data string) {
+	elem.queue(what.Patch, data)
+}
+
 // queue enqueues a wire message of the given type and data for this element on
 // its Request, tagged with the element's Jid. It is a no-op once the element has
 // been deleted.
@@ -339,7 +349,8 @@ func (elem *Element) SetValue(value string) {
 // In the receiving browser, jsfunc is resolved as a path from window and called
 // with JSON.parse(jsonstr); the Element is not passed as this or as an argument.
 // jsfunc must be an application-controlled dot path. The browser rejects an
-// exact "__proto__" component; put user data in jsonstr, not jsfunc.
+// exact "__proto__", "constructor", and "prototype" components; put user
+// data in jsonstr, not jsfunc.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent; a call queued directly from an event handler is only flushed when the

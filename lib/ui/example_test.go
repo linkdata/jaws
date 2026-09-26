@@ -3,7 +3,6 @@ package ui_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -65,41 +64,25 @@ func ExampleHandler_connectHandler() {
 	_ = mux // serve mux with an HTTP server
 }
 
-type examplePathState struct {
-	Title string   `json:"title"`
-	Items []string `json:"items"`
-}
-
-func (state *examplePathState) JawsSetPath(elem *jaws.Element, jsPath string, value any) error {
-	if jsPath != "title" {
-		return fmt.Errorf("%w: %s", ui.ErrIllegalJsVarPath, jsPath)
-	}
-	title, ok := value.(string)
-	if !ok {
-		return fmt.Errorf("title: %T", value)
-	}
-	if state.Title == title {
-		return jaws.ErrValueUnchanged
-	}
-	state.Title = title
-	return nil
-}
-
-func ExampleJsVar_pathSetter() {
-	var mu sync.Mutex
-	state := examplePathState{Title: "old", Items: []string{"server-owned"}}
-	jsv := ui.NewJsVar(&mu, &state)
-
-	if err := jsv.JawsSetPath(nil, "title", "new"); err != nil {
+func ExampleJsVarStore_SetPath() {
+	jw, err := jaws.New()
+	if err != nil {
 		panic(err)
 	}
-	err := jsv.JawsSetPath(nil, "items.1", "blocked")
-	fmt.Println(state.Title)
-	fmt.Println(errors.Is(err, ui.ErrIllegalJsVarPath))
+	defer jw.Close()
+	var mu sync.Mutex
+	state := struct {
+		Title string `json:"title"`
+	}{Title: "old"}
+	store, err := ui.NewJsVarStore(jw, "client", &mu, &state)
+	if err != nil {
+		panic(err)
+	}
+	_, err = store.SetPath("title", "new")
+	fmt.Println(state.Title, err)
 
 	// Output:
-	// new
-	// true
+	// new <nil>
 }
 
 func ExampleJSONSizeCheck() {
@@ -107,12 +90,20 @@ func ExampleJSONSizeCheck() {
 		Items []string `json:"items"`
 	}
 
+	jw, err := jaws.New()
+	if err != nil {
+		panic(err)
+	}
+	defer jw.Close()
 	var mu sync.Mutex
 	state := clientState{}
-	jsv := ui.NewJsVar(&mu, &state)
-	jsv.ClientCheck = ui.JSONSizeCheck[clientState](1 << 20)
+	store, err := ui.NewJsVarStore(jw, "client", &mu, &state)
+	if err != nil {
+		panic(err)
+	}
+	store.ClientCheck = ui.JSONSizeCheck[clientState](1 << 20)
 
-	_ = jsv // render this request-scoped binding normally
+	_ = store.Bind() // render one request-scoped binding normally
 }
 
 func ExampleTemplate_failureBehavior() {

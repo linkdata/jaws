@@ -6,8 +6,9 @@ package jaws
 // [Request.process] is the select loop. Inbound client events are resolved by
 // resolveEventFnCall and executed on the event goroutine via eventCaller;
 // broadcasts and removal reports are applied by handleBroadcast and handleRemove;
-// dirty elements are rendered into the outbound queue by getSendMsgs, sendQueue
-// and makeUpdateList. onConnect runs the user ConnectFn once the socket is up.
+// dirty elements are rendered into the outbound queue by getSendMsgs, sendQueue,
+// makeUpdateList, and makePathUpdateList. onConnect runs the user ConnectFn once
+// the socket is up.
 
 import (
 	"cmp"
@@ -80,11 +81,20 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 
 		rq.sendQueue(outboundMsgCh)
 
-		// Drain pending dirty tags and exact Element targets, then call
-		// JawsUpdate for the selected Elements. Updates queue browser messages
-		// on the Request.
+		// Drain pending dirty tags, exact Element targets, and path invalidations.
+		// Updates queue browser messages on the Request.
 		for _, elem := range rq.makeUpdateList() {
 			elem.JawsUpdate()
+		}
+		for _, update := range rq.makePathUpdateList() {
+			if update.elem.deleted.Load() {
+				continue
+			}
+			if updater, ok := update.elem.UI().(interface{ JawsUpdatePaths(*Element, []string) }); ok {
+				updater.JawsUpdatePaths(update.elem, update.paths)
+			} else {
+				update.elem.JawsUpdate()
+			}
 		}
 
 		rq.sendQueue(outboundMsgCh)
@@ -107,15 +117,6 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 			return
 		}
 
-		if group, grouped := tagmsg.Dest.(setGroup); grouped {
-			for _, msg := range group {
-				rq.handleBroadcast(msg, eventCallCh)
-				// Each Set keeps its position across Elements; getSendMsgs sorts
-				// within one send by Jid.
-				rq.sendQueue(outboundMsgCh)
-			}
-			continue
-		}
 		rq.handleBroadcast(tagmsg, eventCallCh)
 	}
 }
@@ -125,7 +126,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall) {
 	if wsmsg.Jid.IsValid() {
 		switch wsmsg.What {
-		case what.Input, what.Click, what.ContextMenu, what.Set:
+		case what.Input, what.Click, what.ContextMenu, what.Proposal:
 			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data))
 		case what.Remove:
 			rq.handleRemove(wsmsg.Jid, wsmsg.Data)
@@ -468,6 +469,15 @@ func (rq *Request) purgeDeletedElementsLocked() {
 			delete(rq.tagMap, k)
 		}
 	}
+	for tagValue := range rq.todoPaths {
+		if elem, exact := tagValue.(*Element); exact {
+			if elem.deleted.Load() {
+				delete(rq.todoPaths, tagValue)
+			}
+		} else if !rq.hasLiveTagLocked(tagValue) {
+			delete(rq.todoPaths, tagValue)
+		}
+	}
 	rq.deletedElems = 0
 }
 
@@ -531,6 +541,52 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 	rq.todoDirt = rq.todoDirt[:0]
 	rq.mu.Unlock()
 	slices.SortFunc(todo, func(a, b *Element) int { return cmp.Compare(a.Jid(), b.Jid()) })
+	return
+}
+
+type pathUpdate struct {
+	elem  *Element
+	paths []string
+}
+
+// makePathUpdateList drains path invalidations and resolves their current live
+// Elements. The caller invokes UI callbacks after this function releases rq.mu;
+// rendering may acquire an application lock before registering a Request tag.
+func (rq *Request) makePathUpdateList() (todo []pathUpdate) {
+	rq.mu.Lock()
+	if len(rq.todoPaths) == 0 {
+		rq.mu.Unlock()
+		return
+	}
+	byElement := make(map[*Element]*dirtyPathSet)
+	for tagValue, paths := range rq.todoPaths {
+		var targets []*Element
+		if elem, exact := tagValue.(*Element); exact {
+			targets = []*Element{elem}
+		} else {
+			targets = rq.tagMap[tagValue]
+		}
+		for _, elem := range targets {
+			if elem.deleted.Load() {
+				continue
+			}
+			set := byElement[elem]
+			if set == nil {
+				set = new(dirtyPathSet)
+				byElement[elem] = set
+			}
+			for _, path := range paths.paths {
+				set.add(path)
+			}
+		}
+	}
+	clear(rq.todoPaths)
+	rq.mu.Unlock()
+	for elem, paths := range byElement {
+		slices.Sort(paths.paths)
+		todo = append(todo, pathUpdate{elem: elem, paths: paths.paths})
+	}
+	slices.SortFunc(todo, func(a, b pathUpdate) int { return cmp.Compare(a.elem.Jid(), b.elem.Jid()) })
 	return
 }
 

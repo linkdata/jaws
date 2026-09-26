@@ -30,10 +30,10 @@ const (
 
 	// Commands associated with an Element
 
-	// Set updates a JavaScript variable bound to the target element.
+	// Patch updates a JsVar store value bound to the target element.
 	//
-	// Data uses the form path=json.
-	Set
+	// Data uses path=json for assignment and path= for deletion.
+	Patch
 	// Inner sets the element's inner HTML.
 	Inner
 	// Delete deletes the element.
@@ -61,6 +61,10 @@ const (
 
 	// Input reports that an element value or input changed.
 	Input
+	// Proposal reports an optimistic JsVar store write from the browser.
+	//
+	// Data uses the form path=json.
+	Proposal
 	// Click reports that an element was clicked.
 	Click
 	// ContextMenu reports that a context menu was requested on an element.

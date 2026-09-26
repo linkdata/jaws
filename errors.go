@@ -17,10 +17,9 @@ var ErrServeAlreadyRunning = errors.New("serve loop already running")
 // ErrValueUnchanged reports a successful no-op set: there was no error, but the
 // underlying value already equaled the desired value.
 //
-// Setter-style implementations (the JawsSet / JawsSetPath methods in
-// github.com/linkdata/jaws/lib/ui and github.com/linkdata/jawstree) return it,
-// and callers test for it with [errors.Is]. It lives in this package so all
-// implementations share one error identity.
+// Setter-style implementations return it, and callers test for it with
+// [errors.Is]. It lives in this package so implementations share one error
+// identity.
 var ErrValueUnchanged = errors.New("value unchanged")
 
 // ErrRequestOverloaded indicates that a [Request] could not keep up with its messages.

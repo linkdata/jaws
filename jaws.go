@@ -200,6 +200,7 @@ type Jaws struct {
 	sessionSweep            uint8 // maintenance passes since the last Session expiry scan
 	dirty                   map[any]int
 	dirtOrder               int
+	dirtyPaths              map[any]*dirtyPathSet
 }
 
 // New allocates a JaWS instance with the default configuration.
@@ -278,6 +279,7 @@ func (jw *Jaws) Close() {
 		close(jw.closeCh)
 	}
 	jw.updateTicker.Stop()
+	jw.dirtyPaths = nil
 	for _, rq := range jw.requests {
 		if rq == nil {
 			continue

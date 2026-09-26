@@ -138,7 +138,7 @@ JaWS keeps dependencies outside the standard library to a minimum:
 * [linkdata/staticserve](https://github.com/linkdata/staticserve) serves hashed
   static assets.
 * [linkdata/jq](https://github.com/linkdata/jq) provides JSON path access for
-  `JsVar` values.
+  `JsVarStore` values.
 * [linkdata/secureheaders](https://github.com/linkdata/secureheaders) provides
   the security-header baseline.
 * [linkdata/deadlock](https://github.com/linkdata/deadlock) provides debug-aware

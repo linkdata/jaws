@@ -296,7 +296,6 @@ global.window = {
 			return other !== fn;
 		});
 	},
-	jawsNames: new Map(),
 };
 global.document = {
 	readyState: "loading",
@@ -588,6 +587,7 @@ function FakeSocket() {
 	this.readyState = 1;
 	socketCount++;
 }
+
 FakeSocket.prototype.addEventListener = function() {};
 WebSocket = FakeSocket;
 
@@ -616,583 +616,232 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_JsVarNestedPathUsesTopLevelNameRouting(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-	function FakeSocket() { this.readyState = 1; this.sent = []; }
-	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-
-window.app = { state: 0 };
-window.jawsNames.set("app", ["Jid.9"]);
-jaws = new FakeSocket();
-
-jawsVar("app.state", 42);
-process.stdout.write(jaws.sent[0] || "");
-`)
-
-	if raw == "" {
-		t.Fatal("jawsVar did not emit a websocket frame")
-	}
-
-	msg, ok := wire.Parse([]byte(raw))
-	if !ok {
-		t.Fatalf("Set frame must be parseable by jawswire.Parse, got %q", raw)
-	}
-	if msg.What != what.Set {
-		t.Fatalf("unexpected what: got %v", msg.What)
-	}
-	if msg.Jid != 9 {
-		t.Fatalf("nested JsVar path should route through top-level name registration, got %v in %q", msg.Jid, raw)
-	}
-	if msg.Data != "state=42" {
-		t.Fatalf("unexpected Set payload %q", msg.Data)
-	}
-}
-
-func TestJawsJS_JsVarArrayPathsUseExactPropertyNames(t *testing.T) {
+func TestJawsJS_StoreReadAndOptimisticProposal(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
 FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
 WebSocket = FakeSocket;
-
-window.app = { items: [10, 20] };
-window.jawsNames.set("app", ["Jid.9"]);
 jaws = new FakeSocket();
+const elem = {
+	id: "Jid.9",
+	dataset: { jawsstore: "app", jawsdata: '{"state":{"value":1},"items":[10,20]}' },
+	hasAttribute: function(attr) { return attr === "data-jawsstore"; },
+};
+jawsAttach(elem);
 
-jawsVar("app.items.1", 21);
-jawsVar("app.items.01", 99);
+const initial = jawsVar("app.state.value");
+const readFrames = jaws.sent.length;
+const accepted = jawsVar("app.state.value", 42);
+const afterWrite = jawsVar("app.state.value");
+const invalidIndex = jawsVar("app.items.01", 99);
+let invalidIntermediate = false;
+try { jawsVar("app.items.01.value", 99); }
+catch { invalidIntermediate = true; }
+const sideProperty = Object.hasOwn(jawsVar("app.items"), "01");
+const arrayWrite = jawsVar("app.items.1", 21);
+const frames = jaws.sent.slice();
 
+jaws.send = function() { throw new Error("send failed"); };
+const sendFailed = jawsVar("app.state.value", 100);
+const serializationFailed = jawsVar("app.state.value", 1n);
+jaws.readyState = 0;
+const closed = jawsVar("app.state.value", 200);
+const missingWrite = jawsVar("absent", 1);
 process.stdout.write(JSON.stringify({
-	canonical: window.app.items[1],
-	sideProperty: window.app.items["01"],
-	hasSideProperty: Object.hasOwn(window.app.items, "01"),
-	serialized: JSON.stringify(window.app.items),
-	frames: jaws.sent,
+	initial: initial,
+	readFrames: readFrames,
+	accepted: accepted,
+	afterWrite: afterWrite,
+	invalidIndex: invalidIndex,
+	invalidIntermediate: invalidIntermediate,
+	sideProperty: sideProperty,
+	arrayWrite: arrayWrite,
+	arrayValue: jawsVar("app.items.1"),
+	frames: frames,
+	sendFailed: sendFailed,
+	serializationFailed: serializationFailed,
+	closed: closed,
+	missingWrite: missingWrite,
+	missingRead: jawsVar("absent") === undefined,
+	finalValue: jawsVar("app.state.value"),
 }));
 `)
-
 	var got struct {
-		Canonical       int      `json:"canonical"`
-		SideProperty    int      `json:"sideProperty"`
-		HasSideProperty bool     `json:"hasSideProperty"`
-		Serialized      string   `json:"serialized"`
-		Frames          []string `json:"frames"`
+		Initial             int      `json:"initial"`
+		ReadFrames          int      `json:"readFrames"`
+		Accepted            bool     `json:"accepted"`
+		AfterWrite          int      `json:"afterWrite"`
+		InvalidIndex        bool     `json:"invalidIndex"`
+		InvalidIntermediate bool     `json:"invalidIntermediate"`
+		SideProperty        bool     `json:"sideProperty"`
+		ArrayWrite          bool     `json:"arrayWrite"`
+		ArrayValue          int      `json:"arrayValue"`
+		Frames              []string `json:"frames"`
+		SendFailed          bool     `json:"sendFailed"`
+		SerializationFailed bool     `json:"serializationFailed"`
+		Closed              bool     `json:"closed"`
+		MissingWrite        bool     `json:"missingWrite"`
+		MissingRead         bool     `json:"missingRead"`
+		FinalValue          int      `json:"finalValue"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+		t.Fatalf("store output %q: %v", raw, err)
 	}
-	if got.Canonical != 21 || got.SideProperty != 99 || !got.HasSideProperty {
-		t.Fatalf("array property state = %+v, want canonical index 21 and exact side property 99", got)
+	if got.Initial != 1 || got.ReadFrames != 0 || !got.Accepted || got.AfterWrite != 42 ||
+		got.InvalidIndex || !got.InvalidIntermediate || got.SideProperty || !got.ArrayWrite || got.ArrayValue != 21 ||
+		got.SendFailed || got.SerializationFailed || got.Closed || got.MissingWrite ||
+		!got.MissingRead || got.FinalValue != 42 {
+		t.Fatalf("store read/write state = %+v", got)
 	}
-	if got.Serialized != "[10,21]" {
-		t.Fatalf("serialized array = %q, want side property omitted", got.Serialized)
+	if len(got.Frames) != 2 {
+		t.Fatalf("proposal frames = %q, want two", got.Frames)
 	}
-	wantData := []string{"items.1=21", "items.01=99"}
-	if len(got.Frames) != len(wantData) {
-		t.Fatalf("frames = %q, want %d", got.Frames, len(wantData))
-	}
-	for i, rawFrame := range got.Frames {
-		msg, ok := wire.Parse([]byte(rawFrame))
-		if !ok || msg.What != what.Set || msg.Jid != 9 || msg.Data != wantData[i] {
-			t.Fatalf("frame %d = %+v, parseable %t; want Jid.9 Set %q", i, msg, ok, wantData[i])
+	for i, want := range []string{"state.value=42", "items.1=21"} {
+		msg, ok := wire.Parse([]byte(got.Frames[i]))
+		if !ok || msg.What != what.Proposal || msg.Jid != 9 || msg.Data != want {
+			t.Fatalf("proposal %d = %+v, parseable %t; want Jid.9 %q", i, msg, ok, want)
 		}
 	}
 }
 
-func TestJawsJS_JsVarRejectsProtoPathComponents(t *testing.T) {
+func TestJawsJS_PatchUsesCurrentStoreBinding(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
 FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
 WebSocket = FakeSocket;
 jaws = new FakeSocket();
-
-let directCalls = 0;
-let nestedCalls = 0;
-let getterReads = 0;
-const forbiddenDirect = function() { directCalls++; };
-window.app = {};
-Object.defineProperty(window.app, "__proto__", {
-	value: forbiddenDirect,
-	writable: true,
-	configurable: true,
-});
-window.calls = {
-	safe: function(value) { window.safeArgument = value; },
-};
-Object.defineProperty(window.calls, "__proto__", {
-	value: { run: function() { nestedCalls++; } },
-	writable: true,
-	configurable: true,
-});
-window.getterTarget = {};
-Object.defineProperty(window.getterTarget, "state", {
-	get: function() {
-		getterReads++;
-		return {};
-	},
-});
-window.jawsNames.set("app", ["Jid.9"]);
-
-const windowPrototype = Object.getPrototypeOf(window);
-const appPrototype = Object.getPrototypeOf(window.app);
-const forbiddenNested = window.calls.__proto__;
-function rejectsProto(run) {
-	try {
-		run();
-	} catch (err) {
-		return String(err) === "jaws: reserved path component: __proto__";
-	}
-	return false;
+const elems = {};
+document.getElementById = function(id) { return elems[id] || null; };
+function store(id, value) {
+	const elem = {
+		id: id,
+		dataset: { jawsstore: "app", jawsdata: JSON.stringify(value) },
+		hasAttribute: function(attr) { return attr === "data-jawsstore"; },
+	};
+	elems[id] = elem;
+	jawsAttach(elem);
+	return elem;
 }
-
-const rejected = [
-	function() { return jawsVar("__proto__", { polluted: true }); },
-	function() { return jawsVar(".app..__proto__.", { polluted: true }); },
-	function() { return jawsVar("app.__proto__"); },
-	function() { return jawsVar("app.__proto__", {}, "Set"); },
-	function() { return jawsVar("app.__proto__", {}, "Call"); },
-	function() { return jawsVar("calls..__proto__..run", {}, "Call"); },
-	function() { return jawsVar("getterTarget.state.__proto__", {}, "Call"); },
-].map(rejectsProto);
-const rejectedSendCount = jaws.sent.length;
-
-const opaque = JSON.parse('{"__proto__":{"safe":true}}');
-jawsVar("app.__proto", 1);
-jawsVar("app.__Proto__", 2, "Set");
-jawsVar("app.__proto___", 3, "Set");
-jawsVar("app.payload", opaque);
-jawsVar("calls.safe", opaque, "Call");
-
+const old = store("Jid.9", {state: 1});
+store("Jid.10", {state: 2, obsolete: 5, items: [1, 2]});
+jawsPerform("Patch", "Jid.9", "state=99");
+const afterStale = jawsVar("app.state");
+jawsPerform("Patch", "Jid.10", "items.1=3");
+jawsPerform("Patch", "Jid.10", "obsolete=");
+const deleted = !Object.hasOwn(jawsVar("app"), "obsolete");
+jawsForgetStore(old);
+const routeSurvived = jawsVar("app.state") === 2;
+jawsPerform("Patch", "Jid.10", '={"state":7}');
 process.stdout.write(JSON.stringify({
-	rejected: rejected,
-	rejectedSendCount: rejectedSendCount,
-	directCalls: directCalls,
-	nestedCalls: nestedCalls,
-	getterReads: getterReads,
-	windowPrototypeUnchanged: Object.getPrototypeOf(window) === windowPrototype,
-	appPrototypeUnchanged: Object.getPrototypeOf(window.app) === appPrototype,
-	directMemberUnchanged: window.app.__proto__ === forbiddenDirect,
-	nestedMemberUnchanged: window.calls.__proto__ === forbiddenNested,
-	objectPrototypePolluted: Object.hasOwn(Object.prototype, "polluted"),
-	nearNamesWork: window.app.__proto === 1 && window.app.__Proto__ === 2 && window.app.__proto___ === 3,
-	safeFrameCount: jaws.sent.length - rejectedSendCount,
-	payloadOwnProto: Object.hasOwn(window.app.payload, "__proto__"),
-	payloadPrototypeUnchanged: Object.getPrototypeOf(window.app.payload) === Object.prototype,
-	argumentOwnProto: Object.hasOwn(window.safeArgument, "__proto__"),
+	afterStale: afterStale,
+	deleted: deleted,
+	routeSurvived: routeSurvived,
+	state: jawsVar("app"),
+	frames: jaws.sent,
+	windowGlobal: Object.hasOwn(window, "app"),
 }));
 `)
-
 	var got struct {
-		Rejected                  []bool `json:"rejected"`
-		RejectedSendCount         int    `json:"rejectedSendCount"`
-		DirectCalls               int    `json:"directCalls"`
-		NestedCalls               int    `json:"nestedCalls"`
-		GetterReads               int    `json:"getterReads"`
-		WindowPrototypeUnchanged  bool   `json:"windowPrototypeUnchanged"`
-		AppPrototypeUnchanged     bool   `json:"appPrototypeUnchanged"`
-		DirectMemberUnchanged     bool   `json:"directMemberUnchanged"`
-		NestedMemberUnchanged     bool   `json:"nestedMemberUnchanged"`
-		ObjectPrototypePolluted   bool   `json:"objectPrototypePolluted"`
-		NearNamesWork             bool   `json:"nearNamesWork"`
-		SafeFrameCount            int    `json:"safeFrameCount"`
-		PayloadOwnProto           bool   `json:"payloadOwnProto"`
-		PayloadPrototypeUnchanged bool   `json:"payloadPrototypeUnchanged"`
-		ArgumentOwnProto          bool   `json:"argumentOwnProto"`
+		AfterStale    int            `json:"afterStale"`
+		Deleted       bool           `json:"deleted"`
+		RouteSurvived bool           `json:"routeSurvived"`
+		State         map[string]int `json:"state"`
+		Frames        []string       `json:"frames"`
+		WindowGlobal  bool           `json:"windowGlobal"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
+		t.Fatalf("patch output %q: %v", raw, err)
+	}
+	if got.AfterStale != 2 || !got.Deleted || !got.RouteSurvived ||
+		!reflect.DeepEqual(got.State, map[string]int{"state": 7}) ||
+		len(got.Frames) != 0 || got.WindowGlobal {
+		t.Fatalf("patch state = %+v", got)
+	}
+}
+
+func TestJawsJS_PatchFailureReloads(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let reloads = 0;
+let errors = 0;
+window.location.reload = function() { reloads++; };
+console.error = function() { errors++; };
+const elem = {
+	id: "Jid.9",
+	dataset: { jawsstore: "app", jawsdata: '{"state":1}' },
+	hasAttribute: function(attr) { return attr === "data-jawsstore"; },
+};
+document.getElementById = function(id) { return id === elem.id ? elem : null; };
+jawsAttach(elem);
+jawsMessage({data: "Patch\tJid.9\tmissing.deep=2\nPatch\tJid.9\tstate=9\n"});
+process.stdout.write(JSON.stringify({reloads: reloads, errors: errors, state: jawsVar("app.state")}));
+`)
+	var got struct {
+		Reloads int `json:"reloads"`
+		Errors  int `json:"errors"`
+		State   int `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("patch failure output %q: %v", raw, err)
+	}
+	if got.Reloads != 1 || got.Errors != 0 || got.State != 1 {
+		t.Fatalf("failed patch handling = %+v", got)
+	}
+}
+
+func TestJawsJS_StorePathGuards(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+const elem = {
+	id: "Jid.9",
+	dataset: { jawsstore: "app", jawsdata: '{}' },
+	hasAttribute: function(attr) { return attr === "data-jawsstore"; },
+};
+jawsAttach(elem);
+const originalPrototype = Object.getPrototypeOf(jawsVar("app"));
+const forbidden = ["app.__proto__", "app.constructor", "app.prototype", "app..state", "app.state=bad", "app.state\tbad", "app.state\x1bbad", "app.state\x7fbad"];
+const rejected = forbidden.map(function(path) {
+	try { jawsVar(path, {polluted: true}); return false; }
+	catch { return true; }
+});
+let badStoreRejected = false;
+try {
+	jawsAttach({id: "Jid.10", dataset: {jawsstore: "__proto__", jawsdata: '{}'},
+		hasAttribute: function(attr) { return attr === "data-jawsstore"; }});
+} catch { badStoreRejected = true; }
+const nearName = jawsVar("app.__proto", 5);
+process.stdout.write(JSON.stringify({
+	rejected: rejected,
+	badStoreRejected: badStoreRejected,
+	nearName: nearName,
+	nearValue: jawsVar("app.__proto"),
+	frames: jaws.sent.length,
+	prototypeUnchanged: Object.getPrototypeOf(jawsVar("app")) === originalPrototype,
+	objectPolluted: Object.hasOwn(Object.prototype, "polluted"),
+}));
+`)
+	var got struct {
+		Rejected           []bool `json:"rejected"`
+		BadStoreRejected   bool   `json:"badStoreRejected"`
+		NearName           bool   `json:"nearName"`
+		NearValue          int    `json:"nearValue"`
+		Frames             int    `json:"frames"`
+		PrototypeUnchanged bool   `json:"prototypeUnchanged"`
+		ObjectPolluted     bool   `json:"objectPolluted"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("guard output %q: %v", raw, err)
 	}
 	for i, rejected := range got.Rejected {
 		if !rejected {
-			t.Errorf("reserved-path case %d was not rejected", i)
+			t.Errorf("unsafe path %d was accepted", i)
 		}
 	}
-	if len(got.Rejected) != 7 {
-		t.Fatalf("ran %d reserved-path cases, want 7", len(got.Rejected))
-	}
-	if got.RejectedSendCount != 0 {
-		t.Errorf("rejected operations sent %d frames", got.RejectedSendCount)
-	}
-	if got.DirectCalls != 0 || got.NestedCalls != 0 || got.GetterReads != 0 {
-		t.Errorf("rejected paths performed work: direct calls %d, nested calls %d, getter reads %d", got.DirectCalls, got.NestedCalls, got.GetterReads)
-	}
-	if !got.WindowPrototypeUnchanged || !got.AppPrototypeUnchanged || !got.DirectMemberUnchanged || !got.NestedMemberUnchanged || got.ObjectPrototypePolluted {
-		t.Errorf("rejected paths changed an object or prototype: %+v", got)
-	}
-	if !got.NearNamesWork {
-		t.Error("nearby, case-distinct path components should remain usable")
-	}
-	if got.SafeFrameCount != 2 {
-		t.Errorf("safe browser writes sent %d frames, want 2", got.SafeFrameCount)
-	}
-	if !got.PayloadOwnProto || !got.PayloadPrototypeUnchanged || !got.ArgumentOwnProto {
-		t.Errorf("__proto__ data member was not preserved as ordinary JSON data: %+v", got)
-	}
-}
-
-func TestJawsJS_ProtoPathRejectionDoesNotAbandonBatch(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-const elements = {
-	"Jid.9": { dataset: { jawsname: "state" } },
-	"Jid.10": { dataset: {} },
-};
-document.getElementById = function(id) { return elements[id] || null; };
-
-window.state = { safe: 0, payload: null };
-let forbiddenCalls = 0;
-let safeCalls = 0;
-let safeArgument;
-window.calls = {
-	safe: function(value) {
-		safeCalls++;
-		safeArgument = value;
-	},
-};
-Object.defineProperty(window.calls, "__proto__", {
-	value: { run: function() { forbiddenCalls++; } },
-	writable: true,
-	configurable: true,
-});
-const statePrototype = Object.getPrototypeOf(window.state);
-const forbiddenMember = window.calls.__proto__;
-let errors = 0;
-console.error = function() { errors++; };
-
-jawsMessage({ data: [
-	'Set\tJid.9\t__proto__={"polluted":true}',
-	'Call\t\tcalls..__proto__..run={}',
-	'Call\tJid.10\tcalls.__proto__.run={}',
-	'Set\tJid.9\tsafe=7',
-	'Set\tJid.9\tpayload={"__proto__":{"safe":true}}',
-	'Call\t\tcalls.safe={"__proto__":{"safe":true}}',
-].join("\n") + "\n" });
-
-process.stdout.write(JSON.stringify({
-	errors: errors,
-	forbiddenCalls: forbiddenCalls,
-	safeCalls: safeCalls,
-	safeValue: window.state.safe,
-	stateOwnProto: Object.hasOwn(window.state, "__proto__"),
-	statePrototypeUnchanged: Object.getPrototypeOf(window.state) === statePrototype,
-	forbiddenMemberUnchanged: window.calls.__proto__ === forbiddenMember,
-	objectPrototypePolluted: Object.hasOwn(Object.prototype, "polluted"),
-	payloadOwnProto: Object.hasOwn(window.state.payload, "__proto__"),
-	argumentOwnProto: Object.hasOwn(safeArgument, "__proto__"),
-}));
-`)
-
-	var got struct {
-		Errors                   int  `json:"errors"`
-		ForbiddenCalls           int  `json:"forbiddenCalls"`
-		SafeCalls                int  `json:"safeCalls"`
-		SafeValue                int  `json:"safeValue"`
-		StateOwnProto            bool `json:"stateOwnProto"`
-		StatePrototypeUnchanged  bool `json:"statePrototypeUnchanged"`
-		ForbiddenMemberUnchanged bool `json:"forbiddenMemberUnchanged"`
-		ObjectPrototypePolluted  bool `json:"objectPrototypePolluted"`
-		PayloadOwnProto          bool `json:"payloadOwnProto"`
-		ArgumentOwnProto         bool `json:"argumentOwnProto"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if got.Errors != 3 {
-		t.Errorf("logged %d rejected orders, want 3", got.Errors)
-	}
-	if got.ForbiddenCalls != 0 || got.SafeCalls != 1 {
-		t.Errorf("function calls = forbidden %d, safe %d; want 0 and 1", got.ForbiddenCalls, got.SafeCalls)
-	}
-	if got.SafeValue != 7 {
-		t.Errorf("later Set value = %d, want 7", got.SafeValue)
-	}
-	if got.StateOwnProto || !got.StatePrototypeUnchanged || !got.ForbiddenMemberUnchanged || got.ObjectPrototypePolluted {
-		t.Errorf("rejected batch orders changed an object or prototype: %+v", got)
-	}
-	if !got.PayloadOwnProto || !got.ArgumentOwnProto {
-		t.Errorf("later JSON values lost their own __proto__ member: %+v", got)
-	}
-}
-
-func TestJawsJS_JsVarRoutingTableIsPrototypeSafe(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-jaws = new FakeSocket();
-
-function jsVarElement(name, id) {
-	return {
-		id: id,
-		dataset: { jawsname: name },
-		hasAttribute: function(attr) { return attr === "data-jawsname"; },
-	};
-}
-
-// jawsNames is a Map, so even "__proto__" is just an ordinary key: it is tracked
-// like any other name and cannot pollute Object.prototype or the table itself.
-jawsAttach(jsVarElement("__proto__", "Jid.9"));
-jawsAttach(jsVarElement("__proto", "Jid.10"));
-
-process.stdout.write(JSON.stringify({
-	protoRoute: window.jawsNames.get("__proto__") || null,
-	nearRoute: window.jawsNames.get("__proto") || null,
-	objectPolluted: ({}).length !== undefined || Object.prototype.hasOwnProperty("Jid.9"),
-}));
-`)
-
-	var got struct {
-		ProtoRoute     []string `json:"protoRoute"`
-		NearRoute      []string `json:"nearRoute"`
-		ObjectPolluted bool     `json:"objectPolluted"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if got.ObjectPolluted {
-		t.Fatal("attaching a __proto__ binding polluted Object.prototype")
-	}
-	if len(got.ProtoRoute) != 1 || got.ProtoRoute[0] != "Jid.9" {
-		t.Fatalf(`jawsNames.get("__proto__") = %v, want [Jid.9]`, got.ProtoRoute)
-	}
-	if len(got.NearRoute) != 1 || got.NearRoute[0] != "Jid.10" {
-		t.Fatalf(`jawsNames.get("__proto") = %v, want [Jid.10]`, got.NearRoute)
-	}
-}
-
-func TestJawsJS_DuplicateJsVarNameFansOutToAllLiveBindings(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-jaws = new FakeSocket();
-window.app = { state: 0 };
-
-const elems = {};
-document.getElementById = function(id) { return elems[id] || null; };
-
-function jsVarElement(id) {
-	const e = {
-		id: id,
-		dataset: { jawsname: "app" },
-		hasAttribute: function(attr) { return attr === "data-jawsname"; },
-		querySelectorAll: function() { return []; },
-		remove: function() { delete elems[id]; },
-	};
-	elems[id] = e;
-	return e;
-}
-
-jawsAttach(jsVarElement("Jid.9"));
-jawsAttach(jsVarElement("Jid.10"));
-
-// One browser write reaches every live binding of the name.
-jaws.sent = [];
-jawsVar("app.state", 1);
-const bothLive = jaws.sent;
-
-// Deleting one binding leaves the write reaching only the remaining one.
-jawsPerform("Delete", "Jid.10", "\"\"");
-jaws.sent = [];
-jawsVar("app.state", 2);
-const oneLive = jaws.sent;
-
-// Deleting the last binding drops the name entirely.
-jawsPerform("Delete", "Jid.9", "\"\"");
-jaws.sent = [];
-jawsVar("app.state", 3);
-const noneLive = jaws.sent;
-
-process.stdout.write(JSON.stringify({
-	bothLive: bothLive,
-	oneLive: oneLive,
-	noneLive: noneLive,
-	nameStillTracked: window.jawsNames.has("app"),
-}));
-`)
-
-	var got struct {
-		BothLive         []string `json:"bothLive"`
-		OneLive          []string `json:"oneLive"`
-		NoneLive         []string `json:"noneLive"`
-		NameStillTracked bool     `json:"nameStillTracked"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-
-	// While both bindings are live, the write fans out to both (oldest-first).
-	if len(got.BothLive) != 2 {
-		t.Fatalf("write with two live bindings = %q, want a frame for each", got.BothLive)
-	}
-	if msg, ok := wire.Parse([]byte(got.BothLive[0])); !ok || msg.Jid != 9 || msg.Data != "state=1" {
-		t.Fatalf("first fan-out frame = %+v, parseable %t; want Jid.9 state=1", msg, ok)
-	}
-	if msg, ok := wire.Parse([]byte(got.BothLive[1])); !ok || msg.Jid != 10 || msg.Data != "state=1" {
-		t.Fatalf("second fan-out frame = %+v, parseable %t; want Jid.10 state=1", msg, ok)
-	}
-
-	// After removing one, only the survivor receives the write.
-	if len(got.OneLive) != 1 {
-		t.Fatalf("write after deleting one binding = %q, want a single frame", got.OneLive)
-	}
-	if msg, ok := wire.Parse([]byte(got.OneLive[0])); !ok || msg.Jid != 9 || msg.Data != "state=2" {
-		t.Fatalf("surviving-binding frame = %+v, parseable %t; want Jid.9 state=2", msg, ok)
-	}
-
-	// After removing all, nothing is emitted and the name is forgotten.
-	if len(got.NoneLive) != 0 {
-		t.Fatalf("write after deleting all bindings = %q, want no frames", got.NoneLive)
-	}
-	if got.NameStillTracked {
-		t.Fatal("routing table still tracks the name after all bindings were deleted")
-	}
-}
-
-func TestJawsJS_InnerUpdateKeepsTargetJsVarNameRoute(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-jaws = new FakeSocket();
-window.app = { state: 0 };
-
-// Inner replaces only the target's descendants; the target JsVar element itself
-// stays live, so its name route must survive the update.
-const jsvar = {
-	id: "Jid.9",
-	_inner: "",
-	dataset: { jawsname: "app" },
-	hasAttribute: function(attr) { return attr === "data-jawsname"; },
-	querySelectorAll: function() { return []; },
-	get innerHTML() { return this._inner; },
-	set innerHTML(v) { this._inner = v; },
-};
-document.getElementById = function(id) { return id === "Jid.9" ? jsvar : null; };
-
-jawsAttach(jsvar);
-jawsPerform("Inner", "Jid.9", JSON.stringify("<span>x</span>"));
-jawsVar("app.state", 7);
-
-process.stdout.write(JSON.stringify({
-	nameStillTracked: window.jawsNames.has("app"),
-	frame: jaws.sent[jaws.sent.length - 1] || "",
-}));
-`)
-
-	var got struct {
-		NameStillTracked bool   `json:"nameStillTracked"`
-		Frame            string `json:"frame"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if !got.NameStillTracked {
-		t.Fatal("Inner update on a JsVar forgot its still-live name route")
-	}
-	msg, ok := wire.Parse([]byte(got.Frame))
-	if !ok || msg.What != what.Set || msg.Jid != 9 || msg.Data != "state=7" {
-		t.Fatalf("write after Inner routed to %+v, parseable %t; want live target Jid.9 state=7", msg, ok)
-	}
-}
-
-func TestJawsJS_RerenderReplacesNestedJsVarNameRoute(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-jaws = new FakeSocket();
-window.app = { state: 0 };
-
-function jsVarElement(id) {
-	return {
-		id: id,
-		dataset: { jawsname: "app" },
-		hasAttribute: function(attr) { return attr === "data-jawsname"; },
-	};
-}
-
-// A container holds a nested JsVar. Re-rendering it (Inner) removes the old nested
-// binding and attaches a fresh one with the same name; routing must land on the
-// new binding without a duplicate-name error.
-const children = { before: [jsVarElement("Jid.2")], after: [jsVarElement("Jid.3")] };
-let phase = "before";
-const container = {
-	id: "Jid.1",
-	_inner: "",
-	get innerHTML() { return this._inner; },
-	set innerHTML(v) { this._inner = v; phase = "after"; },
-	querySelectorAll: function(sel) {
-		return sel.indexOf("jawsonchangesubmit") >= 0 ? [] : children[phase];
-	},
-};
-document.getElementById = function(id) { return id === "Jid.1" ? container : null; };
-
-jawsAttach(children.before[0]);
-jawsPerform("Inner", "Jid.1", JSON.stringify("<div>new</div>"));
-jawsVar("app.state", 5);
-
-process.stdout.write(JSON.stringify({
-	route: window.jawsNames.get("app") || null,
-	frame: jaws.sent[jaws.sent.length - 1] || "",
-}));
-`)
-
-	var got struct {
-		Route []string `json:"route"`
-		Frame string   `json:"frame"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if len(got.Route) != 1 || got.Route[0] != "Jid.3" {
-		t.Fatalf(`jawsNames.get("app") = %v, want the re-rendered [Jid.3]`, got.Route)
-	}
-	msg, ok := wire.Parse([]byte(got.Frame))
-	if !ok || msg.What != what.Set || msg.Jid != 3 || msg.Data != "state=5" {
-		t.Fatalf("write after re-render routed to %+v, parseable %t; want new binding Jid.3 state=5", msg, ok)
-	}
-}
-
-func TestJawsJS_JsVarNestedPathHandlesShadowedHasOwnProperty(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-	function FakeSocket() { this.readyState = 1; this.sent = []; }
-	FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-	WebSocket = FakeSocket;
-
-	window.app = { hasOwnProperty: 1, state: { value: 0 } };
-	window.jawsNames.set("app", ["Jid.9"]);
-	jaws = new FakeSocket();
-
-	jawsVar("app.state.value", 42);
-	process.stdout.write(JSON.stringify({
-		value: window.app.state.value,
-		frame: jaws.sent[0] || ""
-	}));
-	`)
-
-	var got struct {
-		Value int    `json:"value"`
-		Frame string `json:"frame"`
-	}
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("unexpected JSON output %q: %v", raw, err)
-	}
-	if got.Value != 42 {
-		t.Fatalf("jawsVar did not update shadowed object path: got %d", got.Value)
-	}
-
-	msg, ok := wire.Parse([]byte(got.Frame))
-	if !ok {
-		t.Fatalf("Set frame must be parseable by jawswire.Parse, got %q", got.Frame)
-	}
-	if msg.What != what.Set {
-		t.Fatalf("unexpected what: got %v", msg.What)
-	}
-	if msg.Jid != 9 {
-		t.Fatalf("nested JsVar path should route through top-level name registration, got %v in %q", msg.Jid, got.Frame)
-	}
-	if msg.Data != "state.value=42" {
-		t.Fatalf("unexpected Set payload %q", msg.Data)
+	if len(got.Rejected) != 8 || !got.BadStoreRejected || !got.NearName ||
+		got.NearValue != 5 || got.Frames != 1 || !got.PrototypeUnchanged || got.ObjectPolluted {
+		t.Fatalf("store path guards = %+v", got)
 	}
 }
 
@@ -1292,16 +941,16 @@ process.stdout.write(JSON.stringify({ called: called, lookedUp: lookedUp, thrown
 	}
 }
 
-func TestJawsJS_IsCommandRoutesElementBoundSet(t *testing.T) {
-	set := wire.WsMsg{What: what.Set, Data: "state=2"}
-	if !set.What.IsCommand() {
-		set.Jid = 1
+func TestJawsJS_IsCommandRoutesElementBoundPatch(t *testing.T) {
+	patch := wire.WsMsg{What: what.Patch, Data: "state=2"}
+	if !patch.What.IsCommand() {
+		patch.Jid = 1
 	}
 	call := wire.WsMsg{What: what.Call, Data: "app.notify=3"}
 	if !call.What.IsCommand() {
 		call.Jid = 1
 	}
-	frame, err := json.Marshal(set.Format() + call.Format())
+	frame, err := json.Marshal(patch.Format() + call.Format())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1310,11 +959,13 @@ func TestJawsJS_IsCommandRoutesElementBoundSet(t *testing.T) {
 let notified = 0;
 let errors = [];
 let lookups = [];
-window.app = {
-	state: 0,
-	notify: function(value) { notified = value; }
+window.app = { notify: function(value) { notified = value; } };
+const elem = {
+	id: "Jid.1",
+	dataset: { jawsstore: "store", jawsdata: '{"state":0}' },
+	hasAttribute: function(attr) { return attr === "data-jawsstore"; },
 };
-const elem = { id: "Jid.1", dataset: { jawsname: "app" } };
+jawsAttach(elem);
 document.getElementById = function(id) {
 	lookups.push(id);
 	return id === elem.id ? elem : null;
@@ -1324,7 +975,7 @@ console.error = function(message) { errors.push(String(message)); };
 jawsMessage({ data: `+string(frame)+` });
 
 process.stdout.write(JSON.stringify({
-	state: window.app.state,
+	state: jawsVar("store.state"),
 	notified: notified,
 	errors: errors,
 	lookups: lookups,
@@ -1341,7 +992,7 @@ process.stdout.write(JSON.stringify({
 		t.Fatalf("unexpected JSON output %q: %v", raw, err)
 	}
 	if got.State != 2 {
-		t.Errorf("Set value = %d, want 2", got.State)
+		t.Errorf("Patch value = %d, want 2", got.State)
 	}
 	if got.Notified != 3 {
 		t.Errorf("Call argument = %d, want 3", got.Notified)
@@ -1442,55 +1093,6 @@ process.stdout.write(JSON.stringify({ lookups: lookups, errors: errors, html: el
 	}
 	if got.HTML != "good" {
 		t.Fatalf("canonical target update = %q", got.HTML)
-	}
-}
-
-func TestJawsJS_JsVarWithoutRegisteredTopLevelNameDoesNotEmitInvalidFrame(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-
-window.app = { state: 0 };
-jaws = new FakeSocket();
-
-jawsVar("app.state", 42);
-process.stdout.write(jaws.sent[0] || "");
-`)
-
-	if raw != "" {
-		if _, ok := wire.Parse([]byte(raw)); !ok {
-			t.Fatalf("jawsVar should not emit unparseable Set frame when JsVar name is unregistered, got %q", raw)
-		}
-	}
-}
-
-func TestJawsJS_JsVarSendsOnlyToCanonicalJid(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
-WebSocket = FakeSocket;
-jaws = new FakeSocket();
-window.app = { state: 0 };
-
-const routes = ["application-id", "Jid.0", "Jid.01", "Jid.-1", "Jid.7"];
-routes.forEach(function(id, i) {
-	window.jawsNames.set("app", [id]);
-	jawsVar("app.state", i + 1);
-});
-process.stdout.write(JSON.stringify(jaws.sent));
-`)
-
-	var frames []string
-	if err := json.Unmarshal([]byte(raw), &frames); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-	if len(frames) != 1 {
-		t.Fatalf("JsVar frames = %q, want one canonical route", frames)
-	}
-	msg, ok := wire.Parse([]byte(frames[0]))
-	if !ok || msg.What != what.Set || msg.Jid != 7 || msg.Data != "state=5" {
-		t.Fatalf("unexpected JsVar frame: %+v, parseable %t", msg, ok)
 	}
 }
 
@@ -1779,16 +1381,14 @@ const warnings = [];
 console.warn = function(msg) { warnings.push(msg); };
 
 const nodes = {};
-function makeNode(id, name) {
+function makeNode(id) {
 	const node = new Node();
 	node.id = id;
 	node.tagName = "DIV";
-	node.dataset = name ? { jawsname: name } : {};
+	node.dataset = {};
 	node.children = [];
 	node.parentElement = null;
-	node.hasAttribute = function(attr) {
-		return attr === "data-jawsname" && Boolean(name);
-	};
+	node.hasAttribute = function() { return false; };
 	node.addEventListener = function() {};
 	node.querySelectorAll = function(selector) {
 		if (selector === '[id^="' + jawsIdPrefix + '"]') {
@@ -1827,10 +1427,10 @@ parent.children.push(child);
 child.parentElement = parent;
 
 const replaceParent = makeNode("parent");
-const oldNode = makeNode("Jid.4", "oldRoot");
-const retainedDescendant = makeNode("Jid.6", "oldChild");
-const removedDescendant = makeNode("Jid.7", "removedChild");
-oldNode.outerHTML = '<section id="Jid.4" data-jawsname="oldRoot"><div id="Jid.6" data-jawsname="oldChild"></div><div id="Jid.7" data-jawsname="removedChild"></div></section>';
+const oldNode = makeNode("Jid.4");
+const retainedDescendant = makeNode("Jid.6");
+const removedDescendant = makeNode("Jid.7");
+oldNode.outerHTML = '<section id="Jid.4"><div id="Jid.6"></div><div id="Jid.7"></div></section>';
 oldNode.children.push(retainedDescendant, removedDescendant);
 retainedDescendant.parentElement = oldNode;
 removedDescendant.parentElement = oldNode;
@@ -1843,12 +1443,12 @@ jawsAttach(removedDescendant);
 document.getElementById = function(id) { return nodes[id] || null; };
 let replacementRoot = null;
 let replacementRetained = null;
-const replacement = '<section id="Jid.4" data-jawsname="newRoot"><div id="Jid.6" data-jawsname="newChild"></div><div id="Jid.8" data-jawsname="addedChild"></div></section>';
+const replacement = '<section id="Jid.4"><div id="Jid.6"></div><div id="Jid.8"></div></section>';
 jawsElement = function(html) {
 	if (html !== replacement) throw new Error("unexpected replacement " + html);
-	replacementRoot = makeNode("Jid.4", "newRoot");
-	replacementRetained = makeNode("Jid.6", "newChild");
-	const addedDescendant = makeNode("Jid.8", "addedChild");
+	replacementRoot = makeNode("Jid.4");
+	replacementRetained = makeNode("Jid.6");
+	const addedDescendant = makeNode("Jid.8");
 	replacementRoot.children.push(replacementRetained, addedDescendant);
 	replacementRetained.parentElement = replacementRoot;
 	addedDescendant.parentElement = replacementRoot;
@@ -1875,12 +1475,6 @@ process.stdout.write(JSON.stringify({
 	warnings: warnings,
 	childStillRegistered: Boolean(nodes["Jid.2"]),
 	rootRecreated: replaceParent.children[0] === replacementRoot && oldNode !== replacementRoot,
-	oldRootRoute: window.jawsNames.get("oldRoot") || null,
-	oldChildRoute: window.jawsNames.get("oldChild") || null,
-	removedChildRoute: window.jawsNames.get("removedChild") || null,
-	newRootRoute: window.jawsNames.get("newRoot") || null,
-	newChildRoute: window.jawsNames.get("newChild") || null,
-	addedChildRoute: window.jawsNames.get("addedChild") || null,
 }));
 `)
 
@@ -1893,12 +1487,6 @@ process.stdout.write(JSON.stringify({
 		Warnings           []string `json:"warnings"`
 		ChildRegistered    bool     `json:"childStillRegistered"`
 		RootRecreated      bool     `json:"rootRecreated"`
-		OldRootRoute       []string `json:"oldRootRoute"`
-		OldChildRoute      []string `json:"oldChildRoute"`
-		RemovedChildRoute  []string `json:"removedChildRoute"`
-		NewRootRoute       []string `json:"newRootRoute"`
-		NewChildRoute      []string `json:"newChildRoute"`
-		AddedChildRoute    []string `json:"addedChildRoute"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
@@ -1920,14 +1508,6 @@ process.stdout.write(JSON.stringify({
 	}
 	if !got.RootRecreated {
 		t.Fatalf("Replace did not insert the replacement DOM: %+v", got)
-	}
-	if got.OldRootRoute != nil || got.OldChildRoute != nil || got.RemovedChildRoute != nil {
-		t.Fatalf("Replace retained old name routes: %+v", got)
-	}
-	if !reflect.DeepEqual(got.NewRootRoute, []string{"Jid.4"}) ||
-		!reflect.DeepEqual(got.NewChildRoute, []string{"Jid.6"}) ||
-		!reflect.DeepEqual(got.AddedChildRoute, []string{"Jid.8"}) {
-		t.Fatalf("replacement name routes = root %v, child %v, added %v", got.NewRootRoute, got.NewChildRoute, got.AddedChildRoute)
 	}
 	msg, ok := wire.Parse([]byte(got.RemoveFrame))
 	if !ok {
@@ -2629,42 +2209,6 @@ process.stdout.write(JSON.stringify({ msg: jaws.sent[0] || "", prevented: preven
 	}
 	if got.Prevented || got.Stopped {
 		t.Fatalf("input-origin context menu should not be intercepted, got prevented=%v stopped=%v", got.Prevented, got.Stopped)
-	}
-}
-
-func TestJawsJS_SetSkipsUnchangedJsVarUpdate(t *testing.T) {
-	raw := runJawsJSSnippet(t, `
-let setCalls = 0;
-let currentState = 7;
-window.app = {};
-Object.defineProperty(window.app, "state", {
-	get: function() { return currentState; },
-	set: function(v) { setCalls++; currentState = v; },
-	enumerable: true,
-	configurable: true,
-});
-
-const elem = { id: "Jid.1", dataset: { jawsname: "app" } };
-document.getElementById = function(id) { return id === "Jid.1" ? elem : null; };
-
-jawsPerform("Set", "Jid.1", "state=7");
-jawsPerform("Set", "Jid.1", "state=8");
-
-process.stdout.write(JSON.stringify({ setCalls: setCalls, state: window.app.state }));
-`)
-
-	var got struct {
-		SetCalls int `json:"setCalls"`
-		State    int `json:"state"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
-		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
-	}
-	if got.SetCalls != 1 {
-		t.Fatalf("Set() writes = %d, want 1", got.SetCalls)
-	}
-	if got.State != 8 {
-		t.Fatalf("state = %d, want 8", got.State)
 	}
 }
 
@@ -3536,9 +3080,8 @@ function FakeSocket() { this.readyState = 1; this.sent = []; }
 FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
 WebSocket = FakeSocket;
 jaws = new FakeSocket();
-window.app = { state: 0 };
 
-const replacement = '<div id="Jid.1" data-jawsname="app"><input id="Jid.2" type="text" value="server"><input id="Jid.3" type="checkbox" checked></div>';
+const replacement = '<div id="Jid.1" data-jawsstore="app" data-jawsdata="{&quot;state&quot;:0}"><input id="Jid.2" type="text" value="server"><input id="Jid.3" type="checkbox" checked></div>';
 const beforeInput = {
 	id: "Jid.2",
 	tagName: "INPUT",
@@ -3559,8 +3102,8 @@ let outerHTMLReads = 0;
 const before = {
 	id: "Jid.1",
 	tagName: "DIV",
-	dataset: { jawsname: "app" },
-	hasAttribute: function(attr) { return attr === "data-jawsname"; },
+	dataset: { jawsstore: "app", jawsdata: '{"state":0}' },
+	hasAttribute: function(attr) { return attr === "data-jawsstore"; },
 	querySelectorAll: function(selector) {
 		if (selector === '[id^="' + jawsIdPrefix + '"]') return [beforeInput, beforeCheckbox];
 		return [];
@@ -3611,9 +3154,9 @@ document.createElement = function(tag) {
 	const after = {
 		id: "Jid.1",
 		tagName: "DIV",
-		dataset: { jawsname: "app" },
+		dataset: { jawsstore: "app", jawsdata: '{"state":0}' },
 		listeners: [],
-		hasAttribute: function(attr) { return attr === "data-jawsname"; },
+		hasAttribute: function(attr) { return attr === "data-jawsstore"; },
 		addEventListener: function(name) { this.listeners.push(name); },
 		querySelectorAll: function(selector) {
 			if (selector === '[id^="' + jawsIdPrefix + '"]') return [afterInput, afterCheckbox];
@@ -3659,7 +3202,7 @@ process.stdout.write(JSON.stringify({
 	inputListeners: afterInput.listeners,
 	checked: afterCheckbox.checked,
 	checkboxListeners: afterCheckbox.listeners,
-	nameRoute: window.jawsNames.get("app") || null,
+	storeValue: jawsVar("app.state"),
 	frames: jaws.sent,
 }));
 `)
@@ -3676,7 +3219,7 @@ process.stdout.write(JSON.stringify({
 		InputListeners    []string `json:"inputListeners"`
 		Checked           bool     `json:"checked"`
 		CheckboxListeners []string `json:"checkboxListeners"`
-		NameRoute         []string `json:"nameRoute"`
+		StoreValue        int      `json:"storeValue"`
 		Frames            []string `json:"frames"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
@@ -3715,13 +3258,13 @@ process.stdout.write(JSON.stringify({
 	if !reflect.DeepEqual(got.CheckboxListeners, []string{"input"}) {
 		t.Fatalf("replacement checkbox listeners = %q, want [input]", got.CheckboxListeners)
 	}
-	if !reflect.DeepEqual(got.NameRoute, []string{"Jid.1"}) {
-		t.Fatalf("replacement name route = %q, want [Jid.1]", got.NameRoute)
+	if got.StoreValue != 7 {
+		t.Fatalf("replacement store value = %d, want 7", got.StoreValue)
 	}
 	if len(got.Frames) != 1 {
-		t.Fatalf("frames = %q, want one Set and no Remove", got.Frames)
+		t.Fatalf("frames = %q, want one Proposal and no Remove", got.Frames)
 	}
-	if msg, ok := wire.Parse([]byte(got.Frames[0])); !ok || msg.What != what.Set || msg.Jid != 1 || msg.Data != "state=7" {
+	if msg, ok := wire.Parse([]byte(got.Frames[0])); !ok || msg.What != what.Proposal || msg.Jid != 1 || msg.Data != "state=7" {
 		t.Fatalf("write after Replace routed to %+v, parseable %t; want Jid.1 state=7", msg, ok)
 	}
 }

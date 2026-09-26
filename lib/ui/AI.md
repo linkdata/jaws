@@ -39,7 +39,7 @@ documented on their concrete types:
 - Template, Container, Tbody, and Select keep that state in each Element's state
   slot rather than on the widget definition.
 
-Input widgets and JsVar require distinct widget values. To show one binder in two
+Input widgets and JsVarStore bindings require distinct widget values. To show one binder in two
 inputs, construct two widgets:
 
 ```go
@@ -64,7 +64,7 @@ contract. Required operational collaborators follow the module nil convention.
 ## RequestWriter and templates
 
 `RequestWriter` exposes helpers such as `Span`, `Text`, `Select`, `Container`,
-`JsVar`, and `Template` for concise template use. Explicit construction is also
+`Template` for concise template use. Explicit construction is also
 available through `rw.NewUI(ui.NewX(...), params...)`.
 
 `rw.Template(outerTag, name, dot, params...)` renders a partial template inside
@@ -187,12 +187,12 @@ single-select `named.BoolArray` of distinct names, or one synchronized mutation
 that clears peers and dirties every changed binding.
 
 Every browser-to-server WebSocket message must fit the 32 KiB inbound limit.
-The client does not chunk input, JsVar, click, context-menu, or removal payloads.
+The client does not chunk input, Proposal, click, context-menu, or removal payloads.
 An oversized message fails the WebSocket read and closes the Request connection.
 The resulting read-limit error is retained in the Request cancellation cause,
 which is passed to `Jaws.Log`; the message is not merely rejected for one
 control. Use HTTP uploads for large values and smaller independently updated
-wrappers for large trees. `JsVar.ClientCheck` runs after receipt and cannot
+wrappers for large trees. `JsVarStore.ClientCheck` runs after receipt and cannot
 enforce this transport boundary. See [wire](../wire/AI.md).
 
 ## Input dirty targets
@@ -285,120 +285,72 @@ slider := ui.NewRange(binder)
 
 ## JavaScript variables
 
-JsVar binds a JSON-marshalable Go value to an application-owned property on
-`window`. It is bidirectional: neither side becomes authoritative merely because
-the binding exists. Create a fresh binding for each Request. A shared handler
-can implement `JsVarMaker` so each render receives a new JsVar over synchronized,
-possibly shared state.
+JsVarStore owns one application value and one browser name. Its Go value is
+authoritative. Create one store for shared state, then call Bind for each
+Request render; each binding is used once. The bundled client holds values in a
+private Map, so read or propose changes through jawsVar rather than window
+properties.
 
 ```go
-type application struct {
-	clientMu sync.Mutex
-	client   Client
+store, err := ui.NewJsVarStore(jw, "client", &mu, &client)
+if err != nil {
+	return err
 }
-
-func (app *application) JawsMakeJsVar(*jaws.Request) (ui.IsJsVar, error) {
-	jsv := ui.NewJsVar(&app.clientMu, &app.client)
-	jsv.ClientCheck = ui.JSONSizeCheck[Client](1 << 20)
-	return jsv, nil
+store.ClientCheck = func(source *jaws.Element, next *Client, path string) error {
+	return validateClient(source, next, path)
 }
-
-handler := ui.Handler(jw, "index", new(application))
 ```
+
+Assign `store` to a `ClientStore *ui.JsVarStore[Client]` field on the template
+Dot, then render a fresh binding:
 
 ```gotemplate
-{{$.JsVar "client" .Dot}}
+{{$.NewUI (.Dot.ClientStore.Bind)}}
 ```
 
-Several bindings may share a name. A browser write fans out to every live
-binding of that name; a removed binding stops receiving it. If several bindings
-share one non-idempotent backing value, that write is applied once per binding.
+ClientCheck is required for browser writes; nil denies them. jq.SetChecked
+applies each changed proposal tentatively under the application lock, then
+calls ClientCheck once with the complete tentative value. An error or panic
+rolls that proposal back. The check must only inspect and must not acquire the
+same lock, mutate or retain tentative data, or call a store setter. The source
+Element can authorize a user or session, but all bindings receive the same
+JSON value. Put data with different visibility in separate stores.
 
-See [JsVar](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#JsVar) for
-delivery timing, partial updates, and client checks.
+A browser call jawsVar("client.x", value) sends one Proposal when the socket is
+open, then changes its local value optimistically and returns true. A false
+result leaves local state alone. Every accepted change schedules a canonical
+Patch for all bindings. A rejected, invalid, or unchanged proposal schedules a
+source correction; a JSON size rejection cancels the source Request so its next
+render restores canonical state. Server writes use SetPath or DeletePath; grouped atomic
+read-modify-write operations use WriteLocked's borrowed get/set/delete path
+functions. ReadLocked borrows the complete value under its read lock. Neither
+callback may retain mutable borrowed data or re-enter a lock-taking method.
 
-The server rejects the exact top-level name `__proto__`; the browser rejects that
-exact component anywhere in a dotted `jawsVar` path. Names share the page global
-namespace, so use an application-owned top-level symbol and dotted suffixes for
-paths. Do not bind unrelated or browser-owned globals.
+The empty path replaces the root; dotted paths have nonempty components.
+Names and components named __proto__, constructor, or prototype are reserved.
+Server paths are application-controlled; browser proposal paths are untrusted
+and must be authorized by ClientCheck. Paths are limited to 4096 UTF-8 bytes.
+Browser proposals replace existing paths only, so they cannot append slice
+elements one message at a time. jq's exact JSON field names apply; a Go field
+tagged json:"value" is addressed as value, not Value. JSON null is a value;
+DeletePath removes a string-keyed map entry.
 
-Rendering a non-nil Ptr serializes the current Go snapshot. The browser installs
-it when the binding element attaches. Browser writes before the WebSocket opens
-are not queued, and server broadcasts are not replayed to a rendered page that
-has not subscribed. Applications needing convergence must define a handshake,
-resend, merge, or browser-authoritative policy.
-
-### JSON representation
+The store reads and encodes current Go state when a Request handles a path
+invalidation, including one accumulated while its WebSocket was pending. It
+extracts partial JSON from that root encoding for ordinary JSON trees. Custom
+marshalers, promoted fields, slices, dynamic interfaces, and other complex
+shapes use root patches. Map trees receiving partial patches must have no
+shared mutable aliases between separately addressable paths; changing one
+aliased map can change another JSON path. Every bound value must remain JSON
+encodable. ExtraTags can dirty derived UI after changed writes.
 
 JavaScript numbers cannot exactly represent integers outside
-`-9007199254740991` through `9007199254740991`. Represent exact wide integers as
-built-in strings and convert BigInt values back to strings before `jawsVar`. A Go
-`json:",string"` tag is not generic round-trip support.
-
-```js
-const next = BigInt(client.counter) + 1n;
-client.counter = next.toString();
-jawsVar("client.counter", client.counter);
-```
-
-Generic browser writes decode into `any` and do not invoke destination custom
-unmarshaling. Use a browser-facing DTO or implement `PathSetter` for types such
-as `time.Time`, `[]byte`, and maps with non-string keys.
-
-### ClientCheck and PathSetter
-
-The generic setter can update exported JSON fields and grow slices and has no
-default accumulated-state limit. `ClientCheck` validates the complete tentative
-value before an actual generic write commits. It receives the browser-supplied
-jq path unchanged. Empty components are ignored, so `.value.` aliases `value`;
-treat the raw path as an inspection hint, not an authorization key. Array and
-slice components must be canonical JavaScript array-index names representable
-as Go `int`, and string-keyed map entries are exact. Struct path components and
-map-to-struct keys follow `encoding/json`'s default field-selection rules. An
-exact `json:"-"` tag excludes an otherwise selected exported field. For a
-non-promoting field, a valid nonempty tag name is used verbatim, while an absent,
-empty, or invalid name falls back to the Go field name; `json:"-,"` therefore
-names the field `-`. Ambiguous fields are absent from the path namespace.
-
-An anonymous struct without a valid explicit JSON name contributes its promoted
-fields directly without a Go-type-name component: use `value`, not
-`Inner.value`, or tag the anonymous field to create a nested path. Promotion
-reaches exported fields through unexported embedded structs. An explicitly
-named unexported anonymous struct is not itself a readable or writable endpoint
-or writable map-to-struct key, but longer paths can reach its exported fields.
-Reads and generic writes that traverse a nil pointer fail with
-`jq.ErrPathNotFound`, and generic writes do not allocate it. `JawsGetPath`
-returns nil on lookup failure, so nil does not distinguish failure from a
-resolved nil value. Use `PathSetter` to allow-list paths and operations.
-
-A check runs while the application locker is held. It must inspect only: do not
-mutate or retain tentative state, re-enter the JsVar, call a path setter, acquire
-the same locker, or return/wrap `jaws.ErrEventUnhandled`. A nil result commits;
-an error rolls back without a broadcast. The browser already changed locally,
-so an ordinary rejection can leave it divergent until application
-resynchronization.
-
-Generic setter errors use a generic browser alert and retain
-detail in the operator log; any alert for a `ClientCheck` or `PathSetter` error
-retains its text.
-
-A check using `jq.Get` cannot inspect an explicitly named
-unexported anonymous struct at its own endpoint after a tentative write beneath
-it; inspect a longer exported-field path or the Go value directly.
-
-The check sees tentative Go state, not necessarily the decoded value later used
-for a peer broadcast. jq conversions and ignored map-to-struct fields can make
-them differ. Server writes, invalid or unchanged generic writes, and PathSetter
-writes bypass ClientCheck.
-
-`JSONSizeCheck[T]` marshals the whole tentative value. A non-positive limit
-disables it. An over-limit value or marshaling failure matches
-`ErrJsVarTooLarge` and cancels the associated Request after rollback. It bounds
-encoded JSON, not Go heap/backing memory; custom marshalers, omitted fields,
-aliases, and capacity may require a domain-specific check.
-
-Configure equivalent policies and the same locker on every binding exposing the
-same Ptr or reachable mutable state. One unchecked binding bypasses the policy.
+-9007199254740991 through 9007199254740991. Use built-in string fields and
+explicit BigInt conversion for exact wide integers. A Go json:",string" tag
+changes the outbound representation, but generic browser writes still use
+jq conversion rather than destination custom unmarshaling. JSONSizeCheck is a
+composable whole-value policy; it limits encoded bytes, not Go heap capacity.
+An over-limit proposal is rolled back and cancels the source Request.
 
 ## Container-family widgets
 
@@ -509,7 +461,7 @@ Widget tests should use real Requests and Elements. Cover:
 - Template/Register ownership and stale-Element cleanup;
 - equal container values on independent Elements;
 - append, remove, order, nested subtree retention, and contention-before-callback;
-- JsVar paths, validation, rollback, shared names, ordering, precision, and size;
+- JsVarStore paths, validation, rollback, name conflicts, ordering, precision, and size;
 - both race/debug and plain production builds.
 
 Changes to `int` or `uint` numeric bounds also require the 32-bit leg in the

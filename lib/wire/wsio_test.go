@@ -120,7 +120,7 @@ func TestReadWriteLoop_RoundTrip(t *testing.T) {
 			name: "batched records",
 			want: []WsMsg{
 				{Jid: 1, What: what.Input, Data: "line one\nline two"},
-				{Jid: 2, What: what.Set, Data: `state={"value":1}`},
+				{Jid: 2, What: what.Proposal, Data: `state={"value":1}`},
 				{Jid: 3, What: what.Call, Data: `notify=["done"]`},
 			},
 		},
@@ -170,7 +170,7 @@ func TestReadLoop_SkipsMalformedRecords(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		want := []WsMsg{
 			{Jid: 1, What: what.Input, Data: "first"},
-			{Jid: 2, What: what.Set, Data: "state=second"},
+			{Jid: 2, What: what.Proposal, Data: "state=second"},
 		}
 		payload := want[0].Append(nil)
 		payload = append(payload, "malformed\n\n"...)

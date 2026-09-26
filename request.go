@@ -97,6 +97,7 @@ type Request struct {
 	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
 	session          *Session                // session, if established
 	todoDirt         []any                   // pending dirty tags and exact Element targets
+	todoPaths        map[any]*dirtyPathSet   // pending path updates for live tagged Elements
 	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
 	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
 	cancelFn         context.CancelCauseFunc // cancel function
@@ -184,6 +185,7 @@ func (rq *Request) finishLocked() {
 	}
 	rq.killSessionLocked(prev.claimed())
 	rq.storeState(reqFinished)
+	rq.todoPaths = nil
 	if prev == reqRunning {
 		rq.Jaws.markStatusDirty(StatusMetricActiveRequests)
 	}
@@ -392,9 +394,10 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 // returns it for the caller to return to [Jaws.requestBufferPool].
 //
 // It detaches and clears the reusable collections (the element list, tag map, dirt
-// list and message queue) only. It does NOT cancel the context, detach the session,
-// or change the lifecycle state: the caller (recycleLockedWithCause) has already
-// cancelled the context and called [Request.finishLocked], which detaches the session
+// list and message queue) and discards pending path invalidations. It does NOT
+// cancel the context, detach the session, or change the lifecycle state: the
+// caller (recycleLockedWithCause) has already cancelled the context and called
+// [Request.finishLocked], which detaches the session
 // and transitions the Request to reqFinished. It also does not mutate the individual
 // Element objects' fields or the Jid counter. The Request keeps its identity key and
 // canceled context, so a pointer retained by the initial renderer or by background
@@ -442,6 +445,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	}
 	rq.buffers = nil
 	rq.todoDirt = nil
+	rq.todoPaths = nil
 	rq.elems = nil
 	rq.deletedElems = 0
 	rq.tagMap = nil
@@ -919,7 +923,45 @@ func (rq *Request) appendDirtyTags(tags []any) {
 					continue
 				}
 			}
-			rq.todoDirt = append(rq.todoDirt, tagValue)
+			// Pending Requests can cross many dirty passes before connecting.
+			// Keep each selector once while preserving late tag registration.
+			if !slices.Contains(rq.todoDirt, tagValue) {
+				rq.todoDirt = append(rq.todoDirt, tagValue)
+			}
+		}
+	}
+	rq.mu.Unlock()
+}
+
+// appendDirtyPaths merges path invalidations into the live targets on this
+// Request. The store renders its initial value and registers its tag under one
+// value lock: a mutation before registration is present in that render, and a
+// later mutation sees the registered tag here.
+func (rq *Request) appendDirtyPaths(paths map[any]*dirtyPathSet) {
+	if len(paths) == 0 {
+		return
+	}
+	rq.mu.Lock()
+	if rq.loadState().registered() {
+		for tagValue, incoming := range paths {
+			if elem, exact := tagValue.(*Element); exact {
+				if elem == nil || elem.Request != rq || elem.deleted.Load() {
+					continue
+				}
+			} else if !rq.hasLiveTagLocked(tagValue) {
+				continue
+			}
+			if rq.todoPaths == nil {
+				rq.todoPaths = make(map[any]*dirtyPathSet)
+			}
+			set := rq.todoPaths[tagValue]
+			if set == nil {
+				set = new(dirtyPathSet)
+				rq.todoPaths[tagValue] = set
+			}
+			for _, path := range incoming.paths {
+				set.add(path)
+			}
 		}
 	}
 	rq.mu.Unlock()
@@ -1257,7 +1299,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // be running so the request can subscribe to broadcasts and unsubscribe on exit.
 //
 // Each inbound WebSocket message is limited to 32 KiB. The bundled client does
-// not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
+// not chunk Input, Proposal, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
 // after UTF-8 encoding, so no fixed application-value length is guaranteed. The
 // resulting read-limit error is retained in the Request cancellation cause,

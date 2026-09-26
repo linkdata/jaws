@@ -68,6 +68,21 @@ func Test_wsMsg_Append(t *testing.T) {
 			},
 			want: "Click\tJid.1\t\"double\\\"quote\"\n",
 		},
+		{
+			name:   "proposal is verbatim",
+			fields: fields{Data: `x=1`, Jid: 1, What: what.Proposal},
+			want:   "Proposal\tJid.1\tx=1\n",
+		},
+		{
+			name:   "patch deletion is verbatim",
+			fields: fields{Data: `x=`, Jid: 1, What: what.Patch},
+			want:   "Patch\tJid.1\tx=\n",
+		},
+		{
+			name:   "patch root is verbatim",
+			fields: fields{Data: `={"x":1}`, Jid: 1, What: what.Patch},
+			want:   "Patch\tJid.1\t={\"x\":1}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -129,10 +144,11 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
 		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
-		// Set and Call data is taken verbatim even when it begins with a double
-		// quote: it must not be run through strconv.Unquote (Parse excludes Set/Call
+		// Proposal and Call data is taken verbatim even when it begins with a double
+		// quote: it must not be run through strconv.Unquote (Parse excludes Proposal/Call
 		// from unquoting). Pins that guard against accidental removal.
-		{"set quote-prefixed verbatim", "Set\tJid.4\t\"x\"=1\n", WsMsg{Jid: jid.Jid(4), What: what.Set, Data: "\"x\"=1"}},
+		{"proposal quote-prefixed verbatim", "Proposal\tJid.4\t\"x\"=1\n", WsMsg{Jid: jid.Jid(4), What: what.Proposal, Data: "\"x\"=1"}},
+		{"patch deletion", "Patch\tJid.4\tx=\n", WsMsg{Jid: jid.Jid(4), What: what.Patch, Data: "x="}},
 		{"call quote-prefixed verbatim", "Call\tJid.5\t\"x\"=1\n", WsMsg{Jid: jid.Jid(5), What: what.Call, Data: "\"x\"=1"}},
 	}
 	for _, tt := range tests {
@@ -145,21 +161,21 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 	}
 }
 
-// Test_wsParse_SetCallTruncateAtTab covers the parser contract that inbound Set
+// Test_wsParse_ProposalCallTruncateAtTab covers the parser contract that inbound Proposal
 // and Call data ends at the first tab: a tab-separated suffix an untrusted frame
 // appended past the documented boundary must be dropped, leaving only the
 // recoverable prefix. Frames without such a suffix must round-trip unchanged.
-func Test_wsParse_SetCallTruncateAtTab(t *testing.T) {
+func Test_wsParse_ProposalCallTruncateAtTab(t *testing.T) {
 	tests := []struct {
 		name string
 		txt  string
 		want WsMsg
 	}{
-		{"set suffix dropped", "Set\tJid.1\tpath=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Set, Data: "path=1"}},
+		{"proposal suffix dropped", "Proposal\tJid.1\tpath=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Proposal, Data: "path=1"}},
 		{"call suffix dropped", "Call\tJid.1\tfn=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Call, Data: "fn=1"}},
-		{"set multiple tabs keep prefix", "Set\tJid.2\ta\tb\tc\n", WsMsg{Jid: jid.Jid(2), What: what.Set, Data: "a"}},
-		{"set empty before tab", "Set\tJid.3\t\textra\n", WsMsg{Jid: jid.Jid(3), What: what.Set, Data: ""}},
-		{"set no tab unchanged", "Set\tJid.4\tpath=1\n", WsMsg{Jid: jid.Jid(4), What: what.Set, Data: "path=1"}},
+		{"proposal multiple tabs keep prefix", "Proposal\tJid.2\ta\tb\tc\n", WsMsg{Jid: jid.Jid(2), What: what.Proposal, Data: "a"}},
+		{"proposal empty before tab", "Proposal\tJid.3\t\textra\n", WsMsg{Jid: jid.Jid(3), What: what.Proposal, Data: ""}},
+		{"proposal no tab unchanged", "Proposal\tJid.4\tpath=1\n", WsMsg{Jid: jid.Jid(4), What: what.Proposal, Data: "path=1"}},
 		{"call no tab unchanged", "Call\tJid.5\tfn=1\n", WsMsg{Jid: jid.Jid(5), What: what.Call, Data: "fn=1"}},
 	}
 	for _, tt := range tests {
@@ -225,7 +241,7 @@ func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Click\t\t\"10 20 5 name\\tJid.1\"\n"))
 	f.Add([]byte("ContextMenu\tJid.1\t\"1 2 0 menu\"\n"))
 	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
-	f.Add([]byte("Set\tJid.1\tpath={\"a\":1}\n"))
+	f.Add([]byte("Proposal\tJid.1\tpath={\"a\":1}\n"))
 	f.Add([]byte("Call\tJid.1\tfn=[1,2]\n"))
 	f.Add([]byte("invalid\t\t\"\"\n"))
 	f.Fuzz(func(t *testing.T, a []byte) {
@@ -251,7 +267,7 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 	f.Add(uint8(what.Input), int32(0), "value")
 	f.Add(uint8(what.Click), int32(1), "1 2 5 name")
 	f.Add(uint8(what.ContextMenu), int32(2), "3 4 2 menu")
-	f.Add(uint8(what.Set), int32(3), `path={"a":1}`)
+	f.Add(uint8(what.Proposal), int32(3), `path={"a":1}`)
 	f.Add(uint8(what.Call), int32(4), `fn=[1,2]`)
 	f.Fuzz(func(t *testing.T, whatv uint8, jidv int32, data string) {
 		wht := what.What(whatv)
@@ -272,9 +288,9 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 		if !utf8.ValidString(data) {
 			return
 		}
-		// Set/Call data is written verbatim, so it must not contain the tab/newline
-		// framing delimiters; for other commands appendJSONQuote escapes them.
-		if (wht == what.Set || wht == what.Call) && strings.ContainsAny(data, "\t\n") {
+		// Patch, Proposal, and Call data is written verbatim, so it must not contain
+		// tab or newline framing delimiters; appendJSONQuote escapes them for others.
+		if (wht == what.Patch || wht == what.Proposal || wht == what.Call) && strings.ContainsAny(data, "\t\n") {
 			return
 		}
 		msg := WsMsg{
@@ -324,10 +340,10 @@ func Test_wsMsg_AppendDataIsValidJSON(t *testing.T) {
 }
 
 // Test_wsParse_SanitizesInvalidUTF8InVerbatimData covers Parse's ToValidUTF8
-// sanitization of the verbatim Set/Call data path: invalid UTF-8 from the browser
+// sanitization of the verbatim Proposal/Call data path: invalid UTF-8 from the browser
 // must be stripped so downstream consumers never see it.
 func Test_wsParse_SanitizesInvalidUTF8InVerbatimData(t *testing.T) {
-	raw := append([]byte("Set\tJid.1\tx="), 0xff, 0xfe, 'y', '\n')
+	raw := append([]byte("Proposal\tJid.1\tx="), 0xff, 0xfe, 'y', '\n')
 	msg, ok := Parse(raw)
 	if !ok {
 		t.Fatal("expected Parse to succeed")

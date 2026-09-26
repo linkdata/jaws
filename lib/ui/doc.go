@@ -13,7 +13,7 @@
 // Within one Request, a widget normally backs one live
 // [github.com/linkdata/jaws.Element]. Widgets based on [HTMLInner], plus [Img],
 // [Option], [Template], [Container], [Tbody], and [Select], support multiple live
-// Elements under their concrete contracts. Input widgets and [JsVar] require
+// Elements under their concrete contracts. Input widgets and [JsVarBinding] require
 // distinct widget values.
 //
 // [NewContainer], [NewTbody], [NewSelect], and [NewTemplate] return definition
@@ -32,7 +32,7 @@
 // [github.com/linkdata/jaws/lib/htmlio.Attr] and a trusted name; convert the result
 // to string for [NewTemplate].
 //
-// Browser input, click, and context-menu events are forwarded only while the
+// Browser input, proposal, click, and context-menu events are forwarded only while the
 // WebSocket is open and are not replayed. Native form reset does not update Go
 // bindings, and independently bound [Radio] values do not become one server-side
 // group by sharing an HTML name; see [RequestWriter.RadioGroup].

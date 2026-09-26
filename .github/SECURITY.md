@@ -1,5 +1,9 @@
 # Security Audit Report
 
+This is a point-in-time report for the deployed 2026-04-07 demo and
+`jaws@v0.301.0`. Its observations and `Set`/`PathSetter` descriptions do not
+describe the current JsVarStore design; see [the current UI guidance](../lib/ui/AI.md).
+
 **Target:** https://jawsdemo.northeurope.cloudapp.azure.com/  
 **Date:** 2026-04-07  
 **Scope:** Web application  

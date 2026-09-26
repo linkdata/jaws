@@ -20,10 +20,6 @@ import (
 // Broadcast queues msg for delivery to [Request] and [Element] values selected
 // by [wire.Message.Dest].
 //
-// [what.Set] messages with path=value data are batched until the next
-// [DefaultUpdateInterval] tick or queued non-Set message. Each batch keeps the
-// last Set for each expanded destination selection and path, in last-write order.
-//
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
 // [Jaws.ServeWithTimeout]) is running. Otherwise this call may block.
 //
@@ -131,6 +127,82 @@ func (jw *Jaws) Dirty(dirtyTags ...any) {
 	jw.setDirty(jw.MustTagExpand(dirtyTags))
 }
 
+const (
+	maxDirtyPaths     = 64
+	maxDirtyPathBytes = 16 * 1024
+)
+
+// dirtyPathSet keeps a bounded union of dotted paths. An ancestor subsumes its
+// descendants, and the empty root path subsumes everything.
+type dirtyPathSet struct {
+	paths []string
+	bytes int
+}
+
+func (set *dirtyPathSet) add(path string) {
+	if len(set.paths) == 1 && set.paths[0] == "" {
+		return
+	}
+	if path == "" || len(path) > maxDirtyPathBytes {
+		set.paths = []string{""}
+		set.bytes = 0
+		return
+	}
+	for _, existing := range set.paths {
+		if existing == path || strings.HasPrefix(path, existing+".") {
+			return
+		}
+	}
+	pathPrefix := path + "."
+	set.paths = slices.DeleteFunc(set.paths, func(existing string) bool {
+		if strings.HasPrefix(existing, pathPrefix) {
+			set.bytes -= len(existing)
+			return true
+		}
+		return false
+	})
+	if len(set.paths) >= maxDirtyPaths || set.bytes+len(path) > maxDirtyPathBytes {
+		set.paths = []string{""}
+		set.bytes = 0
+		return
+	}
+	set.paths = append(set.paths, path)
+	set.bytes += len(path)
+}
+
+// DirtyPath schedules a path-aware update for Elements selected by selector.
+//
+// The selector expands like [Jaws.Dirty], including exact Element targets. On
+// the next dirty pass, a live target whose UI has a
+// JawsUpdatePaths(*Element, []string) method receives its coalesced paths.
+// Other live targets receive an ordinary [Updater.JawsUpdate] call. The empty
+// path selects the root; an ancestor subsumes its descendants. Each selector
+// retains at most 64 independent paths and 16 KiB of path bytes per dirty pass
+// and per Request. Exceeding either limit collapses to the root. The path is
+// passed to the UI without validation, so callers must use paths understood by
+// that UI. Calls after [Jaws.Close] are discarded.
+func (jw *Jaws) DirtyPath(selector any, path string) {
+	tags := jw.MustTagExpand(selector)
+	jw.mu.Lock()
+	defer jw.mu.Unlock()
+	select {
+	case <-jw.closeCh:
+		return
+	default:
+	}
+	for _, tagValue := range tags {
+		if jw.dirtyPaths == nil {
+			jw.dirtyPaths = make(map[any]*dirtyPathSet)
+		}
+		set := jw.dirtyPaths[tagValue]
+		if set == nil {
+			set = new(dirtyPathSet)
+			jw.dirtyPaths[tagValue] = set
+		}
+		set.add(path)
+	}
+}
+
 // dirtPair pairs a dirty tag with its insertion-order rank, used by sortedDirtTags
 // to order tags without re-reading the order from the map on every comparison.
 type dirtPair struct {
@@ -157,16 +229,20 @@ func sortedDirtTags(dirty map[any]int) []any {
 
 // distributeDirt drains the accumulated dirty selectors and offers them to every
 // live Request for the next update pass, returning the number drained. Each Request
-// keeps exact Element targets only when it owns them.
+// keeps exact Element targets only when it owns them, and path selectors only when
+// a live matching Element is already registered.
 func (jw *Jaws) distributeDirt() int {
 	var reqs []*Request
 	var dirt []any
+	var paths map[any]*dirtyPathSet
 
 	// Snapshot the Request set under jw.mu, then append to each Request without it.
 	jw.mu.Lock()
-	if len(jw.dirty) > 0 {
+	if len(jw.dirty) > 0 || len(jw.dirtyPaths) > 0 {
 		dirt = sortedDirtTags(jw.dirty)
 		jw.clearDirtLocked()
+		paths = jw.dirtyPaths
+		jw.dirtyPaths = nil
 		reqs = make([]*Request, 0, jw.requestCount)
 		for _, rq := range jw.requests {
 			if rq != nil {
@@ -187,8 +263,9 @@ func (jw *Jaws) distributeDirt() int {
 	//     re-materializing storage on a dead identity.
 	for _, rq := range reqs {
 		rq.appendDirtyTags(dirt)
+		rq.appendDirtyPaths(paths)
 	}
-	return len(dirt)
+	return len(dirt) + len(paths)
 }
 
 // Reload requests all active [Request] values to reload their current page.
@@ -401,7 +478,8 @@ func jsCallData(jsfunc, jsonstr string) string {
 // receiving browser, jsfunc is resolved as a path from window and called with
 // JSON.parse(jsonstr); the matched element is not passed as this or as an
 // argument. jsfunc must be an application-controlled dot path. The browser
-// rejects an exact "__proto__" component; put user data in jsonstr, not jsfunc.
+// rejects exact "__proto__", "constructor", and "prototype" components; put
+// user data in jsonstr, not jsfunc.
 //
 // A nil target calls each active Request once. A nonzero [key.Key] target calls
 // the matching active Request once without requiring a matching DOM element; a

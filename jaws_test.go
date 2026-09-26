@@ -4209,7 +4209,7 @@ func BenchmarkRequestIncomingEventDispatch(b *testing.B) {
 		bubbled bool
 	}{
 		{name: "direct/Input", wht: what.Input},
-		{name: "direct/Set", wht: what.Set},
+		{name: "direct/Proposal", wht: what.Proposal},
 		{name: "bubbled/Click", wht: what.Click, bubbled: true},
 		{name: "bubbled/ContextMenu", wht: what.ContextMenu, bubbled: true},
 	} {

@@ -78,8 +78,9 @@ type WsMsg struct {
 // Append appends m in wire format to b and returns the extended buffer.
 //
 // The record is What<TAB>Jid<TAB>Data<LF>, where the Jid field is empty if Jid
-// is zero. The Data field is written verbatim for [what.Set] and [what.Call] and
-// JSON-quoted for every other command. Append panics if Jid is negative.
+// is zero. The Data field is written verbatim for [what.Patch], [what.Proposal],
+// and [what.Call], and JSON-quoted for every other command. Append panics if
+// Jid is negative.
 //
 // Verbatim Data must contain no tab or newline bytes, which would corrupt the
 // record; ensuring that is the caller's responsibility.
@@ -94,7 +95,7 @@ func (m *WsMsg) Append(b []byte) []byte {
 	}
 	b = append(b, '\t')
 	switch m.What {
-	case what.Set, what.Call:
+	case what.Patch, what.Proposal, what.Call:
 		b = append(b, m.Data...)
 	default:
 		b = appendJSONQuote(b, m.Data)
@@ -112,18 +113,19 @@ func (m *WsMsg) Format() string {
 
 // Parse parses one LF-terminated protocol record.
 //
-// The wire format mirrors [WsMsg.Append]. For commands other than [what.Set] and
-// [what.Call], if the Data field begins with a double quote it is decoded as a JSON
-// string: [strconv.Unquote] handles the common case, with a fallback to a JSON
+// The wire format mirrors [WsMsg.Append]. For commands other than [what.Patch],
+// [what.Proposal], and [what.Call], if the Data field begins with a double quote
+// it is decoded as a JSON string: [strconv.Unquote] handles the common case,
+// with a fallback to a JSON
 // string decode for inputs it rejects but the browser's JSON.stringify can produce
 // (notably a lone UTF-16 surrogate, which the fallback maps to U+FFFD). The message
 // is rejected only if both decoders fail. Data that does not begin with a double
-// quote is taken verbatim, as is all Set and Call data. In all cases the resulting
+// quote is taken verbatim, as is all Patch, Proposal, and Call data. In all cases the resulting
 // data is sanitized with [strings.ToValidUTF8].
 //
-// Inbound [what.Set] and [what.Call] data is taken verbatim at the field
+// Inbound [what.Patch], [what.Proposal], and [what.Call] data is taken verbatim at the field
 // boundaries and is best-effort: the field ends at the first tab, so a tab
-// inside an inbound Set or Call payload truncates the field.
+// inside an inbound Patch, Proposal, or Call payload truncates the field.
 func Parse(txt []byte) (WsMsg, bool) {
 	// Parse reports success with ok rather than an error: the only failure is "txt is
 	// not a valid record", with no sub-cause any caller branches on, and the sole caller
@@ -144,8 +146,8 @@ func Parse(txt []byte) (WsMsg, bool) {
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
 					if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() {
 						raw := txt[nl2+1 : len(txt)-1]
-						if wht == what.Set || wht == what.Call {
-							// Set and Call data is taken verbatim and is best-effort:
+						if wht == what.Patch || wht == what.Proposal || wht == what.Call {
+							// Path and Call data is taken verbatim and is best-effort:
 							// the field ends at the first tab, so drop any tab-separated
 							// suffix an untrusted record appended past that boundary.
 							if i := bytes.IndexByte(raw, '\t'); i >= 0 {
@@ -153,7 +155,7 @@ func Parse(txt []byte) (WsMsg, bool) {
 							}
 						}
 						data := string(raw)
-						if txt[nl2+1] == '"' && wht != what.Set && wht != what.Call {
+						if txt[nl2+1] == '"' && wht != what.Patch && wht != what.Proposal && wht != what.Call {
 							// The browser encodes this data with JSON.stringify.
 							// strconv.Unquote decodes the common case cheaply and
 							// allocation-free, but its grammar is not a superset of

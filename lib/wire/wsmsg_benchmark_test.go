@@ -39,7 +39,7 @@ func BenchmarkParse(b *testing.B) {
 		{"input_escaped", []byte("Input\tJid.1\t\"a\\nb\\tc\"\n")},
 		{"input_surrogate", []byte("Input\tJid.1\t\"\\ud800\"\n")},
 		{"input_unquoted", []byte("Input\tJid.1\ttrue\n")},
-		{"set_verbatim", []byte("Set\tJid.1\tpath={\"a\":1}\n")},
+		{"set_verbatim", []byte("Proposal\tJid.1\tpath={\"a\":1}\n")},
 	}
 	for _, f := range frames {
 		b.Run(f.name, func(b *testing.B) {
