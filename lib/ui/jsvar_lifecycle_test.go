@@ -6,8 +6,11 @@ import (
 	"html/template"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/jawstest"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 var errJsVarLifecycleRender = errors.New("render failed")
@@ -78,11 +81,12 @@ func TestJsVarBindingContainerRollbackRestoresRoute(t *testing.T) {
 	}
 }
 
-func TestJsVarBindingRenderOrderChoosesLatestRoute(t *testing.T) {
+func TestJsVarBindingRenderOrderKeepsBothRoutesActive(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	var mu sync.RWMutex
 	value := 1
 	store := newTestJsVarStore(t, jw, "client", &mu, &value)
+	store.ClientCheck = func(*jaws.Element, *int, string) error { return nil }
 	first := store.Bind()
 	second := store.Bind()
 	firstElem := rq.NewElement(first)
@@ -92,8 +96,51 @@ func TestJsVarBindingRenderOrderChoosesLatestRoute(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !first.isCurrent(firstElem) || second.isCurrent(secondElem) {
-		t.Fatal("current route follows Element creation order instead of render order")
+	if err := first.JawsInput(firstElem, "=2"); err != nil || value != 2 {
+		t.Fatalf("first route input: value=%d err=%v", value, err)
+	}
+	if err := second.JawsInput(secondElem, "=3"); err != nil || value != 3 {
+		t.Fatalf("second route input: value=%d err=%v", value, err)
+	}
+}
+
+func TestJsVarStorePublishesToAllLiveBindings(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	t.Cleanup(jw.Close)
+	tr := jawstest.NewTestRequest(jw, nil)
+	t.Cleanup(func() {
+		tr.Close()
+		<-tr.DoneCh
+	})
+	<-tr.ReadyCh
+
+	var mu sync.RWMutex
+	value := 1
+	store := newTestJsVarStore(t, jw, "client", &mu, &value)
+	_, first, _ := renderTestJsVar(t, tr.Request, store)
+	_, second, _ := renderTestJsVar(t, tr.Request, store)
+	if _, err = store.SetPath("", 2); err != nil {
+		t.Fatal(err)
+	}
+	patches := make(map[jaws.Jid]string)
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for len(patches) < 2 {
+		select {
+		case msg := <-tr.OutCh:
+			if msg.What == what.Patch {
+				patches[msg.Jid] = msg.Data
+			}
+		case <-timer.C:
+			t.Fatalf("patches = %v, want both live bindings", patches)
+		}
+	}
+	if patches[first.Jid()] != "=2" || patches[second.Jid()] != "=2" {
+		t.Fatalf("patches = %v, want =2 on both live bindings", patches)
 	}
 }
 

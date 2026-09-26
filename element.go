@@ -367,6 +367,8 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 // selection, scroll position, live form-control properties, programmatic
 // listeners, expando properties, and custom-element instances, is not preserved.
 // JaWS reattaches its own managed browser behavior.
+// A JsVar store binding that retains its Jid keeps its current browser value
+// rather than reloading its initial data-jawsdata.
 //
 // A replacement node bearing an existing JaWS ID keeps that server-side
 // [Element] registration and UI state; omitted descendant IDs are unregistered.

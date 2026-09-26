@@ -759,6 +759,138 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_RemovingSelectedStoreRestoresEarlierRoute(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+const nodes = {};
+function store(id, value) {
+	const elem = {
+		id: id,
+		dataset: { jawsstore: "app", jawsdata: JSON.stringify({state: value}) },
+		hasAttribute: function(attr) { return attr === "data-jawsstore"; },
+		querySelectorAll: function() { return []; },
+		remove: function() { delete nodes[id]; },
+	};
+	nodes[id] = elem;
+	jawsAttach(elem);
+	return elem;
+}
+document.getElementById = function(id) { return nodes[id] || null; };
+store("Jid.1", 1);
+store("Jid.2", 1);
+jawsPerform("Patch", "Jid.1", "state=2");
+jawsPerform("Patch", "Jid.2", "state=2");
+const before = jawsVar("app.state");
+jawsPerform("Delete", "Jid.2", JSON.stringify(""));
+const restored = jawsVar("app.state");
+jawsPerform("Patch", "Jid.1", "state=3");
+const patched = jawsVar("app.state");
+const wrote = jawsVar("app.state", 4);
+process.stdout.write(JSON.stringify({
+	before: before,
+	restored: restored,
+	patched: patched,
+	wrote: wrote,
+	frames: jaws.sent,
+}));
+`)
+	var got struct {
+		Before   int      `json:"before"`
+		Restored int      `json:"restored"`
+		Patched  int      `json:"patched"`
+		Wrote    bool     `json:"wrote"`
+		Frames   []string `json:"frames"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("store fallback output %q: %v", raw, err)
+	}
+	if got.Before != 2 || got.Restored != 2 || got.Patched != 3 || !got.Wrote || len(got.Frames) != 1 {
+		t.Fatalf("store fallback state = %+v", got)
+	}
+	if msg, ok := wire.Parse([]byte(got.Frames[0])); !ok || msg.What != what.Proposal || msg.Jid != 1 || msg.Data != "state=4" {
+		t.Fatalf("fallback proposal = %+v, parseable %t; want Jid.1 state=4", msg, ok)
+	}
+}
+
+func TestJawsJS_ReplaceRetainedStoreKeepsPatchedValue(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+function store(id, name, value) {
+	return {
+		id: id,
+		dataset: { jawsstore: name, jawsdata: JSON.stringify({value: value}) },
+		hasAttribute: function(attr) { return attr === "data-jawsstore"; },
+		querySelectorAll: function() { return []; },
+	};
+}
+const oldRoot = store("Jid.1", "outer", 1);
+const oldChild = store("Jid.2", "inner", 10);
+oldRoot.querySelectorAll = function(selector) {
+	return selector === '[id^="' + jawsIdPrefix + '"]' ? [oldChild] : [];
+};
+let root = oldRoot;
+let child = oldChild;
+oldRoot.replaceWith = function(fragment) {
+	root = fragment.root;
+	child = fragment.child;
+};
+document.getElementById = function(id) {
+	if (id === "Jid.1") return root;
+	if (id === "Jid.2") return child;
+	return null;
+};
+jawsAttach(oldRoot);
+jawsAttach(oldChild);
+jawsPerform("Patch", "Jid.1", "value=2");
+jawsPerform("Patch", "Jid.2", "value=20");
+const before = [jawsVar("outer.value"), jawsVar("inner.value")];
+const replacement = '<div id="Jid.1"><div id="Jid.2"></div></div>';
+jawsElement = function(html) {
+	if (html !== replacement) throw new Error("unexpected replacement " + html);
+	const nextRoot = store("Jid.1", "outer", 1);
+	const nextChild = store("Jid.2", "inner", 10);
+	const managed = [nextRoot, nextChild];
+	return {
+		root: nextRoot,
+		child: nextChild,
+		querySelectorAll: function(selector) {
+			return selector === '[id^="' + jawsIdPrefix + '"]' ? managed : [];
+		},
+	};
+};
+jawsPerform("Replace", "Jid.1", JSON.stringify(replacement));
+const retained = [jawsVar("outer.value"), jawsVar("inner.value")];
+jawsPerform("Patch", "Jid.1", "value=3");
+jawsPerform("Patch", "Jid.2", "value=30");
+process.stdout.write(JSON.stringify({
+	before: before,
+	retained: retained,
+	after: [jawsVar("outer.value"), jawsVar("inner.value")],
+	frames: jaws.sent,
+}));
+`)
+	var got struct {
+		Before   []int    `json:"before"`
+		Retained []int    `json:"retained"`
+		After    []int    `json:"after"`
+		Frames   []string `json:"frames"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("retained store output %q: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got.Before, []int{2, 20}) ||
+		!reflect.DeepEqual(got.Retained, []int{2, 20}) ||
+		!reflect.DeepEqual(got.After, []int{3, 30}) || len(got.Frames) != 0 {
+		t.Fatalf("retained store values = %+v", got)
+	}
+}
+
 func TestJawsJS_PatchFailureReloads(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 let reloads = 0;

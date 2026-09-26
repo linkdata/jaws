@@ -290,6 +290,9 @@ authoritative. Create one store for shared state, then call Bind for each
 Request render on the Jaws instance passed to NewJsVarStore; each binding is
 used once. The bundled client holds values in a private Map, so read or
 propose changes through jawsVar rather than window properties.
+When several bindings of one store remain live in a Request, each receives
+canonical patches. The browser keeps each binding's value current and uses the
+last attached live binding for `jawsVar` reads and writes.
 
 ```go
 store, err := ui.NewJsVarStore(jw, "client", &mu, &client)
