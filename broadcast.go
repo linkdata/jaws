@@ -177,10 +177,11 @@ func (set *dirtyPathSet) add(path string) {
 // JawsUpdatePaths(*Element, []string) method receives its coalesced paths.
 // Other live targets receive an ordinary [Updater.JawsUpdate] call. The empty
 // path selects the root; an ancestor subsumes its descendants. Each selector
-// retains at most 64 independent paths and 16 KiB of path bytes per dirty pass
-// and per Request. Exceeding either limit collapses to the root. The path is
-// passed to the UI without validation, so callers must use paths understood by
-// that UI. Calls after [Jaws.Close] are discarded.
+// retains at most 64 independent paths and 16 KiB of path bytes per dirty pass;
+// each target Element has the same limit per Request. Exceeding either limit
+// collapses to the root. The path is passed to the UI without validation, so
+// callers must use paths understood by that UI. Calls after [Jaws.Close] are
+// discarded.
 func (jw *Jaws) DirtyPath(selector any, path string) {
 	tags := jw.MustTagExpand(selector)
 	jw.mu.Lock()
@@ -229,7 +230,7 @@ func sortedDirtTags(dirty map[any]int) []any {
 
 // distributeDirt drains the accumulated dirty selectors and offers them to every
 // live Request for the next update pass, returning the number drained. Each Request
-// keeps exact Element targets only when it owns them, and path selectors only when
+// keeps exact Element targets only when it owns them, and path targets only when
 // a live matching Element is already registered.
 func (jw *Jaws) distributeDirt() int {
 	var reqs []*Request

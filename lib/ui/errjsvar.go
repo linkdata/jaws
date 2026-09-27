@@ -7,18 +7,7 @@ import (
 )
 
 // ErrIllegalJsVarName reports an invalid or reserved browser name.
-var ErrIllegalJsVarName errIllegalJsVarName
-
-type errIllegalJsVarName string
-
-func (e errIllegalJsVarName) Error() string {
-	if e != "" {
-		return "illegal jsvar name: " + string(e)
-	}
-	return "illegal jsvar name"
-}
-
-func (errIllegalJsVarName) Is(target error) bool { return target == ErrIllegalJsVarName }
+var ErrIllegalJsVarName = errors.New("illegal jsvar name")
 
 // ErrIllegalJsVarPath reports an invalid or reserved dotted path.
 var ErrIllegalJsVarPath = errors.New("jsvar: invalid path")

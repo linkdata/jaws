@@ -126,6 +126,43 @@ func TestDirtyPathPendingRequestsCoalesceRootWithoutUnrelatedWork(t *testing.T) 
 	}
 }
 
+func TestDirtyPathTargetsLiveElementsAtDistribution(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jw.updateTicker.Stop()
+	serveDone := make(chan struct{})
+	go func() {
+		jw.Serve()
+		close(serveDone)
+	}()
+	defer func() {
+		jw.Close()
+		<-serveDone
+	}()
+	waitForServeLoop(t, jw)
+
+	selector := tag.Tag("shared")
+	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	first := rq.NewElement(pathUpdateUI{})
+	first.Tag(selector)
+	jw.DirtyPath(selector, "value")
+	jw.distributeDirt()
+	rq.DeleteElement(first)
+	second := rq.NewElement(pathUpdateUI{})
+	second.Tag(selector)
+	if got := rq.makePathUpdateList(); len(got) != 0 {
+		t.Fatalf("replacement received prior path update: %#v", got)
+	}
+
+	jw.DirtyPath(selector, "other")
+	jw.distributeDirt()
+	if got := rq.makePathUpdateList(); len(got) != 1 || got[0].elem != second || !reflect.DeepEqual(got[0].paths, []string{"other"}) {
+		t.Fatalf("replacement updates = %#v, want other path", got)
+	}
+}
+
 func TestDirtyPendingRequestKeepsLateTagOnce(t *testing.T) {
 	jw, err := New()
 	if err != nil {

@@ -87,28 +87,28 @@ type requestBuffers struct {
 // non-running Request is retired. It then remains cancelled and unregistered. Its
 // pointer identity is never reused for another connection.
 type Request struct {
-	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
-	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
-	state            atomic.Int32            // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
-	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
-	mu               deadlock.RWMutex        // protects following
-	lastJid          Jid                     // last element Jid allocated within this Request
-	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
-	session          *Session                // session, if established
-	todoDirt         []any                   // pending dirty tags and exact Element targets
-	todoDirtSeen     map[any]struct{}        // membership for selectors retained across dirty passes
-	todoPaths        map[any]*dirtyPathSet   // pending path updates for live tagged Elements
-	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
-	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
-	cancelFn         context.CancelCauseFunc // cancel function
-	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
-	buffers          *requestBuffers         // reusable storage borrowed from Jaws.requestBufferPool; returned to the pool on completion, kept on retirement
-	elems            []*Element              // our Elements
-	deletedElems     int                     // deleted tombstones retained in elems until amortized compaction
-	tagMap           map[any][]*Element      // maps tags to Elements
-	muQueue          deadlock.Mutex          // protects wsQueue and tailsent
-	wsQueue          []wire.WsMsg            // queued messages to send
+	Jaws             *Jaws                      // (read-only) the JaWS instance the Request belongs to
+	JawsKey          key.Key                    // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
+	remoteIP         netip.Addr                 // (read-only) remote IP, or the zero netip.Addr if unset
+	state            atomic.Int32               // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
+	lastWriteSeconds atomic.Int32               // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
+	mu               deadlock.RWMutex           // protects following
+	lastJid          Jid                        // last element Jid allocated within this Request
+	initial          *http.Request              // initial HTTP request passed to Jaws.NewRequest
+	session          *Session                   // session, if established
+	todoDirt         []any                      // pending dirty tags and exact Element targets
+	todoDirtSeen     map[any]struct{}           // membership for selectors retained across dirty passes
+	todoPaths        map[*Element]*dirtyPathSet // pending path updates for live Elements
+	ctx              context.Context            // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
+	httpDoneCh       <-chan struct{}            // once claimed, set to http.Request.Context().Done()
+	cancelFn         context.CancelCauseFunc    // cancel function
+	connectFn        ConnectFn                  // a ConnectFn to call before starting message processing for the Request
+	buffers          *requestBuffers            // reusable storage borrowed from Jaws.requestBufferPool; returned to the pool on completion, kept on retirement
+	elems            []*Element                 // our Elements
+	deletedElems     int                        // deleted tombstones retained in elems until amortized compaction
+	tagMap           map[any][]*Element         // maps tags to Elements
+	muQueue          deadlock.Mutex             // protects wsQueue and tailsent
+	wsQueue          []wire.WsMsg               // queued messages to send
 	tailsent         bool
 }
 
@@ -957,24 +957,31 @@ func (rq *Request) appendDirtyPaths(paths map[any]*dirtyPathSet) {
 	}
 	rq.mu.Lock()
 	if rq.loadState().registered() {
+		appendTo := func(elem *Element, incoming *dirtyPathSet) {
+			if rq.todoPaths == nil {
+				rq.todoPaths = make(map[*Element]*dirtyPathSet)
+			}
+			set := rq.todoPaths[elem]
+			if set == nil {
+				set = new(dirtyPathSet)
+				rq.todoPaths[elem] = set
+			}
+			for _, path := range incoming.paths {
+				set.add(path)
+			}
+		}
 		for tagValue, incoming := range paths {
 			if elem, exact := tagValue.(*Element); exact {
 				if elem == nil || elem.Request != rq || elem.deleted.Load() {
 					continue
 				}
-			} else if !rq.hasLiveTagLocked(tagValue) {
-				continue
-			}
-			if rq.todoPaths == nil {
-				rq.todoPaths = make(map[any]*dirtyPathSet)
-			}
-			set := rq.todoPaths[tagValue]
-			if set == nil {
-				set = new(dirtyPathSet)
-				rq.todoPaths[tagValue] = set
-			}
-			for _, path := range incoming.paths {
-				set.add(path)
+				appendTo(elem, incoming)
+			} else {
+				for _, elem := range rq.tagMap[tagValue] {
+					if !elem.deleted.Load() {
+						appendTo(elem, incoming)
+					}
+				}
 			}
 		}
 	}

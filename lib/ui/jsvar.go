@@ -30,13 +30,13 @@ var jsVarNameRx = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]*$")
 
 func validateJsVarName(name string) error {
 	if len(name) > maxJsVarNameBytes {
-		return errIllegalJsVarName("too long")
+		return fmt.Errorf("%w: too long", ErrIllegalJsVarName)
 	}
 	if !jsVarNameRx.MatchString(name) {
-		return errIllegalJsVarName("illegal syntax")
+		return fmt.Errorf("%w: illegal syntax", ErrIllegalJsVarName)
 	}
 	if name == "__proto__" || name == "constructor" || name == "prototype" {
-		return errIllegalJsVarName("reserved")
+		return fmt.Errorf("%w: reserved", ErrIllegalJsVarName)
 	}
 	return nil
 }
@@ -319,7 +319,7 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 		return ErrJsVarBindingUsed
 	}
 	store := binding.store
-	data, previous, err := binding.renderSnapshot(elem)
+	data, hasPrevious, err := binding.renderSnapshot(elem)
 	if err != nil {
 		return
 	}
@@ -332,14 +332,14 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 	_, err = w.Write(b)
 	if err == nil {
 		binding.active.Store(true)
-		if len(previous) > 0 {
+		if hasPrevious {
 			store.jaws.DirtyPath(elem, "")
 		}
 	}
 	return
 }
 
-func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte, previous []*jaws.Element, err error) {
+func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte, hasPrevious bool, err error) {
 	store := binding.store
 	store.locker.Lock()
 	defer store.locker.Unlock()
@@ -355,7 +355,7 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 			err = ErrJsVarNameConflict
 			break
 		}
-		previous = append(previous, other)
+		hasPrevious = true
 	}
 	if err == nil {
 		data, _, err = marshalJsVar(store.value)
@@ -450,9 +450,6 @@ func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visibl
 	}
 	encoded, err := json.Marshal(current)
 	if err != nil {
-		return "=" + string(data)
-	}
-	if prefix == "" {
 		return "=" + string(data)
 	}
 	return prefix + "=" + string(encoded)

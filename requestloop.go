@@ -448,7 +448,7 @@ func (rq *Request) markElementDeletedLocked(elem *Element) {
 	}
 }
 
-// purgeDeletedElementsLocked drops deleted elements from the request's pending exact
+// purgeDeletedElementsLocked drops deleted elements from the request's pending
 // targets, element list, and tag entries, deleting tag entries that become empty.
 //
 // slices.DeleteFunc zeros the freed tail slots, so the dropped *Element pointers do
@@ -470,13 +470,9 @@ func (rq *Request) purgeDeletedElementsLocked() {
 			delete(rq.tagMap, k)
 		}
 	}
-	for tagValue := range rq.todoPaths {
-		if elem, exact := tagValue.(*Element); exact {
-			if elem.deleted.Load() {
-				delete(rq.todoPaths, tagValue)
-			}
-		} else if !rq.hasLiveTagLocked(tagValue) {
-			delete(rq.todoPaths, tagValue)
+	for elem := range rq.todoPaths {
+		if elem.deleted.Load() {
+			delete(rq.todoPaths, elem)
 		}
 	}
 	rq.deletedElems = 0
@@ -551,42 +547,24 @@ type pathUpdate struct {
 	paths []string
 }
 
-// makePathUpdateList drains path invalidations and resolves their current live
-// Elements. The caller invokes UI callbacks after this function releases rq.mu;
-// rendering may acquire an application lock before registering a Request tag.
+// makePathUpdateList drains path invalidations for live Elements. The caller
+// invokes UI callbacks after this function releases rq.mu. Rendering may
+// acquire an application lock before registering a Request tag.
 func (rq *Request) makePathUpdateList() (todo []pathUpdate) {
 	rq.mu.Lock()
 	if len(rq.todoPaths) == 0 {
 		rq.mu.Unlock()
 		return
 	}
-	byElement := make(map[*Element]*dirtyPathSet)
-	for tagValue, paths := range rq.todoPaths {
-		var targets []*Element
-		if elem, exact := tagValue.(*Element); exact {
-			targets = []*Element{elem}
-		} else {
-			targets = rq.tagMap[tagValue]
-		}
-		for _, elem := range targets {
-			if elem.deleted.Load() {
-				continue
-			}
-			set := byElement[elem]
-			if set == nil {
-				set = new(dirtyPathSet)
-				byElement[elem] = set
-			}
-			for _, path := range paths.paths {
-				set.add(path)
-			}
+	for elem, paths := range rq.todoPaths {
+		if !elem.deleted.Load() {
+			todo = append(todo, pathUpdate{elem: elem, paths: paths.paths})
 		}
 	}
 	clear(rq.todoPaths)
 	rq.mu.Unlock()
-	for elem, paths := range byElement {
-		slices.Sort(paths.paths)
-		todo = append(todo, pathUpdate{elem: elem, paths: paths.paths})
+	for i := range todo {
+		slices.Sort(todo[i].paths)
 	}
 	slices.SortFunc(todo, func(a, b pathUpdate) int { return cmp.Compare(a.elem.Jid(), b.elem.Jid()) })
 	return

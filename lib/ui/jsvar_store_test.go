@@ -832,6 +832,11 @@ func TestJsVarStoreNameConflictAndDeactivation(t *testing.T) {
 	var mu sync.RWMutex
 	value := 1
 	first := newTestJsVarStore(t, jw, "client", &mu, &value)
+	wrapped := &struct{ *JsVarBinding[int] }{first.Bind()}
+	wrappedElem := rq.NewElement(wrapped)
+	if err := wrappedElem.JawsRender(&bytes.Buffer{}, nil); err != nil {
+		t.Fatalf("wrapped same-store binding: %v", err)
+	}
 	binding1, _, _ := renderTestJsVar(t, rq, first)
 	binding2, _, _ := renderTestJsVar(t, rq, first)
 	if !binding1.active.Load() || !binding2.active.Load() {
