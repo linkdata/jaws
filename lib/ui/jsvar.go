@@ -165,43 +165,58 @@ func (store *JsVarStore[T]) ReadLocked(fn func(value *T)) {
 	fn(store.value)
 }
 
-// WriteLocked groups server path writes under one application lock.
+// JsVarPathWriter applies path edits inside [JsVarStore.WriteLocked].
 //
-// The supplied path functions are valid only during fn. They must not escape or
-// call lock-taking store methods. Values returned by get are borrowed and must
-// not be retained or mutated directly. Each successful changed write remains applied
-// and is published after unlocking, even if a later write fails or fn panics.
-// WriteLocked is a lock scope, not a rollback transaction.
-func (store *JsVarStore[T]) WriteLocked(fn func(get func(string) (any, error), set func(string, any) (bool, error), deletePath func(string) (bool, error)) error) (err error) {
-	var changedPaths []string
+// A writer is valid only during the callback. Changed edits are published after
+// the store unlocks, even if the callback returns an error or panics.
+type JsVarPathWriter interface {
+	// SetPath sets a canonical path in the locked value.
+	// See [JsVarStore.SetPath] for path and no-op behavior.
+	SetPath(path string, value any) (changed bool, err error)
+	// DeletePath removes a string-keyed map entry from the locked value.
+	// See [JsVarStore.DeletePath] for path and no-op behavior.
+	DeletePath(path string) (changed bool, err error)
+}
+
+type jsVarPathWriter[T any] struct {
+	store *JsVarStore[T]
+	paths []string
+}
+
+func (writer *jsVarPathWriter[T]) SetPath(path string, value any) (changed bool, err error) {
+	if err = validateJsVarPath(path); err == nil {
+		if changed, err = jq.Set(writer.store.value, path, value); err == nil && changed {
+			writer.paths = append(writer.paths, path)
+		}
+	}
+	return
+}
+
+func (writer *jsVarPathWriter[T]) DeletePath(path string) (changed bool, err error) {
+	if err = validateJsVarPath(path); err == nil {
+		if changed, err = writer.store.deletePathLocked(path); err == nil && changed {
+			writer.paths = append(writer.paths, path)
+		}
+	}
+	return
+}
+
+// WriteLocked groups server path edits under one application lock.
+//
+// The value is borrowed for reads and must not be retained or mutated directly.
+// The writer is valid only during fn and must not be retained. The callback
+// must use the writer for edits and must not call lock-taking store methods.
+// Each successful changed edit remains applied and is published after unlocking,
+// even if a later edit fails or fn panics. WriteLocked is a lock scope, not a
+// rollback transaction.
+func (store *JsVarStore[T]) WriteLocked(fn func(value *T, writer JsVarPathWriter) error) (err error) {
+	writer := &jsVarPathWriter[T]{store: store}
 	store.locker.Lock()
 	defer func() {
 		store.locker.Unlock()
-		store.publish(changedPaths)
+		store.publish(writer.paths)
 	}()
-	get := func(path string) (value any, err error) {
-		if err = validateJsVarPath(path); err == nil {
-			value, err = jq.Get(store.value, path)
-		}
-		return
-	}
-	set := func(path string, value any) (changed bool, err error) {
-		if err = validateJsVarPath(path); err == nil {
-			if changed, err = jq.Set(store.value, path, value); err == nil && changed {
-				changedPaths = append(changedPaths, path)
-			}
-		}
-		return
-	}
-	deletePath := func(path string) (changed bool, err error) {
-		if err = validateJsVarPath(path); err == nil {
-			if changed, err = store.deletePathLocked(path); err == nil && changed {
-				changedPaths = append(changedPaths, path)
-			}
-		}
-		return
-	}
-	err = fn(get, set, deletePath)
+	err = fn(store.value, writer)
 	return
 }
 
@@ -212,8 +227,8 @@ func (store *JsVarStore[T]) WriteLocked(fn func(get func(string) (any, error), s
 // The empty path replaces the root. A no-op returns changed=false. Server writes
 // do not invoke ClientCheck. The resulting value must remain JSON encodable.
 func (store *JsVarStore[T]) SetPath(path string, value any) (changed bool, err error) {
-	err = store.WriteLocked(func(_ func(string) (any, error), set func(string, any) (bool, error), _ func(string) (bool, error)) error {
-		changed, err = set(path, value)
+	err = store.WriteLocked(func(_ *T, writer JsVarPathWriter) error {
+		changed, err = writer.SetPath(path, value)
 		return err
 	})
 	return
@@ -226,8 +241,8 @@ func (store *JsVarStore[T]) SetPath(path string, value any) (changed bool, err e
 // [github.com/linkdata/jq.ErrPathNotFound]. JSON null is a value; deletion is a
 // separate operation. The empty root path is invalid.
 func (store *JsVarStore[T]) DeletePath(path string) (changed bool, err error) {
-	err = store.WriteLocked(func(_ func(string) (any, error), _ func(string, any) (bool, error), deletePath func(string) (bool, error)) error {
-		changed, err = deletePath(path)
+	err = store.WriteLocked(func(_ *T, writer JsVarPathWriter) error {
+		changed, err = writer.DeletePath(path)
 		return err
 	})
 	return

@@ -386,23 +386,24 @@ func TestJsVarStoreExtraTagsDuringPendingRender(t *testing.T) {
 func TestJsVarStoreWriteLocked(t *testing.T) {
 	jw, _ := newCoreRequest(t)
 	var mu sync.RWMutex
-	state := struct {
-		X int `json:"x"`
-		Y int `json:"y"`
-	}{X: 1}
+	type writeLockedState struct {
+		X int            `json:"x"`
+		Y int            `json:"y"`
+		M map[string]int `json:"m"`
+	}
+	state := writeLockedState{X: 1, M: map[string]int{"k": 3}}
 	store := newTestJsVarStore(t, jw, "client", &mu, &state)
 	stop := errors.New("stop")
-	err := store.WriteLocked(func(get func(string) (any, error), set func(string, any) (bool, error), _ func(string) (bool, error)) error {
-		value, err := get("x")
-		if err != nil {
+	err := store.WriteLocked(func(value *writeLockedState, writer JsVarPathWriter) error {
+		if _, err := writer.SetPath("x", value.X+1); err != nil {
 			return err
 		}
-		if _, err = set("x", value.(int)+1); err != nil {
+		if _, err := writer.DeletePath("m.k"); err != nil {
 			return err
 		}
 		return stop
 	})
-	if !errors.Is(err, stop) || state.X != 2 {
+	if !errors.Is(err, stop) || state.X != 2 || len(state.M) != 0 {
 		t.Fatalf("earlier grouped write lost: state=%+v err=%v", state, err)
 	}
 	func() {
@@ -411,8 +412,8 @@ func TestJsVarStoreWriteLocked(t *testing.T) {
 				t.Fatal("missing callback panic")
 			}
 		}()
-		_ = store.WriteLocked(func(_ func(string) (any, error), set func(string, any) (bool, error), _ func(string) (bool, error)) error {
-			if _, err := set("y", 4); err != nil {
+		_ = store.WriteLocked(func(_ *writeLockedState, writer JsVarPathWriter) error {
+			if _, err := writer.SetPath("y", 4); err != nil {
 				t.Fatal(err)
 			}
 			panic("stop")

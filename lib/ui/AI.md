@@ -326,10 +326,11 @@ open, then changes its local value optimistically and returns true. A false
 result leaves local state alone. Every accepted change schedules a canonical
 Patch for all bindings. A rejected, invalid, or unchanged proposal schedules a
 source correction; a JSON size rejection cancels the source Request so its next
-render restores canonical state. Server writes use SetPath or DeletePath; grouped atomic
-read-modify-write operations use WriteLocked's borrowed get/set/delete path
-functions. ReadLocked borrows the complete value under its read lock. Neither
-callback may retain mutable borrowed data or re-enter a lock-taking method.
+render restores canonical state. Server writes use SetPath or DeletePath;
+grouped atomic read-modify-write operations use WriteLocked's borrowed,
+read-only value and its SetPath/DeletePath writer. ReadLocked borrows the
+complete value under its read lock. Neither callback may retain mutable
+borrowed data or re-enter a lock-taking method.
 
 The empty path replaces the root; dotted paths have nonempty components.
 Names and components named __proto__, constructor, or prototype are reserved.

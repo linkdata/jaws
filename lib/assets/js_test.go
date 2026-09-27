@@ -831,18 +831,22 @@ function store(id, name, value) {
 }
 const oldRoot = store("Jid.1", "outer", 1);
 const oldChild = store("Jid.2", "inner", 10);
+const oldRemoved = store("Jid.3", "inner", 30);
 oldRoot.querySelectorAll = function(selector) {
-	return selector === '[id^="' + jawsIdPrefix + '"]' ? [oldChild] : [];
+	return selector === '[id^="' + jawsIdPrefix + '"]' ? [oldChild, oldRemoved] : [];
 };
 let root = oldRoot;
 let child = oldChild;
+let removed = oldRemoved;
 oldRoot.replaceWith = function(fragment) {
 	root = fragment.root;
 	child = fragment.child;
+	removed = null;
 };
 document.getElementById = function(id) {
 	if (id === "Jid.1") return root;
 	if (id === "Jid.2") return child;
+	if (id === "Jid.3") return removed;
 	return null;
 };
 jawsAttach(oldRoot);
@@ -850,6 +854,9 @@ jawsAttach(oldChild);
 jawsPerform("Patch", "Jid.1", "value=2");
 jawsPerform("Patch", "Jid.2", "value=20");
 const before = [jawsVar("outer.value"), jawsVar("inner.value")];
+jawsAttach(oldRemoved);
+jawsPerform("Patch", "Jid.3", "value=300");
+const selectedBefore = jawsVar("inner.value");
 const replacement = '<div id="Jid.1"><div id="Jid.2"></div></div>';
 jawsElement = function(html) {
 	if (html !== replacement) throw new Error("unexpected replacement " + html);
@@ -866,28 +873,41 @@ jawsElement = function(html) {
 };
 jawsPerform("Replace", "Jid.1", JSON.stringify(replacement));
 const retained = [jawsVar("outer.value"), jawsVar("inner.value")];
+const wrote = jawsVar("inner.value", 31);
 jawsPerform("Patch", "Jid.1", "value=3");
 jawsPerform("Patch", "Jid.2", "value=30");
 process.stdout.write(JSON.stringify({
 	before: before,
+	selectedBefore: selectedBefore,
 	retained: retained,
+	wrote: wrote,
 	after: [jawsVar("outer.value"), jawsVar("inner.value")],
 	frames: jaws.sent,
 }));
 `)
 	var got struct {
-		Before   []int    `json:"before"`
-		Retained []int    `json:"retained"`
-		After    []int    `json:"after"`
-		Frames   []string `json:"frames"`
+		Before         []int    `json:"before"`
+		SelectedBefore int      `json:"selectedBefore"`
+		Retained       []int    `json:"retained"`
+		Wrote          bool     `json:"wrote"`
+		After          []int    `json:"after"`
+		Frames         []string `json:"frames"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("retained store output %q: %v", raw, err)
 	}
 	if !reflect.DeepEqual(got.Before, []int{2, 20}) ||
+		got.SelectedBefore != 300 ||
 		!reflect.DeepEqual(got.Retained, []int{2, 20}) ||
-		!reflect.DeepEqual(got.After, []int{3, 30}) || len(got.Frames) != 0 {
+		!got.Wrote ||
+		!reflect.DeepEqual(got.After, []int{3, 30}) || len(got.Frames) != 2 {
 		t.Fatalf("retained store values = %+v", got)
+	}
+	if msg, ok := wire.Parse([]byte(got.Frames[0])); !ok || msg.What != what.Remove || msg.Jid != 1 || msg.Data != "Jid.3" {
+		t.Fatalf("removed store frame = %+v, parseable %t", msg, ok)
+	}
+	if msg, ok := wire.Parse([]byte(got.Frames[1])); !ok || msg.What != what.Proposal || msg.Jid != 2 || msg.Data != "value=31" {
+		t.Fatalf("selected store proposal = %+v, parseable %t", msg, ok)
 	}
 }
 
