@@ -11,7 +11,7 @@ import (
 )
 
 func BenchmarkDirtyPathFanout(b *testing.B) {
-	for _, bindings := range []int{1, 8} {
+	for _, bindings := range []int{1, 8, 64} {
 		for _, phase := range []string{"total", "distribute"} {
 			b.Run("bindings="+strconv.Itoa(bindings)+"/phase="+phase, func(b *testing.B) {
 				jw, err := New()
@@ -21,7 +21,8 @@ func BenchmarkDirtyPathFanout(b *testing.B) {
 				jw.updateTicker.Stop()
 				serveDone := make(chan struct{})
 				go func() {
-					jw.Serve()
+					// Timer pauses can outlive the default pending Request timeout.
+					jw.ServeWithTimeout(time.Hour)
 					close(serveDone)
 				}()
 				b.Cleanup(func() {

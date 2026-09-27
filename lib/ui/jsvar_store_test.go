@@ -628,7 +628,7 @@ func TestJsVarStoreRejectsCollidingMapKeysOnRender(t *testing.T) {
 	store := newTestJsVarStore(t, jw, "client", &mu, &state)
 	binding := store.Bind()
 	elem := rq.NewElement(binding)
-	if _, _, err := binding.renderSnapshot(elem); err == nil {
+	if _, err := binding.renderSnapshot(elem); err == nil {
 		t.Fatal("rendered colliding encoded map keys")
 	}
 }
@@ -779,7 +779,7 @@ func TestJsVarStoreRejectsDuplicateEncoding(t *testing.T) {
 	state = duplicate
 	duplicateBinding := store.Bind()
 	duplicateElem := rq.NewElement(duplicateBinding)
-	if _, _, err := duplicateBinding.renderSnapshot(duplicateElem); err == nil {
+	if _, err := duplicateBinding.renderSnapshot(duplicateElem); err == nil {
 		t.Fatal("rendered duplicate JSON")
 	}
 	if _, err := binding.snapshotPatches([]string{""}); err == nil {
@@ -838,7 +838,13 @@ func TestJsVarStoreNameConflictAndDeactivation(t *testing.T) {
 		t.Fatalf("wrapped same-store binding: %v", err)
 	}
 	binding1, _, _ := renderTestJsVar(t, rq, first)
-	binding2, _, _ := renderTestJsVar(t, rq, first)
+	if changed, err := first.SetPath("", 2); err != nil || !changed {
+		t.Fatalf("SetPath = (%t, %v), want changed", changed, err)
+	}
+	binding2, _, html := renderTestJsVar(t, rq, first)
+	if !strings.Contains(html, `data-jawsdata="2"`) {
+		t.Fatalf("new binding snapshot = %q, want current value", html)
+	}
 	if !binding1.active.Load() || !binding2.active.Load() {
 		t.Fatal("same-store bindings did not stay active")
 	}

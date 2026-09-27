@@ -957,6 +957,8 @@ func (rq *Request) appendDirtyPaths(paths map[any]*dirtyPathSet) {
 	}
 	rq.mu.Lock()
 	if rq.loadState().registered() {
+		// ponytail: This fanout runs on Serve's tick. Resolve selectors in each
+		// Request's drain if wide tags measurably delay that loop.
 		appendTo := func(elem *Element, incoming *dirtyPathSet) {
 			if rq.todoPaths == nil {
 				rq.todoPaths = make(map[*Element]*dirtyPathSet)

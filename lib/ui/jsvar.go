@@ -319,7 +319,7 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 		return ErrJsVarBindingUsed
 	}
 	store := binding.store
-	data, hasPrevious, err := binding.renderSnapshot(elem)
+	data, err := binding.renderSnapshot(elem)
 	if err != nil {
 		return
 	}
@@ -332,14 +332,11 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 	_, err = w.Write(b)
 	if err == nil {
 		binding.active.Store(true)
-		if hasPrevious {
-			store.jaws.DirtyPath(elem, "")
-		}
 	}
 	return
 }
 
-func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte, hasPrevious bool, err error) {
+func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte, err error) {
 	store := binding.store
 	store.locker.Lock()
 	defer store.locker.Unlock()
@@ -353,13 +350,10 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 		route, ok := other.UI().(jsVarBindingRoute)
 		if !ok || route.jsVarStore() != store {
 			err = ErrJsVarNameConflict
-			break
+			return
 		}
-		hasPrevious = true
 	}
-	if err == nil {
-		data, _, err = marshalJsVar(store.value)
-	}
+	data, _, err = marshalJsVar(store.value)
 	return
 }
 
