@@ -907,6 +907,12 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 // update tick later drains the list (see makeUpdateList) and re-renders the affected
 // elements. Takes rq.mu.
 //
+// Do not filter ordinary tags against tagMap: initial rendering may register a
+// matching tag after this tick. Non-running Requests can retain duplicate or
+// foreign tags until they connect or retire. This tradeoff was reviewed in
+// #365 and #417; add per-Request deduplication only if representative workloads
+// show material availability pressure that warrants the extra lifecycle state.
+//
 // It may run after the caller's dirt snapshot was taken but before rq finished
 // (see distributeDirt). A finished Request is unregistered (registered is false), so
 // the tags are discarded rather than accumulating on a dead identity.
