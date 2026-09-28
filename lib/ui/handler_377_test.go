@@ -26,6 +26,7 @@ const handlerWebSocketTestTimeout = 5 * time.Second
 type handlerWebSocketServer struct {
 	server   *httptest.Server
 	requests chan *jaws.Request
+	jaws     *jaws.Jaws
 }
 
 func newHandlerWebSocketServer(t *testing.T, source string, dot any, funcs template.FuncMap) (ts *handlerWebSocketServer) {
@@ -67,7 +68,7 @@ func newHandlerWebSocketServer(t *testing.T, source string, dot any, funcs templ
 	mux.Handle("GET /jaws/", jw)
 	mux.Handle("GET /", Handler(jw, "page", dot))
 	server := httptest.NewServer(mux)
-	ts = &handlerWebSocketServer{server: server, requests: requests}
+	ts = &handlerWebSocketServer{server: server, requests: requests, jaws: jw}
 	t.Cleanup(func() {
 		jw.Close()
 		server.Close()
