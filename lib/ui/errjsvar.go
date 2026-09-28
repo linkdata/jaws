@@ -9,7 +9,8 @@ import (
 // ErrIllegalJsVarName reports an invalid or reserved browser name.
 var ErrIllegalJsVarName = errors.New("illegal jsvar name")
 
-// ErrIllegalJsVarPath reports an invalid or reserved dotted path.
+// ErrIllegalJsVarPath reports an invalid path or unsupported complex-shape
+// proposal.
 var ErrIllegalJsVarPath = errors.New("jsvar: invalid path")
 
 // ErrJsVarNameConflict reports duplicate or overlapping browser names in a Request.

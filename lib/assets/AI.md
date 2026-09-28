@@ -6,10 +6,8 @@ See the [module-wide AI guidance](../../AI.md) before changing this package.
 
 This package embeds the thin JaWS browser client and stylesheet and contains
 helpers used while generating page metadata. The server is authoritative. The
-client attaches event forwarding to managed `Jid.*` nodes, applies explicit DOM
-commands, applies optimistic writes to live browser variables for `JsVarStore`
-bindings, and reconnects after transport loss. Go remains authoritative for
-application state.
+client forwards events from managed `Jid.*` nodes, applies DOM commands and
+optimistic writes to live browser variables, and reconnects after transport loss.
 
 Server-sent HTML is intentionally inserted as HTML. The client must not escape
 it because trusted widget markup and replacements need full DOM semantics.
@@ -53,14 +51,14 @@ runtime tests.
 
 ## Browser helpers
 
-`jawsVar(name)` reads the live path from `window` and sends its current JSON value
-when an initial binding and open socket exist. A two-argument call serializes one
-JSON proposal for a bound path, sends it to the binding's Jid, then updates the
-live variable and returns true. Unbound paths read and write locally. A closed
-socket or serialization/send failure for a bound write returns false without a
-local change. Binding nodes hold route IDs, not copies of values. Paths reject
-empty, delimiter, and prototype-sensitive components. Bound array writes require
-an existing canonical index; a server patch may replace the root or a safe
+`jawsVar(name)` reads the live path from `window` and attempts to propose its JSON
+value when bound and connected. A two-argument call sends one proposal for a bound
+path, then assigns the live variable. It returns true if assignment succeeds.
+Unbound paths work locally. A closed socket or serialization/send failure for a
+bound write returns false without a local change. Binding nodes hold the store
+name, Jid, and initial JSON; later values live on `window`. Paths reject empty,
+delimiter, and prototype-sensitive components. Bound array writes require an
+existing canonical index; a server patch may replace the root or a safe
 subtree, or delete a map key. Full store authority, validation, and
 synchronization rules belong to `lib/ui/AI.md`.
 

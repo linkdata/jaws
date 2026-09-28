@@ -14,10 +14,10 @@ import (
 
 // AppendJSONQuote appends s to b as a JSON string literal accepted by JSON.parse.
 //
-// Invalid UTF-8 is replaced with U+FFFD. Unlike [strconv.AppendQuote], the
-// result uses JSON escapes and does not HTML-escape the data.
+// It uses JSON escapes, preserves '<', '>', and '&', and replaces invalid UTF-8
+// with U+FFFD.
 func AppendJSONQuote(b []byte, s string) []byte {
-	// Invalid UTF-8 still produces valid output with replacement runes.
+	// AppendQuote reports invalid UTF-8 after replacing it, which is accepted here.
 	quoted, _ := jsontext.AppendQuote(b, s)
 	return quoted
 }
@@ -66,19 +66,10 @@ func (m *WsMsg) Format() string {
 
 // Parse parses one LF-terminated protocol record.
 //
-// The wire format mirrors [WsMsg.Append]. For commands other than [what.JsVar]
-// and [what.Call], if the Data field begins with a double quote
-// it is decoded as a JSON string: [strconv.Unquote] handles the common case,
-// with a fallback to a JSON
-// string decode for inputs it rejects but the browser's JSON.stringify can produce
-// (notably a lone UTF-16 surrogate, which the fallback maps to U+FFFD). The message
-// is rejected only if both decoders fail. Data that does not begin with a double
-// quote is taken verbatim, as is all JsVar and Call data. In all cases the resulting
-// data is sanitized with [strings.ToValidUTF8].
-//
-// Inbound [what.JsVar] and [what.Call] data is taken verbatim at the field
-// boundaries and is best-effort: the field ends at the first tab, so a tab
-// inside an inbound JsVar or Call payload truncates the field.
+// For commands other than [what.JsVar] and [what.Call], quote-prefixed Data
+// is decoded as a string; other Data is taken verbatim. A malformed
+// quoted string rejects the record. JsVar and Call Data is always verbatim
+// and ends at the first tab. Accepted Data is sanitized with [strings.ToValidUTF8].
 func Parse(txt []byte) (WsMsg, bool) {
 	// Parse reports success with ok rather than an error: the only failure is "txt is
 	// not a valid record", with no sub-cause any caller branches on, and the sole caller

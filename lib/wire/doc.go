@@ -11,10 +11,9 @@
 // [WsMsg.Append] JSON-quotes Data for commands other than
 // [github.com/linkdata/jaws/lib/what.JsVar] and
 // [github.com/linkdata/jaws/lib/what.Call]. [Parse] decodes quote-prefixed Data
-// for the other commands and accepts unquoted Data verbatim. JsVar and Call carry
-// verbatim path=json Data; server JsVar also uses path= for deletion. Verbatim Data
-// must contain no raw tab or LF delimiters. Every accepted result is sanitized
-// as valid UTF-8. See
+// for other commands and accepts unquoted Data verbatim. JsVar and Call carry
+// verbatim path=json Data; server JsVar also uses path= for deletion. Verbatim
+// Data must contain no raw tab or LF. Accepted Data is valid UTF-8. See
 // [github.com/linkdata/jaws/lib/what] for command semantics and
 // [github.com/linkdata/jaws/lib/tag] for destination keys.
 package wire

@@ -76,11 +76,10 @@ func validateJsVarPath(path string) error {
 // JsVarCheck validates the complete tentative state of a browser proposal.
 //
 // A nil check denies browser writes. The check runs under the store's write lock
-// after jq tentatively applies a changed value. It must only inspect next: jq
-// rolls the proposal back if the check returns an error or panics. The source
-// may be used to authorize a user or session; every binding sees the same value.
-// Validate the complete next value: a parent or root proposal can change many
-// fields, so a path-only denylist cannot protect descendants.
+// after jq tentatively applies a changed value. It must only inspect next;
+// an error or panic rolls the proposal back. The source can authorize a user
+// or session. Validate the complete value, including changes through parent
+// and root paths.
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -106,9 +105,9 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 
 // JsVarStore owns one authoritative Go value and its browser name.
 //
-// Use [JsVarStore.Bind] once per Request during initial page rendering. The
-// store never retains a Request or Element. ClientCheck and ExtraTags are
-// configured before first use and must not be changed while the store is active.
+// Use [JsVarStore.Bind] once per Request during initial page rendering.
+// ClientCheck and ExtraTags must be configured before first use and remain
+// unchanged while the store is active.
 // Every binding sees the same JSON value; ClientCheck controls writes, not
 // disclosure.
 //
@@ -116,11 +115,9 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // mutations must use SetPath, DeletePath, or WriteLocked to publish changes.
 // The JSON encoding must have unique object member names.
 // For partial map patches, the bound JSON tree must not share mutable pointers,
-// maps, or slices across different paths: changing one alias can change another
-// browser path. Complex Go types fall back to a root patch. Custom JSON methods
-// reached while locked must not re-enter the store or its locker.
-// The store keeps at most 64 changed paths and 16 KiB of path bytes; a binding
-// behind the log receives a root patch.
+// maps, or slices across different paths. Complex Go types use root patches.
+// Custom JSON methods reached while locked must not re-enter the store or its
+// locker.
 //
 // A JsVarStore must not be copied after first use.
 type JsVarStore[T any] struct {
@@ -138,18 +135,17 @@ type JsVarStore[T any] struct {
 	logBytes int
 }
 
-// NewJsVarStore creates a store with an application-owned browser name.
+// NewJsVarStore creates a store for a browser variable.
 //
 // The name is a dot-separated path from window using JavaScript identifiers
 // with ASCII letters, digits, underscore, or dollar sign. No component may be
 // "__proto__", "constructor", or "prototype"; the limit is 4096 bytes.
 // Initial data and patches assign to that live path, including browser-owned
-// setters and their side effects.
+// properties and setters.
 //
 // The value and locker must remain valid for the store's lifetime. An invalid
 // name returns [ErrIllegalJsVarName], and a nil value returns
-// [github.com/linkdata/jq.ErrInvalidReceiver]. A binding rendered on a Request
-// owned by another Jaws returns an error.
+// [github.com/linkdata/jq.ErrInvalidReceiver].
 func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value *T) (store *JsVarStore[T], err error) {
 	if err = validateJsVarName(name); err == nil {
 		if value == nil {
@@ -171,8 +167,7 @@ func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value 
 //
 // Render each binding once during the Request's initial page render, outside
 // regions that may later be replaced or removed. Browser names may neither
-// duplicate nor contain one another within a Request. A binding can be
-// deactivated during a connection redirect to suppress provisional traffic.
+// duplicate nor contain one another within a Request.
 func (store *JsVarStore[T]) Bind() *JsVarBinding[T] {
 	return &JsVarBinding[T]{store: store}
 }
@@ -263,7 +258,7 @@ func (store *JsVarStore[T]) SetPath(path string, value any) (changed bool, err e
 // The parent must be a map with built-in string keys. A missing key in that
 // map returns changed=false; a missing or non-map parent returns
 // [github.com/linkdata/jq.ErrPathNotFound]. JSON null is a value; deletion is a
-// separate operation. The empty root path is invalid.
+// separate operation. The empty path returns [ErrIllegalJsVarPath].
 func (store *JsVarStore[T]) DeletePath(path string) (changed bool, err error) {
 	err = store.WriteLocked(func(_ *T, writer JsVarPathWriter) error {
 		changed, err = writer.DeletePath(path)
@@ -346,8 +341,8 @@ type (
 
 // JsVarBinding renders one browser route to a [JsVarStore].
 //
-// Bindings are one-use and request-scoped. Deactivate makes a provisional route
-// inert before a redirect; it is safe to call concurrently with input dispatch.
+// Bindings are one-use and request-scoped. [JsVarBinding.Deactivate] is safe to
+// call concurrently with input dispatch.
 type JsVarBinding[T any] struct {
 	store         *JsVarStore[T]
 	rendered      atomic.Bool
@@ -369,6 +364,8 @@ func (binding *JsVarBinding[T]) Deactivate() {
 // JawsRender writes the hidden browser route and its initial JSON value.
 //
 // A Request owned by a different [jaws.Jaws] returns an error without output.
+// Rendering twice returns [ErrJsVarBindingUsed]; a duplicate or overlapping
+// browser name in the Request returns [ErrJsVarNameConflict].
 func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if elem.Jaws != binding.store.jaws {
 		// The store publishes through exactly one Jaws; a foreign Request could
@@ -429,8 +426,6 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 
 // JawsUpdate sends canonical patches for store changes and browser corrections.
 //
-// Complex JSON shapes use a root patch. Plain value trees use partial patches
-// extracted from one full root encoding, preserving JSON tags and exact numbers.
 // A failed encoding cancels the Request.
 func (binding *JsVarBinding[T]) JawsUpdate(elem *jaws.Element) {
 	if !binding.active.Load() {
@@ -565,14 +560,13 @@ func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visibl
 	return prefix + "=" + string(encoded)
 }
 
-// JawsInput applies a browser proposal after checking the whole tentative value.
+// JawsInput applies a browser proposal allowed by ClientCheck.
 //
 // A deactivated binding ignores proposals.
 //
 // A rejected, invalid, or unchanged proposal schedules a canonical correction
 // for its source binding. A changed accepted proposal invalidates every binding.
-// An unchanged proposal to a complex Go shape is rejected to avoid revealing
-// Go values hidden by its JSON encoding.
+// An unchanged proposal to a complex Go shape is rejected.
 // A panicking check rolls back and schedules a root correction before the panic
 // continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
 func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err error) {

@@ -396,9 +396,8 @@ func jsCallData(jsfunc, jsonstr string) string {
 // target selects which requests or elements receive the Call message. In each
 // receiving browser, jsfunc is resolved as a path from window and called with
 // JSON.parse(jsonstr); the matched element is not passed as this or as an
-// argument. jsfunc must be an application-controlled dot path. The browser
-// rejects exact "__proto__", "constructor", and "prototype" components; put
-// user data in jsonstr, not jsfunc.
+// argument. jsfunc must be an application-controlled dot path; put user data
+// in jsonstr, not jsfunc.
 //
 // A nil target calls each active Request once. A nonzero [key.Key] target calls
 // the matching active Request once without requiring a matching DOM element; a

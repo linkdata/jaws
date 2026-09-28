@@ -339,8 +339,8 @@ transport error is retained in the Request cancellation cause, which is passed
 to `Jaws.Log`.
 
 Event-handler errors are logged and queued as browser danger alerts when possible.
-Recovered panics retain detail in the log but use a generic alert; rejected
-JsVar proposals also use a generic alert.
+Recovered panics retain detail in the log but use a generic alert. Rejected
+JsVar proposals use a generic alert; size rejections cancel the Request.
 
 Errors accepted for Logger delivery are dispatched through `Logger.Error`
 serially and asynchronously. The queue holds at most 4096 pending reports;

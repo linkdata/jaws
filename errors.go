@@ -18,8 +18,7 @@ var ErrServeAlreadyRunning = errors.New("serve loop already running")
 // underlying value already equaled the desired value.
 //
 // Setter-style implementations return it, and callers test for it with
-// [errors.Is]. It lives in this package so implementations share one error
-// identity.
+// [errors.Is].
 var ErrValueUnchanged = errors.New("value unchanged")
 
 // ErrRequestOverloaded indicates that a [Request] could not keep up with its messages.

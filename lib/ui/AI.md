@@ -39,8 +39,8 @@ documented on their concrete types:
 - Template, Container, Tbody, and Select keep that state in each Element's state
   slot rather than on the widget definition.
 
-Input widgets and JsVarStore bindings require distinct widget values. To show one binder in two
-inputs, construct two widgets:
+Input widgets and JsVarStore bindings require distinct widget values. To show
+one binder in two inputs, construct two widgets:
 
 ```go
 binder := bind.New(&mu, &value)
@@ -289,9 +289,10 @@ JsVarStore owns one application value and one browser name. Its Go value is
 authoritative. Create one store for shared state, then call Bind once per
 Request during initial page rendering on the Jaws instance passed to
 NewJsVarStore. Keep the binding outside regions that may be replaced or removed.
-The browser reads and writes the live path from `window`; declare application
-globals with `var` or as `window` properties before jaws.js attaches the page.
-Names may be dot-separated paths to existing browser or package variables.
+The browser reads and writes the live path from `window`. For dotted names,
+the parent object must exist when jaws.js attaches. Top-level names can be
+created by the binding. Application globals must be `window` properties;
+browser and third-party globals may also be bound.
 Each Request may bind a browser path only once; overlapping names such as
 `client` and `client.x` conflict.
 Initial data and patches assign to the live path, so a browser setter may run.
@@ -313,29 +314,25 @@ then render a binding in the initial page template:
 {{$.NewUI (.Dot.ClientStore.Bind)}}
 ```
 
-ClientCheck is required for browser writes; nil denies them. jq.SetChecked
-applies each changed proposal tentatively under the application lock, then
-calls ClientCheck once with the complete tentative value. An error or panic
-rolls that proposal back. The check must only inspect and must not acquire the
-same lock, mutate or retain tentative data, or call a store setter. The source
-Element can authorize a user or session, but all bindings receive the same
-JSON value. Put data with different visibility in separate stores. Validate
-the complete value: a root or parent proposal can change multiple descendants,
-so a path-only denylist cannot make a field immutable.
+ClientCheck is required for browser writes; nil denies them. Each changed
+proposal is tentative until ClientCheck accepts the complete value under the
+store lock. An error or panic rolls it back. The check must only inspect: it
+must not acquire the same lock, mutate or retain tentative data, or call a store
+setter. The source Element can authorize a user or session. Every binding sees
+the same JSON value, so use separate stores for data with different visibility.
+Root or parent proposals can change multiple fields, including Go fields omitted
+from JSON; validate the complete value, not only the path.
 
-A browser call jawsVar("client.x", value) sends one JsVar proposal when the socket is
-open, then changes the live variable optimistically and returns true. A call
-with one argument reads the live value and proposes it when bound and connected;
-this also sends direct browser-side mutations. Unbound paths read and write
-locally without a proposal. A false write leaves local state alone. Every
-accepted change schedules a canonical JsVar update for all bindings. A rejected,
-invalid, or unchanged proposal schedules a source correction; a JSON size
-rejection cancels the source Request so its next render restores canonical state.
-Server writes use SetPath or DeletePath;
-grouped atomic read-modify-write operations use WriteLocked's borrowed,
-read-only value and its SetPath/DeletePath writer. ReadLocked borrows the
-complete value under its read lock. Neither callback may retain mutable
-borrowed data or re-enter a lock-taking method.
+`jawsVar("client.x", value)` sends one proposal when connected, then assigns the
+live variable and returns true if assignment succeeds. A one-argument call
+reads the live value and attempts to propose it when bound and connected. This
+also sends direct browser-side mutations. Unbound paths work locally; a false
+write leaves the local value alone. Accepted changes update every binding.
+Rejected, invalid, or unchanged proposals correct the source binding. A size
+rejection cancels its Request for reload recovery.
+Server writes use SetPath or DeletePath. WriteLocked groups path edits under
+one lock; ReadLocked borrows the value under a read lock. Neither callback may
+retain mutable borrowed data or re-enter a lock-taking method.
 
 The empty path replaces the root; dotted paths have nonempty components.
 Names and components named __proto__, constructor, or prototype are reserved.
@@ -348,9 +345,6 @@ the encoded value and may change only their visible subtree. A Go field tagged
 json:"value" is addressed as value, not Value. JSON null is a value; DeletePath
 removes a string-keyed map entry.
 
-An unchanged proposal to a complex Go shape is rejected and corrected. Its Go
-equality could otherwise reveal a field hidden by the JSON encoding.
-
 The store records changed paths under its value lock and dirties its tag. Each
 binding reads changes since its own rendered version when its Request updates,
 including changes accumulated while the WebSocket was pending. The log keeps at
@@ -362,18 +356,14 @@ partial patches must have no shared mutable aliases between separately
 addressable paths; changing one aliased map can change another JSON path.
 Every bound value must remain JSON encodable with unique object member names.
 Changed browser proposals are checked for encodability; JSONSizeCheck can also
-bound their encoded size.
-Complex custom encoders may accept root proposals while rejecting a non-root
-proposal that changes another visible field. ExtraTags can dirty derived UI
-after changed writes.
+bound their encoded size. ExtraTags can dirty derived UI after changed writes.
 
 JavaScript numbers cannot exactly represent integers outside
 -9007199254740991 through 9007199254740991. Use built-in string fields and
 explicit BigInt conversion for exact wide integers. A Go json:",string" tag
 changes the outbound representation, but generic browser writes still use
-jq conversion rather than destination custom unmarshaling. JSONSizeCheck is a
-composable whole-value policy; it limits encoded bytes, not Go heap capacity.
-An over-limit proposal is rolled back and cancels the source Request.
+jq conversion rather than destination custom unmarshaling. JSONSizeCheck limits
+encoded bytes, not Go heap capacity. An over-limit proposal cancels its Request.
 
 ## Container-family widgets
 

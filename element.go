@@ -348,9 +348,8 @@ func (elem *Element) SetValue(value string) {
 //
 // In the receiving browser, jsfunc is resolved as a path from window and called
 // with JSON.parse(jsonstr); the Element is not passed as this or as an argument.
-// jsfunc must be an application-controlled dot path. The browser rejects an
-// exact "__proto__", "constructor", and "prototype" components; put user
-// data in jsonstr, not jsfunc.
+// jsfunc must be an application-controlled dot path; put user data in jsonstr,
+// not jsfunc.
 //
 // Call this while the [Element] is rendering or updating, when a send pass is
 // imminent; a call queued directly from an event handler is only flushed when the
@@ -367,6 +366,7 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 // selection, scroll position, live form-control properties, programmatic
 // listeners, expando properties, and custom-element instances, is not preserved.
 // JaWS reattaches its own managed browser behavior.
+//
 // A replacement node bearing an existing JaWS ID keeps that server-side
 // [Element] registration and UI state; omitted descendant IDs are unregistered.
 // Retained Elements are not rerendered separately, so their markup must match that

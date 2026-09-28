@@ -32,10 +32,10 @@
 // [github.com/linkdata/jaws/lib/htmlio.Attr] and a trusted name; convert the result
 // to string for [NewTemplate].
 //
-// Browser input, proposal, click, and context-menu events are forwarded only while the
-// WebSocket is open and are not replayed. Native form reset does not update Go
-// bindings, and independently bound [Radio] values do not become one server-side
-// group by sharing an HTML name; see [RequestWriter.RadioGroup].
+// Browser input, JsVar proposal, click, and context-menu events are forwarded
+// only while the WebSocket is open and are not replayed. Native form reset does
+// not update Go bindings. Independently bound [Radio] values do not form one
+// server-side group by sharing an HTML name; see [RequestWriter.RadioGroup].
 //
 // Each browser-to-server WebSocket message is limited to 32 KiB by
 // [github.com/linkdata/jaws.Request.ServeHTTP]. Standard widgets do not chunk
