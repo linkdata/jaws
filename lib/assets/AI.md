@@ -7,7 +7,7 @@ See the [module-wide AI guidance](../../AI.md) before changing this package.
 This package embeds the thin JaWS browser client and stylesheet and contains
 helpers used while generating page metadata. The server is authoritative. The
 client attaches event forwarding to managed `Jid.*` nodes, applies explicit DOM
-commands, keeps an optimistic local view of one `JsVar` store per name, and
+commands, keeps optimistic local values for `JsVarStore` bindings, and
 reconnects after transport loss. Go remains authoritative for application state.
 
 Server-sent HTML is intentionally inserted as HTML. The client must not escape
@@ -90,7 +90,7 @@ the page security policy.
 Run `JAWS_REQUIRE_NODE=1 go test -race ./lib/assets` and
 `JAWS_REQUIRE_NODE=1 go test ./lib/assets` from the module root. Requiring Node
 prevents the browser-client behavior suite from silently skipping. Those tests
-cover event routing, connection gating, DOM mutation, reconnection, `JsVar`
+cover event routing, connection gating, DOM mutation, reconnection, `JsVarStore`
 proposals and patches, prototype safety, and batch isolation. Keep
 `BenchmarkJawsJSMessageDispatch` when changing the command dispatcher. Resource
 tests should assert generated markup and classification, not hashes of embedded
