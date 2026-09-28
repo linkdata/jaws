@@ -126,7 +126,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall) {
 	if wsmsg.Jid.IsValid() {
 		switch wsmsg.What {
-		case what.Input, what.Click, what.ContextMenu, what.Proposal:
+		case what.Input, what.Click, what.ContextMenu, what.Set:
 			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data))
 		case what.Remove:
 			rq.handleRemove(wsmsg.Jid, wsmsg.Data)

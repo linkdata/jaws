@@ -214,7 +214,7 @@ func (elem *Element) JawsUpdate() {
 // path and encoded value without raw tab or newline bytes. A deleted Element
 // ignores the patch. This low-level helper is intended for JsVar stores.
 func (elem *Element) Patch(data string) {
-	elem.queue(what.Patch, data)
+	elem.queue(what.Set, data)
 }
 
 // queue enqueues a wire message of the given type and data for this element on

@@ -1322,7 +1322,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // be running so the request can subscribe to broadcasts and unsubscribe on exit.
 //
 // Each inbound WebSocket message is limited to 32 KiB. The bundled client does
-// not chunk Input, Proposal, Click, ContextMenu, or Remove messages; oversized
+// not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
 // after UTF-8 encoding, so no fixed application-value length is guaranteed. The
 // resulting read-limit error is retained in the Request cancellation cause,

@@ -35,7 +35,7 @@ set or remove the managed `id` attribute and that accept only canonical positive
 - DOM replacement/removal reports disappeared managed descendants to the
   server. Direct-child validation for insert/remove positions prevents an
   unrelated same-ID node elsewhere in the page from becoming a target.
-- Each ordinary command in a batched frame is isolated. A failed `Patch` closes
+- Each ordinary command in a batched frame is isolated. A failed `Set` closes
   the socket and reloads the page so the next render restores canonical state.
 
 The reconnect path observes a five-second grace period after a WebSocket

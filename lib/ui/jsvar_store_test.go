@@ -72,6 +72,9 @@ func TestJsVarStorePolicyAndCorrection(t *testing.T) {
 	if err := binding.JawsInput(elem, "value=2"); err != nil || state.Value != 2 || checks != 1 {
 		t.Fatalf("accepted proposal: state=%d checks=%d err=%v", state.Value, checks, err)
 	}
+	if err := binding.JawsInput(elem, "value="); err == nil || state.Value != 2 {
+		t.Fatalf("browser deletion proposal: state=%d err=%v", state.Value, err)
+	}
 	if err := binding.JawsInput(elem, "value=3"); err == nil || state.Value != 2 || checks != 2 {
 		t.Fatalf("rejected proposal: state=%d checks=%d err=%v", state.Value, checks, err)
 	}
@@ -132,7 +135,7 @@ func TestJsVarStoreCheckPanicCorrectsSource(t *testing.T) {
 		panic("check")
 	}
 	binding, elem, _ := renderTestJsVar(t, tr.Request, store)
-	if err := jaws.CallEventHandlers(binding, elem, what.Proposal, "value=2"); err == nil {
+	if err := jaws.CallEventHandlers(binding, elem, what.Set, "value=2"); err == nil {
 		t.Fatal("panicking check returned nil")
 	}
 	if state.Value != 1 {
@@ -147,7 +150,7 @@ func TestJsVarStoreCheckPanicCorrectsSource(t *testing.T) {
 	for {
 		select {
 		case msg := <-tr.OutCh:
-			if msg.What == what.Patch {
+			if msg.What == what.Set {
 				if msg.Data != `={"value":1}` {
 					t.Fatalf("panic correction = %q", msg.Data)
 				}
@@ -174,7 +177,7 @@ func TestJsVarStoreRejectedUnhandledCheckIsHandled(t *testing.T) {
 		return rejection
 	}
 	binding, elem, _ := renderTestJsVar(t, rq, store)
-	err := jaws.CallEventHandlers(binding, elem, what.Proposal, "value=2")
+	err := jaws.CallEventHandlers(binding, elem, what.Set, "value=2")
 	if err == nil || errors.Is(err, jaws.ErrEventUnhandled) || !errors.Is(err, rejection) {
 		t.Fatalf("rejected proposal dispatch = %v", err)
 	}

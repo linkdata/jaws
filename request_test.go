@@ -2495,7 +2495,7 @@ func (fn requestClickHandlerFunc) JawsClick(elem *Element, click Click) error {
 }
 
 func TestRequest_IncomingRemovePreservesAcceptedEventOrder(t *testing.T) {
-	for _, wht := range []what.What{what.Input, what.Proposal, what.Click, what.ContextMenu} {
+	for _, wht := range []what.What{what.Input, what.Set, what.Click, what.ContextMenu} {
 		for _, removeFirst := range []bool{false, true} {
 			name := wht.String() + " before Remove"
 			wantCalls := int32(1)
@@ -2536,7 +2536,7 @@ func TestRequest_IncomingRemovePreservesAcceptedEventOrder(t *testing.T) {
 				var calls func() int32
 				var value func() string
 				var target *Element
-				if wht == what.Input || wht == what.Proposal {
+				if wht == what.Input || wht == what.Set {
 					setter := newTestSetter("old")
 					target = render("target", newTestTextInputWidget(setter))
 					calls = func() int32 { return int32(setter.SetCount()) }

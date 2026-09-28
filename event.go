@@ -192,7 +192,7 @@ func callEventHandler(obj any, elem *Element, wht what.What, value string, clk C
 		} else if h, ok := obj.(ContextMenuHandler); ok {
 			err = h.JawsContextMenu(elem, clk)
 		}
-	case what.Input, what.Hook, what.Proposal:
+	case what.Input, what.Hook, what.Set:
 		err = callInputHandler(obj, elem, value)
 	}
 	return

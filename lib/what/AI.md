@@ -12,9 +12,9 @@ associated with an Element; it is neither valid nor representable on the wire.
 `Parse` is exact and case-sensitive, except that an empty field denotes `Update`.
 
 Request-wide commands are `Update`, `Reload`, `Redirect`, `Alert`, `Order`, and
-`Call`. Element-associated commands include `Patch`, `Inner`, `Delete`, `Replace`,
-`Remove`, `Insert`, `Append`, attribute/class changes, and `Value`. Input events
-are `Input`, `Proposal`, `Click`, and `ContextMenu`.
+`Call`. Element-associated commands include `Set`, `Inner`, `Delete`, `Replace`,
+`Remove`, `Insert`, `Append`, attribute/class changes, and `Value`. Browser-originated
+element events are `Input`, `Set`, `Click`, and `ContextMenu`.
 
 Important server-to-browser payload meanings:
 
@@ -23,9 +23,9 @@ Important server-to-browser payload meanings:
 - `Reload` ignores Data. `Redirect` carries a URL validated by the root package.
   `Alert` is the escaped level, LF, and escaped message. `Order` is a
   space-separated Jid list. These commands are page-global.
-- `Call` and `Patch` use `path=json`. `Patch` uses `path=` to delete a JSON
-  object property. Request-scoped `Call` has an empty Jid; Element-scoped
-  `Call` and every `Patch` identify an Element.
+- `Call` and `Set` use `path=json`. Server-to-browser `Set` uses `path=` to
+  delete a JSON object property. Request-scoped `Call` has an empty Jid; Element-scoped
+  `Call` and every `Set` identify an Element.
 - `Inner`, `Replace`, and `Append` carry trusted HTML. `Delete` needs no Data.
   `Remove` identifies a direct child Jid. `Insert` is a child Jid or nonnegative
   child index, LF, and trusted HTML.
@@ -34,7 +34,7 @@ Important server-to-browser payload meanings:
   control state rather than an HTML attribute value.
 
 Browser-to-server `Input` carries the control's textual value and invokes its
-`JawsInput` handler. A browser-originated `Proposal` likewise invokes `JawsInput` on
+`JawsInput` handler. A browser-originated `Set` likewise invokes `JawsInput` on
 the binding Element with `path=json`. `Click` and `ContextMenu` carry
 coordinates, modifier-key state, the nearest name, and any managed ancestor Jids
 used for event routing. Browser-originated `Remove` is a cleanup acknowledgement:
