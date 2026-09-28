@@ -76,7 +76,6 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	maintenanceInterval = max(maintenanceInterval, minInterval)
 
 	subs := map[chan wire.Message]*Request{}
-	var sets setBatch
 	t := jw.newMaintenanceTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
@@ -109,25 +108,15 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}
 
-	// Set frames are coalesced before distribution. Every remaining addressed
-	// frame except the internal Update tick is required, so an overloaded
-	// Request is cancelled instead of silently losing a frame.
+	// Every addressed frame except the internal Update tick is required, so an
+	// overloaded Request is cancelled instead of silently losing a frame.
 	mustBroadcast := func(msg wire.Message) {
-		group, grouped := msg.Dest.(setGroup)
 		for msgCh, rq := range subs {
-			selected := msg
-			var matched setGroup
-			if grouped {
-				matched = group.forRequest(rq)
-				if len(matched) == 0 {
-					continue
-				}
-				selected.Dest = matched
-			} else if msg.Dest != nil && !rq.wantMessage(&msg) {
+			if msg.Dest != nil && !rq.wantMessage(&msg) {
 				continue
 			}
 			select {
-			case msgCh <- selected:
+			case msgCh <- msg:
 			default:
 				// Only the internal periodic dirty-render tick, a nil-destination
 				// Update (see the updateTicker case below), is safe to drop.
@@ -136,36 +125,25 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 				// tick carries no payload;
 				// it only nudges the Request. The pending dirt is still rendered
 				// without it: a Request already in its process loop is woken by the
-				// message that filled the channel and drains todoDirt on the next pass,
+				// message that filled the channel and drains pending dirt on the next pass,
 				// and one still starting up (subscribed before onConnect) drains
-				// todoDirt on its first pass without needing a wake. Every addressed
+				// pending dirt on its first pass without needing a wake. Every addressed
 				// message is one-shot and must not be silently dropped — including a
 				// tag-targeted Update and the key-targeted Update wake-up from
 				// Session.Close — so an overloaded Request is failed-fast instead.
 				if msg.What != what.Update || msg.Dest != nil {
 					killSub(msgCh)
-					if grouped {
-						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %d Sets", ErrRequestOverloaded, rq, len(matched)))
-					} else {
-						rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
-					}
+					rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
 				}
 			}
 		}
 	}
-	flushSets := func() {
-		if group := sets.take(); len(group) > 0 {
-			mustBroadcast(wire.Message{What: what.Set, Dest: group})
-		}
-	}
-
 	for {
 		select {
 		case <-jw.Done():
 			normalShutdown = true
 			return
 		case <-jw.updateTicker.C:
-			flushSets()
 			if jw.distributeDirt() > 0 {
 				mustBroadcast(wire.Message{What: what.Update})
 			}
@@ -180,10 +158,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			killSub(msgCh)
 		case msg, ok := <-jw.bcastCh:
 			if ok {
-				if msg.What != what.Set || !sets.add(msg) {
-					flushSets()
-					mustBroadcast(msg)
-				}
+				mustBroadcast(msg)
 			}
 		}
 	}

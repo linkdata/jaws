@@ -34,16 +34,17 @@ A WebSocket text message may contain several records. The read loop splits them
 on LF, keeps order, validates each independently, and skips malformed records
 without discarding valid siblings.
 
-For commands other than `Set` and `Call`, `WsMsg.Append` writes Data as a JSON
-string accepted by browser `JSON.parse`. For incoming non-Set/Call Data that
-begins with `"`, `Parse` first uses `strconv.Unquote` and falls back to JSON
+For commands other than `JsVar` and `Call`, `WsMsg.Append` writes
+Data as a JSON string accepted by browser `JSON.parse`. For other incoming Data
+that begins with `"`, `Parse` first uses `strconv.Unquote` and falls back to JSON
 decoding for browser-valid strings such as lone UTF-16 surrogates. The record is
-rejected only if both decoders fail. Unquoted Data and every Set/Call payload are
+rejected only if both decoders fail. Unquoted Data and every JsVar/Call payload are
 taken verbatim. Every accepted result is sanitized as valid UTF-8.
 `AppendJSONQuote` stays in the overlap of both string grammars and deliberately
 avoids Go-only escapes.
 
-`Set` and `Call` carry Data verbatim as `path=json`. The complete verbatim Data,
+`JsVar` and `Call` carry Data verbatim as `path=json`; server-to-browser `JsVar`
+also uses `path=` for deletion. The complete verbatim Data,
 including JSON, must contain no raw tab or LF byte because those delimit fields
 and records. The path/function portion additionally permits no carriage return
 or `=` delimiter. Inbound tabs truncate the best-effort payload at the field

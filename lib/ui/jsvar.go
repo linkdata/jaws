@@ -1,156 +1,94 @@
 package ui
 
 import (
+	"encoding"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/htmlio"
-	"github.com/linkdata/jaws/lib/what"
-	"github.com/linkdata/jaws/lib/wire"
 	"github.com/linkdata/jq"
 )
 
-var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
-
-func validateJsVarName(value []any) (name string, err error) {
-	if len(value) > 0 {
-		var ok bool
-		if name, ok = value[0].(string); !ok {
-			err = errIllegalJsVarName("expected string")
-			return
-		}
-		if !jsVarNameRx.MatchString(name) {
-			err = errIllegalJsVarName("illegal syntax")
-			return
-		}
-		// A JsVar name is used as a property key on the browser window: jaws.js
-		// reads and writes window[name]. Assigning window["__proto__"] mutates the
-		// window's prototype instead of setting a normal property, so it is reserved.
-		if name == "__proto__" {
-			err = errIllegalJsVarName("reserved")
-		}
-	}
-	if name == "" {
-		err = errIllegalJsVarName("missing")
-	}
-	return
-}
-
-// PathSetter can set a JSON path value.
-type PathSetter interface {
-	// JawsSetPath should apply value at jsPath, which may be empty for the root.
-	//
-	// Browser writes pass [json.Unmarshal]'s generic any representation without
-	// the raw JSON bytes. Programmatic [JsVar.JawsSetPath] calls pass the
-	// caller-supplied value unchanged.
-	//
-	// A [JsVar] returns [ErrIllegalJsVarPath] before calling a PathSetter when
-	// jsPath contains a protocol byte. Otherwise it passes jsPath unchanged and
-	// does not apply generic jq validation. Successful broadcasts preserve jsPath
-	// and the requested value.
-	//
-	// If the target already has the requested value, it should return [jaws.ErrValueUnchanged].
-	//
-	// When a [JsVar]'s bound value (Ptr) implements PathSetter, the JsVar
-	// delegates to it while holding the JsVar write lock. Such an
-	// implementation must not lock or unlock the JsVar, nor call its locked
-	// accessors such as [JsVar.JawsGet] or [JsVar.JawsSet].
-	//
-	// When an accepted update is broadcast, the JsVar marshals value before
-	// releasing that write lock. Custom marshaling callbacks reachable from value,
-	// including MarshalJSON and MarshalText, must not acquire the same locker or
-	// re-enter the JsVar.
-	//
-	// If an implementation panics, the calling JsVar releases its write lock
-	// before propagating the panic.
-	JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error)
-}
-
-// SetPather observes JsVar writes that request a broadcast.
-type SetPather interface {
-	// JawsPathSet receives the requested path and value after the JsVar requests a broadcast.
-	//
-	// jsPath may be empty for the root. The JsVar calls this after unlocking,
-	// so the callback may call its locked accessors.
-	JawsPathSet(elem *jaws.Element, jsPath string, value any)
-}
-
-// IsJsVar is implemented by JaWS UI values that bind a Go value to a
-// browser-side JavaScript variable.
-type IsJsVar interface {
-	bind.RWLocker
-	jaws.UI
-	jaws.InputHandler
-	PathSetter
-}
-
-// JsVarMaker creates a request-scoped JavaScript variable binding.
-//
-// JawsMakeJsVar must return a fresh [IsJsVar] for each call. The returned value
-// is scoped to rq and one live [jaws.Element]. Bindings may share synchronized
-// backing state, but the binding values themselves must remain distinct.
-type JsVarMaker interface {
-	JawsMakeJsVar(rq *jaws.Request) (value IsJsVar, err error)
-}
-
-var (
-	_ IsJsVar          = &JsVar[int]{}
-	_ bind.Setter[int] = &JsVar[int]{}
+const (
+	maxJsVarPathBytes = 4096
+	maxJsVarNameBytes = 4096
+	maxJsVarChanges   = 64
+	maxJsVarLogBytes  = 16 * 1024
 )
 
-// JsVarCheck validates a tentative browser update to a [JsVar].
-//
-// JsVarCheck is a type alias so a value of a defined function type with this
-// signature can be assigned to [JsVar.ClientCheck] without explicit conversion.
-//
-// The value contains the complete tentative state, and jsPath is the original
-// browser-supplied jq path. The generic setter ignores empty components, so use
-// jsPath only as an inspection hint; implement [PathSetter] to allow-list paths.
-// See [JsVar] for generic path rules.
-//
-// A nil error accepts the update. A non-nil error rejects it atomically and is
-// returned unchanged, except that an error matching [ErrJsVarTooLarge] is
-// returned as that sentinel after cancelling the associated request, when one
-// is present. A panic rejects the update before continuing unchanged.
-//
-// The check validates tentative Go state only. A broadcast carries the decoded
-// browser value rather than reading the stored path back, so jq conversions or
-// ignored map-to-struct entries can make the peer value differ from the state
-// inspected here. Use [PathSetter] when peer-visible input also needs validation.
-//
-// The check runs while the locker passed to [NewJsVar] is write-locked. It may
-// inspect or marshal value, but it must not mutate it, acquire that locker,
-// re-enter the JsVar, call a jq setter on the value, or retain references into a
-// rejected tentative value. Any custom marshaling callback it invokes, including
-// MarshalJSON or MarshalText, has the same restrictions. The check must not
-// return or wrap [jaws.ErrEventUnhandled], which has handler-dispatch semantics.
-type JsVarCheck[T any] = func(value *T, jsPath string) error
+type jsVarChange struct {
+	version uint64
+	path    string
+}
 
-// JSONSizeCheck returns a check that limits the JSON encoding of value.
+var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`)
+
+func validateJsVarName(name string) error {
+	if len(name) > maxJsVarNameBytes {
+		return fmt.Errorf("%w: too long", ErrIllegalJsVarName)
+	}
+	if !jsVarNameRx.MatchString(name) {
+		return fmt.Errorf("%w: illegal syntax", ErrIllegalJsVarName)
+	}
+	for component := range strings.SplitSeq(name, ".") {
+		if component == "__proto__" || component == "constructor" || component == "prototype" {
+			return fmt.Errorf("%w: reserved", ErrIllegalJsVarName)
+		}
+	}
+	return nil
+}
+
+func validateJsVarPath(path string) error {
+	if len(path) > maxJsVarPathBytes || !utf8.ValidString(path) {
+		return ErrIllegalJsVarPath
+	}
+	for i := range len(path) {
+		if path[i] < 0x20 || path[i] == 0x7f || path[i] == '=' {
+			return ErrIllegalJsVarPath
+		}
+	}
+	if path == "" {
+		return nil
+	}
+	for component := range strings.SplitSeq(path, ".") {
+		switch component {
+		case "", "__proto__", "constructor", "prototype":
+			return ErrIllegalJsVarPath
+		}
+	}
+	return nil
+}
+
+// JsVarCheck validates the complete tentative state of a browser proposal.
 //
-// The check accepts an encoding whose length is exactly maxBytes and rejects a
-// larger encoding with [ErrJsVarTooLarge]. A marshaling failure also matches
-// ErrJsVarTooLarge and retains the marshaling error in its error chain. A
-// non-positive maxBytes disables checking and returns nil.
+// A nil check denies browser writes. The check runs under the store's write lock
+// after jq tentatively applies a changed value. It must only inspect next;
+// an error or panic rolls the proposal back. The source can authorize a user
+// or session. Validate the complete value, including changes through parent
+// and root paths.
+type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
+
+// JSONSizeCheck limits the encoded size of a tentative JsVar store value.
 //
-// JSONSizeCheck marshals the complete value after every tentative change. Its
-// time and allocation cost depend on the whole value and its marshaling behavior;
-// map-key sorting and custom marshalers can add further cost.
-// It bounds the encoding, not Go heap memory: custom JSON marshalers, omitted
-// fields, aliases, slice capacity, and object overhead may make the two differ.
-// Use a domain-specific [JsVarCheck] unless the JSON representation faithfully
-// includes all state a client can grow.
+// A non-positive limit returns nil, which denies browser writes if used as the
+// store's sole ClientCheck. The check bounds JSON bytes, not Go heap capacity.
 func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 	if maxBytes > 0 {
-		check = func(value *T, _ string) (err error) {
+		check = func(_ *jaws.Element, value *T, _ string) (err error) {
 			var data []byte
 			if data, err = json.Marshal(value); err == nil {
 				if len(data) > maxBytes {
@@ -165,503 +103,719 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 	return
 }
 
-// JsVar binds a Go value to a named JavaScript variable in the browser.
+// JsVarStore owns one authoritative Go value and its browser name.
 //
-// A JsVar is request-scoped and must not be rendered by more than one
-// [jaws.Request]. Within that request, it must back at most one live
-// [jaws.Element]. Construct a fresh JsVar for each binding, either directly
-// while rendering or through [JsVarMaker]. Distinct JsVar values may use the
-// same locker and Ptr to expose synchronized application state to multiple
-// Elements or requests.
+// Use [JsVarStore.Bind] once per Request during initial page rendering.
+// ClientCheck and ExtraTags must be configured before first use and remain
+// unchanged while the store is active.
+// Every binding sees the same JSON value; ClientCheck controls writes, not
+// disclosure.
 //
-// JsVar is intended for JSON-marshalable state shared with application
-// JavaScript. The browser binding reads and writes the window property named
-// when the JsVar is rendered. Existing application variables are therefore
-// valid bindings. Do not use a browser-owned property such as window.name, or a
-// global owned by unrelated code.
+// All reads and writes of the bound value must use the supplied locker. Server
+// mutations must use SetPath, DeletePath, or WriteLocked to publish changes.
+// The JSON encoding must have unique object member names.
+// For partial map patches, the bound JSON tree must not share mutable pointers,
+// maps, or slices across different paths. Complex Go types use root patches.
+// Custom JSON methods reached while locked must not re-enter the store or its
+// locker.
 //
-// Browser JSON numbers use JavaScript Number values. Signed and unsigned
-// integers outside -9007199254740991 through 9007199254740991 may be rounded in
-// a snapshot or broadcast; a later browser write may store the rounded value in
-// Go.
-//
-// Represent exact wide integers as built-in string fields and convert them
-// explicitly. Browser code must convert BigInt values back to strings before
-// calling jawsVar. A json:",string" tag is not generic round-trip support; use a
-// built-in string field or a [PathSetter].
-//
-// JSON-marshalable describes server-to-browser values. Generic browser writes
-// decode into any and assign by path; they do not unmarshal directly into T or
-// invoke destination custom unmarshaling. Consequently, time.Time, []byte, and
-// maps with non-string keys are not round-trip writable by the generic setter.
-// Use a browser-facing DTO compatible with the generic setter, or implement
-// [PathSetter] to parse and validate the decoded value.
-//
-// Generic array and slice path components must be canonical JavaScript array
-// indices representable as int: "0" or ASCII decimal digits without a leading
-// zero, at most 4294967294. A component that violates these rules produces an
-// error matching [github.com/linkdata/jq.ErrPathNotFound] when traversal reaches
-// an array or slice. String-keyed map entries are matched exactly. Struct path
-// components and map-to-struct keys follow the default field-selection rules of
-// [encoding/json]. An exact json:"-" tag excludes an otherwise selected exported
-// field. For a non-promoting field, a valid nonempty JSON tag name is used
-// verbatim, while an absent, empty, or invalid name falls back to the Go field
-// name; json:"-," therefore names the field "-". Ambiguous fields are absent
-// from the path namespace.
-//
-// An anonymous struct without a valid explicit JSON name contributes its
-// promoted fields directly and does not add its Go type name as a component:
-// use "value", not "Inner.value", or give the anonymous field an explicit tag
-// to create a nested path. Promotion reaches exported fields through unexported
-// embedded structs. An explicitly named unexported anonymous struct is not
-// itself a readable or writable endpoint or writable map-to-struct key, but
-// longer paths can reach its exported fields.
-//
-// Reads and generic writes that traverse a nil pointer produce an error matching
-// [github.com/linkdata/jq.ErrPathNotFound], and generic writes do not allocate
-// the pointer. Empty components are ignored, and both "" and "." address the
-// root.
-//
-// While the WebSocket is open, jawsVar sends one complete message per matching
-// live binding, subject to [jaws.Request.ServeHTTP]'s inbound limit.
-// [JsVar.ClientCheck] runs only after receipt and cannot enforce that limit. Use
-// a separate upload endpoint for large data.
-//
-// The variable name and browser-side jawsVar paths must be
-// application-controlled. The browser rejects exact "__proto__" path
-// components; put user data in values, not names or paths.
-//
-// Multiple bindings may share a name. The name is a single browser window
-// property, and a browser-initiated write to it is delivered to every live
-// binding of that name; a removed binding stops receiving writes. This lets a
-// subtree re-render replace a binding, lets several requests expose the same
-// application-owned global, and lets one browser value fan out to several
-// independent Go bindings.
-//
-// When bindings sharing a name also share a mutable backing object graph, a
-// browser write applies to that shared state once per binding. Those bindings
-// must use the same locker. Do not expose that state through several
-// simultaneously rendered bindings when its [PathSetter] is not idempotent (for
-// example one that appends).
-//
-// A JsVar is bidirectional; neither side is inherently authoritative. Browser
-// and Go updates may carry complete values or individual paths. The application
-// defines ownership, conflict, and merge policy.
-//
-// When Ptr is non-nil, [JsVar.JawsRender] serializes a snapshot of the bound Go
-// value to initialize the browser variable. A browser call to the JavaScript
-// jawsVar function sends only while its WebSocket is open; an earlier call is
-// not queued for later transmission. [JsVar.JawsSet] and [JsVar.JawsSetPath]
-// broadcast only to matching active requests, so an update is not replayed to a
-// page between its initial render and its broadcast subscription. Applications
-// that require the two sides to converge after either can change the value
-// during that interval must reconcile it explicitly.
-//
-// Accepted writes change Go state immediately. Outgoing path Sets wait for the
-// next [jaws.DefaultUpdateInterval] tick or queued non-Set message. Writes to
-// the same destination and path in one batch coalesce to the last requested
-// value; other paths remain partial updates. [JsVar.ClientCheck] runs for each
-// applicable browser write before coalescing.
-//
-// It is safe for concurrent use when the locker passed to [NewJsVar] is safe
-// for concurrent use. Writes through one JsVar serialize; surviving Sets retain
-// mutation order. Distinct JsVar values sharing Ptr have no cross-binding
-// broadcast order guarantee.
-//
-// Rendering and write broadcasts invoke JSON marshalers while the locker passed
-// to [NewJsVar] is held. Custom marshaling callbacks reached in either case,
-// including MarshalJSON and MarshalText, must not acquire that locker or re-enter
-// the JsVar.
-//
-// A JsVar must not be copied after first use.
-//
-// SECURITY: a JsVar is client-writable. Incoming browser "set" messages are
-// applied by path to the bound value. If the bound value implements [PathSetter],
-// its JawsSetPath validates and applies the change. Otherwise
-// [github.com/linkdata/jq.Set] can write any exported field addressable by the
-// generic path rules above and append one element per message to a slice.
-//
-// There is no default cumulative size bound. Set [JsVar.ClientCheck] before first
-// use to validate each tentative generic browser update. [JSONSizeCheck] provides
-// an exact serialized-size limit. Every client-writable binding that can mutate
-// the same backing object graph must share synchronization and use an equivalent
-// checking policy. An unchecked or less restrictive binding can otherwise commit
-// first; another binding then sees an unchanged value and does not run its check.
-// A ClientCheck does not run for rendering, programmatic writes, invalid or
-// unchanged writes, or values implementing PathSetter. It is an acceptance gate,
-// not a monitor that proves the current value always satisfies an invariant.
-// A check that uses [github.com/linkdata/jq.Get] cannot inspect an explicitly
-// named unexported anonymous struct at its own endpoint; it must inspect a
-// longer exported-field path or the tentative Go value directly.
-//
-// A size check does not prevent a client from setting individual exported fields.
-// When only some fields or paths should be client-writable, implement [PathSetter]
-// on the bound value to allow-list paths and bound lengths.
-//
-// Rejecting a browser write rolls back Go state without changing the value that
-// the browser already assigned before sending it. Except for ErrJsVarTooLarge,
-// which aborts the associated request when present, the application must
-// resynchronize the browser if it requires immediate convergence after
-// rejection.
-// See the Node type in github.com/linkdata/jawstree for an example that restricts
-// client writes to a single boolean field.
-type JsVar[T any] struct {
-	bind.RWLocker
-	Ptr         *T            // bound Go value
-	ClientCheck JsVarCheck[T] // optional check for generic browser writes; configure before first use
-	setMu       sync.Mutex    // serializes each mutation with its broadcast
-	dirtyTag    any           // current dirty tag, set during render; read via JawsGetTag
+// A JsVarStore must not be copied after first use.
+type JsVarStore[T any] struct {
+	ClientCheck JsVarCheck[T] // nil denies browser proposals
+	ExtraTags   []any         // dirtied after each changed mutation
+
+	jaws     *jaws.Jaws
+	name     string
+	locker   bind.RWLocker
+	value    *T
+	partial  bool // plain JSON tree with matching jq paths and safe partial patches
+	version  uint64
+	floor    uint64 // older bindings need a root patch
+	changes  []jsVarChange
+	logBytes int
 }
 
-// JawsGetPath returns the value at jsPath.
+// NewJsVarStore creates a store for a browser variable.
 //
-// A path containing only empty components returns the same logical root value
-// as [JsVar.JawsGet]. Lookup errors return nil and are logged on elem when
-// possible. A nil result therefore does not distinguish a lookup failure from a
-// successfully resolved nil value.
-func (jsvar *JsVar[T]) JawsGetPath(elem *jaws.Element, jsPath string) (value any) {
-	if strings.Trim(jsPath, ".") == "" {
-		return jsvar.JawsGet(elem)
-	}
-	value, err := jsvar.getPath(jsPath)
-	if elem != nil {
-		_ = elem.Jaws.Log(err)
-	}
-	return
-}
-
-func (jsvar *JsVar[T]) getPath(jsPath string) (value any, err error) {
-	jsvar.RLock()
-	defer jsvar.RUnlock()
-	return jq.Get(jsvar.Ptr, jsPath)
-}
-
-// JawsGet returns the bound value.
-func (jsvar *JsVar[T]) JawsGet(elem *jaws.Element) (value T) {
-	jsvar.RLock()
-	defer jsvar.RUnlock()
-	if jsvar.Ptr != nil {
-		value = *jsvar.Ptr
-	}
-	return
-}
-
-// setPathLocked applies the mutation and must be called with the write lock held.
-func (jsvar *JsVar[T]) setPathLocked(elem *jaws.Element, jsPath string, value any, clientWrite bool) (changed, checkRejected, pathSetter bool, err error) {
-	if jsvar.Ptr == nil {
-		err = jq.ErrInvalidReceiver
-	} else if ps, ok := any(jsvar.Ptr).(PathSetter); ok {
-		pathSetter = true
-		err = ps.JawsSetPath(elem, jsPath, value)
-		if err == nil {
-			changed = true
-		}
-	} else if clientWrite && jsvar.ClientCheck != nil {
-		checkCalled := false
-		changed, err = jq.SetChecked(jsvar.Ptr, jsPath, value, func() error {
-			checkCalled = true
-			return jsvar.ClientCheck(jsvar.Ptr, jsPath)
-		})
-		checkRejected = checkCalled && err != nil
-	} else {
-		changed, err = jq.Set(jsvar.Ptr, jsPath, value)
-	}
-	if clientWrite && err != nil && !checkRejected && !pathSetter {
-		err = errJsVarClientWrite{err}
-	}
-	if err == nil && !changed && !clientWrite {
-		err = jaws.ErrValueUnchanged
-	}
-	return
-}
-
-// setPathAndMarshal applies a mutation and prepares any broadcast payload while
-// the bound value remains locked. A setter may retain a composite value directly
-// in Ptr, so value can alias the shared state after a successful set.
-func (jsvar *JsVar[T]) setPathAndMarshal(elem *jaws.Element, jsPath string, value any, clientWrite bool) (dirtyTag any, data []byte, changed, checkRejected, pathSetter bool, err error) {
-	jsvar.Lock()
-	defer jsvar.Unlock()
-	if changed, checkRejected, pathSetter, err = jsvar.setPathLocked(elem, jsPath, value, clientWrite); err == nil && changed {
-		dirtyTag = jsvar.dirtyTag
-		if elem != nil && dirtyTag != nil {
-			data, err = json.Marshal(value)
-		}
-	}
-	return
-}
-
-func (jsvar *JsVar[T]) setPathLock(elem *jaws.Element, jsPath string, value any, clientWrite bool) (broadcasted, checkRejected, pathSetter bool, err error) {
-	jsvar.setMu.Lock()
-	defer jsvar.setMu.Unlock()
-
-	var dirtyTag any
-	var data []byte
-	var changed bool
-	dirtyTag, data, changed, checkRejected, pathSetter, err = jsvar.setPathAndMarshal(elem, jsPath, value, clientWrite)
-	// dirtyTag is assigned only by JawsRender, so a set before JawsRender leaves it
-	// nil. A what.Set with a nil Dest would target every element, and there is
-	// nothing to update yet because the initial render carries the value in its
-	// data-jawsdata attribute, so the broadcast is skipped in that case.
-	//
-	// The broadcast carries the caller's requested value, not the value actually
-	// stored. If a PathSetter transforms the input (e.g. clamps a number), the
-	// stored Go value and the value seen by peers can differ; the stored value is what
-	// JawsGet returns. If peers must observe a transformed stored value, the
-	// application must reject the input or reconcile after the callback.
-	if err == nil && changed && elem != nil && dirtyTag != nil {
-		elem.Jaws.Broadcast(wire.Message{
-			Dest: dirtyTag,
-			What: what.Set,
-			Data: jsPath + "=" + string(data),
-		})
-		broadcasted = true
-	}
-	return
-}
-
-func (jsvar *JsVar[T]) setPath(elem *jaws.Element, jsPath string, value any, clientWrite bool) (err error) {
-	// jsPath is written verbatim into a what.Set wire frame (only the value side
-	// is JSON-encoded). The client splits frames on '\n', fields on '\t', and the
-	// JsVar payload at the first '='. Reject any path carrying those protocol
-	// bytes before applying or broadcasting it: they either corrupt the frame or
-	// make peers parse the value as invalid JSON. Return the fixed sentinel without
-	// the raw path so those bytes cannot reach logs through the error.
-	if strings.ContainsAny(jsPath, "\t\n\r=") {
-		return ErrIllegalJsVarPath
-	}
-	var broadcasted bool
-	var checkRejected bool
-	var pathSetter bool
-	broadcasted, checkRejected, pathSetter, err = jsvar.setPathLock(elem, jsPath, value, clientWrite)
-	if clientWrite && pathSetter && err != nil && errors.Is(err, jaws.ErrValueUnchanged) {
-		err = nil
-	}
-	if checkRejected && errors.Is(err, ErrJsVarTooLarge) {
-		cause := err
-		err = ErrJsVarTooLarge
-		if elem != nil && elem.Request != nil {
-			elem.Request.Cancel(cause)
-		}
-	}
-	if err == nil && broadcasted {
-		if sp, ok := any(jsvar.Ptr).(SetPather); ok {
-			sp.JawsPathSet(elem, jsPath, value)
-		}
-	}
-	return
-}
-
-// JawsSetPath sets the value at jsPath and broadcasts the change when possible.
-// It is a programmatic server-side write, so it does not invoke
-// [JsVar.ClientCheck].
+// The name is a dot-separated path from window using JavaScript identifiers
+// with ASCII letters, digits, underscore, or dollar sign. No component may be
+// "__proto__", "constructor", or "prototype"; the limit is 4096 bytes.
+// Initial data and patches assign to that live path, including browser-owned
+// properties and setters.
 //
-// See [JsVar] for generic path rules.
-//
-// A nil elem changes the bound value without broadcasting. A set before this
-// JsVar has acquired a dirty tag from rendering also produces no broadcast; its
-// initial render seeds the value via the data-jawsdata attribute.
-//
-// The broadcast reaches matching active requests only. It is not replayed to a
-// page between its initial render and its broadcast subscription; see [JsVar]
-// for the synchronization model.
-//
-// The browser receives the JSON encoding of value, not a re-encoding of the
-// destination field after assignment. Applications using an encoded
-// representation such as decimal strings must pass that representation in value.
-//
-// If marshaling a broadcast value fails, JawsSetPath returns the error after
-// applying the write. It does not roll back the value, queue a broadcast, or call
-// [SetPather.JawsPathSet].
-//
-// When a write produces a broadcast, value is marshaled while the application
-// locker is held. Custom marshaling callbacks reachable from value, including
-// MarshalJSON and MarshalText, must not acquire that locker or re-enter the
-// JsVar.
-func (jsvar *JsVar[T]) JawsSetPath(elem *jaws.Element, jsPath string, value any) (err error) {
-	return jsvar.setPath(elem, jsPath, value, false)
-}
-
-// JawsSet replaces the root value and broadcasts the change.
-//
-// It has the same delivery and marshaling semantics as [JsVar.JawsSetPath].
-func (jsvar *JsVar[T]) JawsSet(elem *jaws.Element, value T) (err error) {
-	return jsvar.JawsSetPath(elem, "", value)
-}
-
-// JawsRender writes the hidden element that seeds and routes the JavaScript variable.
-//
-// params[0] must be a valid JsVar name. An invalid name returns
-// [ErrIllegalJsVarName] without writing markup, but still applies any bound-value
-// tag and handlers, invokes its initial-attribute hook, and adds the JsVar handler.
-//
-// A name may be bound by more than one live binding; see [JsVar] for how a
-// browser write is delivered to every live binding of the name.
-//
-// The serialized value is a render-time snapshot. See [JsVar] for the
-// synchronization semantics between rendering and the WebSocket subscription.
-//
-// The bound value's [github.com/linkdata/jaws/lib/tag.TagGetter] JawsGetTag runs with
-// the JsVar write lock held and must not acquire that lock or re-enter the JsVar.
-//
-// [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] runs without the JsVar lock and
-// may acquire the locker passed to [NewJsVar].
-func (jsvar *JsVar[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	// The render-time snapshot is taken under the write lock; see renderSnapshot.
-	// After renderSnapshot returns, ApplyInitialHTMLAttr, AddHandlers, ApplyParams
-	// and, crucially, writing to w run without the lock. ApplyInitialHTMLAttr must
-	// stay out here because the bound value's JawsInitialHTMLAttr may acquire the
-	// same non-reentrant locker; writing to w must stay out because a slow client
-	// stalling a network write would block every goroutine sharing the locker.
-	getter, jsvarName, data, err := jsvar.renderSnapshot(elem, params)
-	getterAttrs := elem.ApplyInitialHTMLAttr(getter)
-	elem.AddHandlers(jsvar)
-	if err == nil {
-		attrs := append(elem.ApplyParams(params[1:]), getterAttrs...)
-		var b []byte
-		b = append(b, "\n<div id="...)
-		b = elem.Jid().AppendQuote(b)
-		b = htmlio.AppendAttr(b, "data-jawsname", jsvarName)
-		if data != nil {
-			b = htmlio.AppendAttr(b, "data-jawsdata", string(data))
-		}
-		b = htmlio.AppendAttrs(b, attrs)
-		b = append(b, " hidden></div>"...)
-		_, err = w.Write(b)
-	}
-	return
-}
-
-// renderSnapshot runs the render-time critical section under the write lock.
-//
-// It resolves the dirty tag, validates the JsVar name, and marshals a snapshot of
-// Ptr. The lock spans tag registration and the marshal so the serialized value stays
-// consistent with the dirty tag even if another request sharing this JsVar sets it
-// concurrently. The deferred unlock ensures a panic from a tag callback or from
-// marshaling cannot leak the lock.
-//
-// A nil Ptr has no bound value to inspect, so bound-value callbacks are skipped and
-// the initial data is omitted. Passing the typed-nil Ptr to ApplyGetter instead would
-// call a value-receiver [github.com/linkdata/jaws/lib/tag.TagGetter] through the nil
-// pointer and panic.
-func (jsvar *JsVar[T]) renderSnapshot(elem *jaws.Element, params []any) (getter any, jsvarName string, data []byte, err error) {
-	jsvar.Lock()
-	defer jsvar.Unlock()
-	if jsvar.Ptr != nil {
-		getter = jsvar.Ptr
-	}
-	jsvar.dirtyTag = elem.ApplyGetter(getter)
-	if jsvarName, err = validateJsVarName(params); err == nil && jsvar.Ptr != nil {
-		data, err = json.Marshal(jsvar.Ptr)
-	}
-	return
-}
-
-// JawsGetTag returns the dirty tag resolved by [JsVar.JawsRender], or nil.
-//
-// A failed JawsRender may still resolve the tag. Once non-nil, it follows the
-// stable-identity contract of [github.com/linkdata/jaws/lib/tag.TagGetter]. Using
-// the JsVar as a tag while nil registers no keys; later resolution is not
-// retroactive.
-//
-// It is safe for concurrent use.
-func (jsvar *JsVar[T]) JawsGetTag() any {
-	jsvar.RLock()
-	defer jsvar.RUnlock()
-	return jsvar.dirtyTag
-}
-
-// JawsUpdate does not broadcast the bound value.
-//
-// Dirtying a JsVar does not resend its root value. Use [JsVar.JawsSet] or
-// [JsVar.JawsSetPath] to send changes.
-func (jsvar *JsVar[T]) JawsUpdate(elem *jaws.Element) {
-	_ = elem // no-op for JsVar[T]
-}
-
-// JawsInput applies a browser-side JavaScript variable update.
-//
-// See [JsVar] for generic write representation limits.
-//
-// For a generic path write, a non-nil [JsVar.ClientCheck] validates the complete
-// tentative state before it is committed. The check runs while the JsVar write
-// lock is held. It must only inspect value: it must not mutate it, re-enter this
-// JsVar, call a jq setter on it, or retain references into a rejected tentative
-// value. An error rejects the write atomically, and a panic rolls the write back
-// before it propagates.
-//
-// A ClientCheck error matching [ErrJsVarTooLarge] aborts the associated request,
-// when elem has one, after the JsVar locks have been released. Other check errors
-// reject the write without aborting a request. ClientCheck is not invoked for
-// invalid or unchanged writes, values implementing [PathSetter], or
-// programmatic [JsVar.JawsSetPath] calls.
-//
-// ClientCheck validates the tentative Go state. An accepted broadcast still
-// carries the decoded browser value, which may differ after jq conversion or
-// map-to-struct field selection; see [JsVarCheck].
-//
-// During Request event processing, generic setter failures are logged with
-// detail but queued as "invalid JsVar update" browser alerts. Errors returned by
-// ClientCheck or [PathSetter] retain their text in any queued alert.
-func (jsvar *JsVar[T]) JawsInput(elem *jaws.Element, value string) (err error) {
-	err = jaws.ErrEventUnhandled
-	if jsPath, jsValue, found := strings.Cut(value, "="); found {
-		var v any
-		if err = json.Unmarshal([]byte(jsValue), &v); err == nil {
-			err = jsvar.setPath(elem, jsPath, v, true)
-		}
-	}
-	return
-}
-
-// NewJsVar creates a JsVar over v protected by l.
-//
-// The locker l must remain valid for the lifetime of the JsVar.
-// The pointer v may be nil; reads then return the zero value, rendering omits the
-// initial data, and writes return [github.com/linkdata/jq.ErrInvalidReceiver].
-// Create a fresh JsVar for each live [jaws.Element]; l and v may be shared by
-// distinct request-scoped JsVar values. Use [JsVarMaker] when construction
-// depends on the current request or the maker is stored in shared handler data.
-func NewJsVar[T any](l sync.Locker, v *T) *JsVar[T] {
-	return &JsVar[T]{RWLocker: bind.AsRWLocker(l), Ptr: v}
-}
-
-func isNilUI(ui jaws.UI) (yes bool) {
-	if yes = (ui == nil); !yes {
-		rv := reflect.ValueOf(ui)
-		yes = rv.Kind() == reflect.Pointer && rv.IsNil()
-	}
-	return
-}
-
-// JsVar binds a [JsVar] to a named JavaScript variable.
-//
-// jsvarName identifies a property on the browser window. It should be owned by
-// the application because the binding initializes and updates its value.
-//
-// See [JsVar] for the bidirectional binding and synchronization semantics,
-// including how a name shared by several live bindings is routed.
-//
-// It returns [ErrIllegalJsVarName] if jsvarName is invalid or reserved.
-//
-// A directly supplied [JsVar] must be scoped to rw.Request. You can instead pass
-// a [JsVarMaker], which is useful when the maker is stored in handler or template
-// data shared by multiple requests.
-func (rw RequestWriter) JsVar(jsvarName string, jsvar any, params ...any) (err error) {
-	if _, err = validateJsVarName([]any{jsvarName}); err == nil {
-		if jvm, ok := jsvar.(JsVarMaker); ok {
-			jsvar, err = jvm.JawsMakeJsVar(rw.Request)
-		}
-		if err == nil {
-			err = ErrJsVarArgumentType
-			if ui, ok := jsvar.(jaws.UI); ok {
-				if !isNilUI(ui) {
-					var newparams []any
-					newparams = append(newparams, jsvarName)
-					newparams = append(newparams, params...)
-					err = rw.NewUI(ui, newparams...)
-				}
+// The value and locker must remain valid for the store's lifetime. An invalid
+// name returns [ErrIllegalJsVarName], and a nil value returns
+// [github.com/linkdata/jq.ErrInvalidReceiver].
+func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value *T) (store *JsVarStore[T], err error) {
+	if err = validateJsVarName(name); err == nil {
+		if value == nil {
+			err = jq.ErrInvalidReceiver
+		} else {
+			store = &JsVarStore[T]{
+				jaws:    jw,
+				name:    name,
+				locker:  bind.AsRWLocker(locker),
+				value:   value,
+				partial: plainJsVarType(reflect.TypeOf(value).Elem()),
 			}
 		}
 	}
 	return
+}
+
+// Bind creates a one-use browser binding for this store.
+//
+// Render each binding once during the Request's initial page render, outside
+// regions that may later be replaced or removed. Browser names may neither
+// duplicate nor contain one another within a Request.
+func (store *JsVarStore[T]) Bind() *JsVarBinding[T] {
+	return &JsVarBinding[T]{store: store}
+}
+
+// ReadLocked inspects the authoritative value while its read lock is held.
+//
+// The callback must not retain value or a mutable value reachable from it, and
+// must not call a lock-taking store method. The lock is released after a panic.
+func (store *JsVarStore[T]) ReadLocked(fn func(value *T)) {
+	store.locker.RLock()
+	defer store.locker.RUnlock()
+	fn(store.value)
+}
+
+// JsVarPathWriter applies path edits inside [JsVarStore.WriteLocked].
+//
+// A writer is valid only during the callback. Changed edits are published after
+// the store unlocks, even if the callback returns an error or panics.
+type JsVarPathWriter interface {
+	// SetPath sets a canonical path in the locked value.
+	// See [JsVarStore.SetPath] for path and no-op behavior.
+	SetPath(path string, value any) (changed bool, err error)
+	// DeletePath removes a string-keyed map entry from the locked value.
+	// See [JsVarStore.DeletePath] for path and no-op behavior.
+	DeletePath(path string) (changed bool, err error)
+}
+
+type jsVarPathWriter[T any] struct {
+	store   *JsVarStore[T]
+	changed bool
+}
+
+func (writer *jsVarPathWriter[T]) SetPath(path string, value any) (changed bool, err error) {
+	if err = validateJsVarPath(path); err == nil {
+		if changed, err = jq.Set(writer.store.value, path, value); err == nil && changed {
+			writer.store.record(path)
+			writer.changed = true
+		}
+	}
+	return
+}
+
+func (writer *jsVarPathWriter[T]) DeletePath(path string) (changed bool, err error) {
+	if err = validateJsVarPath(path); err == nil {
+		if changed, err = writer.store.deletePathLocked(path); err == nil && changed {
+			writer.store.record(path)
+			writer.changed = true
+		}
+	}
+	return
+}
+
+// WriteLocked groups server path edits under one application lock.
+//
+// The value is borrowed for reads and must not be retained or mutated directly.
+// The writer is valid only during fn and must not be retained. The callback
+// must use the writer for edits and must not call lock-taking store methods.
+// Each successful changed edit remains applied and is published after unlocking,
+// even if a later edit fails or fn panics. WriteLocked is a lock scope, not a
+// rollback transaction.
+func (store *JsVarStore[T]) WriteLocked(fn func(value *T, writer JsVarPathWriter) error) (err error) {
+	writer := &jsVarPathWriter[T]{store: store}
+	store.locker.Lock()
+	defer func() {
+		store.locker.Unlock()
+		store.publish(writer.changed)
+	}()
+	err = fn(store.value, writer)
+	return
+}
+
+// SetPath sets a Go value at a canonical path and publishes a changed result.
+//
+// Paths are dot-separated JSON names, with no empty or prototype-sensitive
+// component, control byte, DEL, or '='; the maximum is 4096 UTF-8 bytes.
+// The empty path replaces the root. A no-op returns changed=false. Server writes
+// do not invoke ClientCheck. The resulting value must remain JSON encodable.
+func (store *JsVarStore[T]) SetPath(path string, value any) (changed bool, err error) {
+	err = store.WriteLocked(func(_ *T, writer JsVarPathWriter) error {
+		changed, err = writer.SetPath(path, value)
+		return err
+	})
+	return
+}
+
+// DeletePath removes a map entry by JSON path.
+//
+// The parent must be a map with built-in string keys. A missing key in that
+// map returns changed=false; a missing or non-map parent returns
+// [github.com/linkdata/jq.ErrPathNotFound]. JSON null is a value; deletion is a
+// separate operation. The empty path returns [ErrIllegalJsVarPath].
+func (store *JsVarStore[T]) DeletePath(path string) (changed bool, err error) {
+	err = store.WriteLocked(func(_ *T, writer JsVarPathWriter) error {
+		changed, err = writer.DeletePath(path)
+		return err
+	})
+	return
+}
+
+func (store *JsVarStore[T]) deletePathLocked(path string) (changed bool, err error) {
+	if path == "" {
+		return false, ErrIllegalJsVarPath
+	}
+	parentPath, key := "", path
+	if dot := strings.LastIndexByte(path, '.'); dot >= 0 {
+		parentPath, key = path[:dot], path[dot+1:]
+	}
+	var parent any = store.value
+	if parentPath != "" {
+		if parent, err = jq.Get(store.value, parentPath); err != nil {
+			return
+		}
+	}
+	rv := reflect.ValueOf(parent)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return false, jq.ErrPathNotFound
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() || rv.Kind() != reflect.Map || rv.Type().Key() != reflect.TypeFor[string]() {
+		return false, jq.ErrPathNotFound
+	}
+	if rv.IsNil() {
+		return false, nil
+	}
+	mapKey := reflect.ValueOf(key)
+	if rv.MapIndex(mapKey).IsValid() {
+		rv.SetMapIndex(mapKey, reflect.Value{})
+		changed = true
+	}
+	return
+}
+
+func (store *JsVarStore[T]) publish(changed bool) {
+	if changed {
+		store.jaws.Dirty(append([]any{store}, store.ExtraTags...)...)
+	}
+}
+
+// record runs under the store's write lock. A binding older than floor gets
+// a root patch instead of retaining unbounded history.
+func (store *JsVarStore[T]) record(path string) {
+	store.version++
+	if path == "" || !store.partial {
+		store.changes = nil
+		store.logBytes = 0
+		store.floor = store.version
+		return
+	}
+	for i, change := range store.changes {
+		if change.path == path {
+			store.changes = slices.Delete(store.changes, i, i+1)
+			store.changes = append(store.changes, jsVarChange{store.version, path})
+			return
+		}
+	}
+	for len(store.changes) == maxJsVarChanges || store.logBytes+len(path) > maxJsVarLogBytes {
+		store.floor = store.changes[0].version
+		store.logBytes -= len(store.changes[0].path)
+		store.changes = slices.Delete(store.changes, 0, 1)
+	}
+	store.changes = append(store.changes, jsVarChange{store.version, path})
+	store.logBytes += len(path)
+}
+
+type (
+	jsVarNameTag   struct{ name string }
+	jsVarPrefixTag struct{ name string }
+)
+
+// JsVarBinding renders one browser route to a [JsVarStore].
+//
+// Bindings are one-use and request-scoped. [JsVarBinding.Deactivate] is safe to
+// call concurrently with input dispatch.
+type JsVarBinding[T any] struct {
+	store         *JsVarStore[T]
+	rendered      atomic.Bool
+	active        atomic.Bool
+	lastVersion   atomic.Uint64
+	correctionMu  sync.Mutex
+	correction    string
+	hasCorrection bool
+}
+
+// Deactivate suppresses this binding's later proposal and patch work.
+//
+// Patch work already in progress may queue messages after Deactivate returns,
+// and queued messages may still be delivered.
+func (binding *JsVarBinding[T]) Deactivate() {
+	binding.active.Store(false)
+}
+
+// JawsRender writes the hidden browser route and its initial JSON value.
+//
+// A Request owned by a different [jaws.Jaws] returns an error without output.
+// Rendering twice returns [ErrJsVarBindingUsed]; a duplicate or overlapping
+// browser name in the Request returns [ErrJsVarNameConflict].
+func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
+	if elem.Jaws != binding.store.jaws {
+		// The store publishes through exactly one Jaws; a foreign Request could
+		// render a route but would never receive its invalidations.
+		return fmt.Errorf("jsvar: binding rendered on a different Jaws instance")
+	}
+	if !binding.rendered.CompareAndSwap(false, true) {
+		return ErrJsVarBindingUsed
+	}
+	store := binding.store
+	data, err := binding.renderSnapshot(elem)
+	if err != nil {
+		return
+	}
+	b := []byte("\n<div id=")
+	b = elem.Jid().AppendQuote(b)
+	b = htmlio.AppendAttr(b, "data-jawsstore", store.name)
+	b = htmlio.AppendAttr(b, "data-jawsdata", string(data))
+	b = htmlio.AppendAttrs(b, elem.ApplyParams(params))
+	b = append(b, " hidden></div>"...)
+	_, err = w.Write(b)
+	if err == nil {
+		binding.active.Store(true)
+	}
+	return
+}
+
+func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte, err error) {
+	store := binding.store
+	store.locker.Lock()
+	defer store.locker.Unlock()
+	// Registration and snapshot share the store lock. A mutation sees either
+	// the rendered value or the registered tag, including before WS connection.
+	tags := []any{jsVarNameTag{store.name}, store}
+	conflicts := []any{jsVarNameTag{store.name}, jsVarPrefixTag{store.name}}
+	for i := 0; i < len(store.name); i++ {
+		if store.name[i] == '.' {
+			prefix := store.name[:i]
+			tags = append(tags, jsVarPrefixTag{prefix})
+			conflicts = append(conflicts, jsVarNameTag{prefix})
+		}
+	}
+	elem.Tag(tags...)
+	for _, tag := range conflicts {
+		for _, other := range elem.Request.GetElements(tag) {
+			if other != elem {
+				err = ErrJsVarNameConflict
+				return
+			}
+		}
+	}
+	data, _, err = marshalJsVar(store.value)
+	if err == nil {
+		binding.lastVersion.Store(store.version)
+	}
+	return
+}
+
+// JawsUpdate sends canonical patches for store changes and browser corrections.
+//
+// A failed encoding cancels the Request.
+func (binding *JsVarBinding[T]) JawsUpdate(elem *jaws.Element) {
+	if !binding.active.Load() {
+		return
+	}
+	patches, err := binding.pendingPatches()
+	if err != nil {
+		elem.Request.Cancel(fmt.Errorf("jsvar: encode store %q: %w", binding.store.name, err))
+		return
+	}
+	if binding.active.Load() {
+		for _, patch := range patches {
+			elem.JsVar(patch)
+		}
+	}
+}
+
+func (binding *JsVarBinding[T]) correct(elem *jaws.Element, path string) {
+	binding.correctionMu.Lock()
+	if binding.hasCorrection && binding.correction != path {
+		binding.correction = ""
+	} else {
+		binding.correction = path
+	}
+	binding.hasCorrection = true
+	binding.correctionMu.Unlock()
+	binding.store.jaws.Dirty(elem)
+}
+
+func (binding *JsVarBinding[T]) takeCorrection() (path string, ok bool) {
+	binding.correctionMu.Lock()
+	path, ok = binding.correction, binding.hasCorrection
+	binding.correction = ""
+	binding.hasCorrection = false
+	binding.correctionMu.Unlock()
+	return
+}
+
+func (binding *JsVarBinding[T]) pendingPatches() (patches []string, err error) {
+	store := binding.store
+	correction, needsCorrection := binding.takeCorrection()
+	var paths []string
+	var data []byte
+	var version uint64
+	store.ReadLocked(func(value *T) {
+		version = store.version
+		lastVersion := binding.lastVersion.Load()
+		if lastVersion < store.floor {
+			paths = append(paths, "")
+		} else {
+			for _, change := range store.changes {
+				if change.version > lastVersion {
+					paths = append(paths, change.path)
+				}
+			}
+		}
+		if needsCorrection {
+			paths = append(paths, correction)
+		}
+		if len(paths) > 0 {
+			data, err = json.Marshal(value)
+		}
+	})
+	if err == nil && len(paths) > 0 {
+		patches, err = store.projectPatches(paths, data)
+	}
+	if err == nil {
+		binding.lastVersion.Store(version)
+	}
+	return
+}
+
+func (store *JsVarStore[T]) projectPatches(paths []string, data []byte) (patches []string, err error) {
+	var visible any
+	visible, err = decodeJsVarJSON(data)
+	if err == nil {
+		rootPatch := "=" + string(data)
+		seen := make(map[string]bool, len(paths))
+		slices.Sort(paths)
+		for _, path := range paths {
+			covered := seen[path]
+			for i := range len(path) {
+				if path[i] == '.' && seen[path[:i]] {
+					covered = true
+					break
+				}
+			}
+			if covered {
+				continue
+			}
+			patch := store.projectVisiblePatch(path, data, visible)
+			if patch == rootPatch {
+				patches = []string{rootPatch}
+				break
+			}
+			key, _, _ := strings.Cut(patch, "=")
+			seen[key] = true
+			patches = append(patches, patch)
+		}
+	}
+	return
+}
+
+func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visible any) string {
+	if path == "" || !store.partial || validateJsVarPath(path) != nil {
+		return "=" + string(data)
+	}
+	current := visible
+	var prefix string
+	for component := range strings.SplitSeq(path, ".") {
+		object, ok := current.(map[string]any)
+		if !ok {
+			if prefix == "" {
+				return "=" + string(data)
+			}
+			break
+		}
+		if prefix != "" {
+			prefix += "."
+		}
+		prefix += component
+		next, found := object[component]
+		if !found {
+			return prefix + "="
+		}
+		current = next
+	}
+	encoded, err := json.Marshal(current)
+	if err != nil {
+		return "=" + string(data)
+	}
+	return prefix + "=" + string(encoded)
+}
+
+// JawsInput applies a browser proposal allowed by ClientCheck.
+//
+// A deactivated binding ignores proposals.
+//
+// A rejected, invalid, or unchanged proposal schedules a canonical correction
+// for its source binding. A changed accepted proposal invalidates every binding.
+// An unchanged proposal to a complex Go shape is rejected.
+// A panicking check rolls back and schedules a root correction before the panic
+// continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
+func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err error) {
+	if !binding.active.Load() {
+		return nil
+	}
+	defer func() {
+		if panicValue := recover(); panicValue != nil {
+			binding.correct(elem, "")
+			panic(panicValue)
+		}
+	}()
+	path, raw, found := strings.Cut(input, "=")
+	if !found {
+		err = ErrIllegalJsVarPath
+	} else {
+		err = validateJsVarPath(path)
+	}
+	if err != nil {
+		binding.correct(elem, "")
+		return errJsVarClientWrite{err}
+	}
+	var value any
+	if err = json.Unmarshal([]byte(raw), &value); err != nil {
+		binding.correct(elem, "")
+		return errJsVarClientWrite{err}
+	}
+	changed, err := binding.applyProposal(elem, path, value)
+	if changed {
+		binding.store.publish(true)
+	} else {
+		binding.correct(elem, path)
+	}
+	if err != nil {
+		if errors.Is(err, ErrJsVarTooLarge) {
+			elem.Request.Cancel(err)
+			return ErrJsVarTooLarge
+		}
+		return errJsVarClientWrite{err}
+	}
+	return
+}
+
+func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, value any) (changed bool, err error) {
+	store := binding.store
+	store.locker.Lock()
+	defer store.locker.Unlock()
+	if !binding.active.Load() {
+		return
+	}
+	if store.ClientCheck == nil {
+		return false, ErrJsVarReadOnly
+	}
+	// jq permits one append at the current slice length. Browser proposals only
+	// replace existing paths, so repeated inputs cannot grow a slice unchecked.
+	if path != "" {
+		if _, err = jq.Get(store.value, path); err != nil {
+			return
+		}
+	}
+	if store.partial {
+		// Plain trees map decoded proposals to the same jq/JSON paths.
+		// Check the changed subtree before accepting it.
+		changed, err = jq.SetChecked(store.value, path, value, func() error {
+			var next any = store.value
+			if path != "" {
+				var getErr error
+				if next, getErr = jq.Get(store.value, path); getErr != nil {
+					return getErr
+				}
+			}
+			if _, encodeErr := json.Marshal(next); encodeErr != nil {
+				return encodeErr
+			}
+			return store.ClientCheck(elem, store.value, path)
+		})
+		if changed {
+			store.record(path)
+		}
+		return
+	}
+	_, before, err := marshalJsVar(store.value)
+	if err != nil {
+		return false, err
+	}
+	changed, err = jq.SetChecked(store.value, path, value, func() error {
+		_, after, encodeErr := marshalJsVar(store.value)
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if path != "" && !visibleJsVarChange(before, after, path) {
+			return ErrIllegalJsVarPath
+		}
+		return store.ClientCheck(elem, store.value, path)
+	})
+	if err == nil && !changed {
+		// jq skips the callback for equal Go values. With a custom encoder,
+		// accepting that no-op could reveal a field absent from browser JSON.
+		err = ErrIllegalJsVarPath
+	}
+	if changed {
+		store.record(path)
+	}
+	return
+}
+
+// marshalJsVar rejects ambiguous JSON before it reaches a browser or commits.
+func marshalJsVar(value any) (data []byte, visible any, err error) {
+	if data, err = json.Marshal(value); err == nil {
+		visible, err = decodeJsVarJSON(data)
+	}
+	return
+}
+
+func decodeJsVarJSON(data []byte) (visible any, err error) {
+	err = jsonv2.Unmarshal(data, &visible, jsVarNumberOption)
+	return
+}
+
+var jsVarNumberOption = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(decoder *jsontext.Decoder, value *any) error {
+	if decoder.PeekKind() != '0' {
+		return errors.ErrUnsupported
+	}
+	raw, err := decoder.ReadValue()
+	if err == nil {
+		*value = json.Number(raw)
+	}
+	return err
+}))
+
+func visibleJsVarChange(before, after any, path string) bool {
+	if path == "" {
+		return !reflect.DeepEqual(before, after)
+	}
+	component, rest, _ := strings.Cut(path, ".")
+	switch current := before.(type) {
+	case map[string]any:
+		next, ok := after.(map[string]any)
+		if !ok || len(current) != len(next) {
+			return false
+		}
+		for key, value := range current {
+			if key != component {
+				other, found := next[key]
+				if !found || !reflect.DeepEqual(value, other) {
+					return false
+				}
+			}
+		}
+		value, found := current[component]
+		other, exists := next[component]
+		return found && exists && visibleJsVarChange(value, other, rest)
+	case []any:
+		next, ok := after.([]any)
+		if !ok || len(current) != len(next) {
+			return false
+		}
+		index, err := strconv.Atoi(component)
+		if err != nil || index < 0 || index >= len(current) || strconv.Itoa(index) != component {
+			return false
+		}
+		for i, value := range current {
+			if i != index && !reflect.DeepEqual(value, next[i]) {
+				return false
+			}
+		}
+		return visibleJsVarChange(current[index], next[index], rest)
+	}
+	return false
+}
+
+var jsVarMarshalers = [...]reflect.Type{
+	reflect.TypeFor[jsonv2.MarshalerTo](),
+	reflect.TypeFor[json.Marshaler](),
+	reflect.TypeFor[encoding.TextAppender](),
+	reflect.TypeFor[encoding.TextMarshaler](),
+}
+
+// plainJsVarType is conservative about encoder paths and reference aliases.
+// Map branches are partial under the documented JSON-tree/no-alias contract.
+func plainJsVarType(t reflect.Type) bool {
+	return plainJsVarTypeSeen(t, make(map[reflect.Type]bool))
+}
+
+func plainJsVarScalar(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64, reflect.String:
+		return true
+	}
+	return false
+}
+
+func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	defer delete(seen, t)
+	for _, marshaler := range jsVarMarshalers {
+		if t.Implements(marshaler) || reflect.PointerTo(t).Implements(marshaler) {
+			return false
+		}
+	}
+	if plainJsVarScalar(t) {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		names := make(map[string]bool, t.NumField())
+		for i := range t.NumField() {
+			field := t.Field(i)
+			if field.Anonymous {
+				return false
+			}
+			if !field.IsExported() || field.Tag.Get("json") == "-" {
+				continue
+			}
+			name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
+			if name == "" {
+				name = field.Name
+			}
+			if !jsVarNameRx.MatchString(name) || names[name] {
+				return false
+			}
+			names[name] = true
+			for option := range strings.SplitSeq(options, ",") {
+				switch option {
+				case "":
+				case "string":
+					if !plainJsVarScalar(field.Type) {
+						return false
+					}
+				case "omitempty", "omitzero":
+					return false
+				default:
+					return false
+				}
+			}
+			if !plainJsVarTypeSeen(field.Type, seen) {
+				return false
+			}
+		}
+		return true
+	case reflect.Map:
+		return t.Key() == reflect.TypeFor[string]() && plainJsVarTypeSeen(t.Elem(), seen)
+	case reflect.Array:
+		return plainJsVarTypeSeen(t.Elem(), seen)
+	}
+	return false
 }

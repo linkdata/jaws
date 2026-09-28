@@ -339,8 +339,8 @@ transport error is retained in the Request cancellation cause, which is passed
 to `Jaws.Log`.
 
 Event-handler errors are logged and queued as browser danger alerts when possible.
-Recovered panics retain detail in the log but use a generic alert; generic JsVar
-setter failures do the same.
+Recovered panics retain detail in the log but use a generic alert. Rejected
+JsVar proposals use a generic alert; size rejections cancel the Request.
 
 Errors accepted for Logger delivery are dispatched through `Logger.Error`
 serially and asynchronously. The queue holds at most 4096 pending reports;
@@ -540,10 +540,11 @@ Before exposing an application outside local development:
 * Treat plain strings passed to HTML-producing widgets as trusted HTML. Route
   untrusted text through escaping conversion; see the [`bind`](./lib/bind/AI.md)
   and [`ui`](./lib/ui/AI.md) guides.
-* Define the browser-write policy for every `ui.JsVar`. Use `ui.PathSetter` for
-  path allow-lists or a `ClientCheck` for atomic generic-write validation, and
-  apply equivalent protection and the same lock to every binding that exposes
-  shared mutable state. See the [`ui` guide](./lib/ui/AI.md).
+* Define one `ClientCheck` on each browser-writable `ui.JsVarStore`. It validates
+  the complete tentative value and canonical path under the store lock. A nil
+  check denies browser writes. Use one store for every binding of the same
+  shared value, and keep its JSON tree free of shared mutable aliases when
+  relying on partial map patches. See the [`ui` guide](./lib/ui/AI.md).
 * Keep browser-to-server messages below the transport limit and use HTTP uploads
   for large data. An oversized inbound message closes the Request connection
   rather than rejecting only one value, and its read-limit error is reported

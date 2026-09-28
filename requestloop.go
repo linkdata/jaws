@@ -107,15 +107,6 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 			return
 		}
 
-		if group, grouped := tagmsg.Dest.(setGroup); grouped {
-			for _, msg := range group {
-				rq.handleBroadcast(msg, eventCallCh)
-				// Each Set keeps its position across Elements; getSendMsgs sorts
-				// within one send by Jid.
-				rq.sendQueue(outboundMsgCh)
-			}
-			continue
-		}
 		rq.handleBroadcast(tagmsg, eventCallCh)
 	}
 }
@@ -125,7 +116,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall) {
 	if wsmsg.Jid.IsValid() {
 		switch wsmsg.What {
-		case what.Input, what.Click, what.ContextMenu, what.Set:
+		case what.Input, what.Click, what.ContextMenu, what.JsVar:
 			rq.queueEvent(eventCallCh, rq.resolveEventFnCall(wsmsg.Jid, wsmsg.What, wsmsg.Data))
 		case what.Remove:
 			rq.handleRemove(wsmsg.Jid, wsmsg.Data)

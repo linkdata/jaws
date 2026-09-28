@@ -15,6 +15,8 @@ func TestParse(t *testing.T) {
 	}{
 		{"blank is Update", "", Update},
 		{"Update", "Update", Update},
+		{"JsVar", "JsVar", JsVar},
+		{"old Set name", "Set", Invalid},
 		{"Inner", "Inner", Inner},
 		{"ContextMenu", "ContextMenu", ContextMenu},
 		{"lowercase is not matched", "inner", Invalid},
@@ -60,7 +62,7 @@ func TestIsCommandAndValid(t *testing.T) {
 		{"Alert", Alert, true, true},
 		{"Call", Call, true, true},             // last command, just below separator
 		{"separator", separator, false, false}, // internal boundary marker, not a command or event
-		{"Set", Set, true, false},              // first element value, just above separator
+		{"JsVar", JsVar, true, false},          // first element value, just above separator
 		{"Inner", Inner, true, false},
 		{"Hook", Hook, true, false},            // last defined value, must stay valid
 		{"above Hook", Hook + 1, false, false}, // first undefined value above Hook

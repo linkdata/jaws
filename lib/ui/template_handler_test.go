@@ -183,7 +183,7 @@ func TestTemplate_RenderUpdateEventAndHelpers(t *testing.T) {
 	if err := tpl.JawsContextMenu(elem, jaws.Click{Name: "ctx"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := jaws.CallEventHandlers(tpl, elem, what.Set, "path=1"); err != nil {
+	if err := jaws.CallEventHandlers(tpl, elem, what.JsVar, "path=1"); err != nil {
 		t.Fatal(err)
 	}
 	if td.inputs != 2 {

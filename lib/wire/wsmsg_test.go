@@ -68,6 +68,21 @@ func Test_wsMsg_Append(t *testing.T) {
 			},
 			want: "Click\tJid.1\t\"double\\\"quote\"\n",
 		},
+		{
+			name:   "proposal is verbatim",
+			fields: fields{Data: `x=1`, Jid: 1, What: what.JsVar},
+			want:   "JsVar\tJid.1\tx=1\n",
+		},
+		{
+			name:   "patch deletion is verbatim",
+			fields: fields{Data: `x=`, Jid: 1, What: what.JsVar},
+			want:   "JsVar\tJid.1\tx=\n",
+		},
+		{
+			name:   "patch root is verbatim",
+			fields: fields{Data: `={"x":1}`, Jid: 1, What: what.JsVar},
+			want:   "JsVar\tJid.1\t={\"x\":1}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -129,10 +144,11 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
 		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
-		// Set and Call data is taken verbatim even when it begins with a double
-		// quote: it must not be run through strconv.Unquote (Parse excludes Set/Call
+		// JsVar and Call data is taken verbatim even when it begins with a double
+		// quote: it must not be run through strconv.Unquote (Parse excludes JsVar/Call
 		// from unquoting). Pins that guard against accidental removal.
-		{"set quote-prefixed verbatim", "Set\tJid.4\t\"x\"=1\n", WsMsg{Jid: jid.Jid(4), What: what.Set, Data: "\"x\"=1"}},
+		{"jsvar quote-prefixed verbatim", "JsVar\tJid.4\t\"x\"=1\n", WsMsg{Jid: jid.Jid(4), What: what.JsVar, Data: "\"x\"=1"}},
+		{"jsvar deletion", "JsVar\tJid.4\tx=\n", WsMsg{Jid: jid.Jid(4), What: what.JsVar, Data: "x="}},
 		{"call quote-prefixed verbatim", "Call\tJid.5\t\"x\"=1\n", WsMsg{Jid: jid.Jid(5), What: what.Call, Data: "\"x\"=1"}},
 	}
 	for _, tt := range tests {
@@ -145,21 +161,21 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 	}
 }
 
-// Test_wsParse_SetCallTruncateAtTab covers the parser contract that inbound Set
+// Test_wsParse_JsVarCallTruncateAtTab covers the parser contract that inbound JsVar
 // and Call data ends at the first tab: a tab-separated suffix an untrusted frame
 // appended past the documented boundary must be dropped, leaving only the
 // recoverable prefix. Frames without such a suffix must round-trip unchanged.
-func Test_wsParse_SetCallTruncateAtTab(t *testing.T) {
+func Test_wsParse_JsVarCallTruncateAtTab(t *testing.T) {
 	tests := []struct {
 		name string
 		txt  string
 		want WsMsg
 	}{
-		{"set suffix dropped", "Set\tJid.1\tpath=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Set, Data: "path=1"}},
+		{"jsvar suffix dropped", "JsVar\tJid.1\tpath=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.JsVar, Data: "path=1"}},
 		{"call suffix dropped", "Call\tJid.1\tfn=1\textra\n", WsMsg{Jid: jid.Jid(1), What: what.Call, Data: "fn=1"}},
-		{"set multiple tabs keep prefix", "Set\tJid.2\ta\tb\tc\n", WsMsg{Jid: jid.Jid(2), What: what.Set, Data: "a"}},
-		{"set empty before tab", "Set\tJid.3\t\textra\n", WsMsg{Jid: jid.Jid(3), What: what.Set, Data: ""}},
-		{"set no tab unchanged", "Set\tJid.4\tpath=1\n", WsMsg{Jid: jid.Jid(4), What: what.Set, Data: "path=1"}},
+		{"jsvar multiple tabs keep prefix", "JsVar\tJid.2\ta\tb\tc\n", WsMsg{Jid: jid.Jid(2), What: what.JsVar, Data: "a"}},
+		{"jsvar empty before tab", "JsVar\tJid.3\t\textra\n", WsMsg{Jid: jid.Jid(3), What: what.JsVar, Data: ""}},
+		{"jsvar no tab unchanged", "JsVar\tJid.4\tpath=1\n", WsMsg{Jid: jid.Jid(4), What: what.JsVar, Data: "path=1"}},
 		{"call no tab unchanged", "Call\tJid.5\tfn=1\n", WsMsg{Jid: jid.Jid(5), What: what.Call, Data: "fn=1"}},
 	}
 	for _, tt := range tests {
@@ -179,6 +195,7 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	}{
 		{"nil", nil},
 		{"invalid What", []byte("invalid\t\t\n")},
+		{"old Set command", []byte("Set\tJid.1\tx=1\n")},
 		{"missing ending linefeed", []byte("Click\t\t")},
 		{"just one tab", []byte("Click\t\n")},
 		{"newline instead of What", []byte("\n\t\t\n")},
@@ -225,7 +242,7 @@ func Fuzz_wsParse(f *testing.F) {
 	f.Add([]byte("Click\t\t\"10 20 5 name\\tJid.1\"\n"))
 	f.Add([]byte("ContextMenu\tJid.1\t\"1 2 0 menu\"\n"))
 	f.Add([]byte("Inner\tJid.1\t\"data\\nline\"\n"))
-	f.Add([]byte("Set\tJid.1\tpath={\"a\":1}\n"))
+	f.Add([]byte("JsVar\tJid.1\tpath={\"a\":1}\n"))
 	f.Add([]byte("Call\tJid.1\tfn=[1,2]\n"))
 	f.Add([]byte("invalid\t\t\"\"\n"))
 	f.Fuzz(func(t *testing.T, a []byte) {
@@ -251,7 +268,7 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 	f.Add(uint8(what.Input), int32(0), "value")
 	f.Add(uint8(what.Click), int32(1), "1 2 5 name")
 	f.Add(uint8(what.ContextMenu), int32(2), "3 4 2 menu")
-	f.Add(uint8(what.Set), int32(3), `path={"a":1}`)
+	f.Add(uint8(what.JsVar), int32(3), `path={"a":1}`)
 	f.Add(uint8(what.Call), int32(4), `fn=[1,2]`)
 	f.Fuzz(func(t *testing.T, whatv uint8, jidv int32, data string) {
 		wht := what.What(whatv)
@@ -267,14 +284,14 @@ func Fuzz_wsMsgAppendParseRoundTrip(f *testing.F) {
 			return
 		}
 		// Append/Parse deliberately normalize data to valid UTF-8 (Parse runs
-		// strings.ToValidUTF8 and appendJSONQuote replaces invalid runes with
+		// strings.ToValidUTF8 and AppendJSONQuote replace invalid runes with
 		// U+FFFD), so the round-trip identity only holds for already-valid UTF-8.
 		if !utf8.ValidString(data) {
 			return
 		}
-		// Set/Call data is written verbatim, so it must not contain the tab/newline
-		// framing delimiters; for other commands appendJSONQuote escapes them.
-		if (wht == what.Set || wht == what.Call) && strings.ContainsAny(data, "\t\n") {
+		// JsVar and Call data is written verbatim, so it must not contain
+		// tab or newline framing delimiters; AppendJSONQuote escapes them for others.
+		if (wht == what.JsVar || wht == what.Call) && strings.ContainsAny(data, "\t\n") {
 			return
 		}
 		msg := WsMsg{
@@ -324,10 +341,10 @@ func Test_wsMsg_AppendDataIsValidJSON(t *testing.T) {
 }
 
 // Test_wsParse_SanitizesInvalidUTF8InVerbatimData covers Parse's ToValidUTF8
-// sanitization of the verbatim Set/Call data path: invalid UTF-8 from the browser
+// sanitization of the verbatim JsVar/Call data path: invalid UTF-8 from the browser
 // must be stripped so downstream consumers never see it.
 func Test_wsParse_SanitizesInvalidUTF8InVerbatimData(t *testing.T) {
-	raw := append([]byte("Set\tJid.1\tx="), 0xff, 0xfe, 'y', '\n')
+	raw := append([]byte("JsVar\tJid.1\tx="), 0xff, 0xfe, 'y', '\n')
 	msg, ok := Parse(raw)
 	if !ok {
 		t.Fatal("expected Parse to succeed")
@@ -340,10 +357,7 @@ func Test_wsParse_SanitizesInvalidUTF8InVerbatimData(t *testing.T) {
 	}
 }
 
-// stdlibJSONQuote is the standard-library reference for appendJSONQuote: an
-// encoder with HTML escaping disabled, which is the behavior the hand-rolled
-// quoter mimics (and which jsontext.AppendQuote would provide directly when
-// encoding/json/v2 builds without GOEXPERIMENT=jsonv2).
+// stdlibJSONQuote is an independent JSON encoder with HTML escaping disabled.
 func stdlibJSONQuote(s string) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -355,14 +369,13 @@ func stdlibJSONQuote(s string) []byte {
 	return b[:len(b)-1] // drop the trailing newline Encode appends
 }
 
-// Fuzz_appendJSONQuote pins the PROVISIONAL hand-rolled appendJSONQuote to the
-// standard library so it can be replaced confidently when jsontext.AppendQuote
-// becomes available. For any input it must (1) produce valid JSON the browser's
+// FuzzAppendJSONQuote checks the encoded output against an independent encoder.
+// For any input it must (1) produce valid JSON the browser's
 // JSON.parse accepts, (2) decode to exactly what the stdlib non-HTML-escaping
 // encoder decodes to (cosmetic escape differences are allowed, semantic ones are
 // not), and (3) stay decodable by strconv.Unquote so the server-side Append->Parse
 // round trip is preserved.
-func Fuzz_appendJSONQuote(f *testing.F) {
+func FuzzAppendJSONQuote(f *testing.F) {
 	for _, s := range []string{
 		"",
 		"plain",
@@ -376,7 +389,7 @@ func Fuzz_appendJSONQuote(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		out := appendJSONQuote(nil, s)
+		out := AppendJSONQuote(nil, s)
 
 		if !json.Valid(out) {
 			t.Fatalf("output is not valid JSON: in=%q out=%q", s, out)
@@ -399,9 +412,7 @@ func Fuzz_appendJSONQuote(f *testing.F) {
 	})
 }
 
-// Test_AppendJSONQuote covers the exported wrapper: it must delegate to
-// appendJSONQuote (whose exact behavior Fuzz_appendJSONQuote pins) and honor the
-// append contract by extending the supplied buffer rather than replacing it.
+// Test_AppendJSONQuote checks that quoting extends the supplied buffer.
 func Test_AppendJSONQuote(t *testing.T) {
 	for _, s := range []string{
 		"",
@@ -419,11 +430,6 @@ func Test_AppendJSONQuote(t *testing.T) {
 			t.Errorf("AppendJSONQuote dropped the buffer prefix for %q: %q", s, got)
 		}
 		quoted := got[len(prefix):]
-
-		// It must produce exactly what the unexported implementation it wraps does.
-		if want := appendJSONQuote(nil, s); !bytes.Equal(quoted, want) {
-			t.Errorf("AppendJSONQuote(%q) = %q, want %q", s, quoted, want)
-		}
 
 		// And that output must be valid JSON the browser's JSON.parse accepts.
 		if !json.Valid(quoted) {

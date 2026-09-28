@@ -6,9 +6,8 @@ See the [module-wide AI guidance](../../AI.md) before changing this package.
 
 This package embeds the thin JaWS browser client and stylesheet and contains
 helpers used while generating page metadata. The server is authoritative. The
-client attaches event forwarding to managed `Jid.*` nodes, applies explicit DOM
-commands, tracks live `JsVar` name routes, and reconnects after transport loss;
-it does not replicate application state or business rules.
+client forwards events from managed `Jid.*` nodes, applies DOM commands and
+optimistic writes to live browser variables, and reconnects after transport loss.
 
 Server-sent HTML is intentionally inserted as HTML. The client must not escape
 it because trusted widget markup and replacements need full DOM semantics.
@@ -34,8 +33,8 @@ set or remove the managed `id` attribute and that accept only canonical positive
 - DOM replacement/removal reports disappeared managed descendants to the
   server. Direct-child validation for insert/remove positions prevents an
   unrelated same-ID node elsewhere in the page from becoming a target.
-- Each command in a batched frame is isolated. A failing DOM command is logged
-  and later commands in the same frame still run.
+- Each ordinary command in a batched frame is isolated. A failed `JsVar` closes
+  the socket and reloads the page so the next render restores canonical state.
 
 The reconnect path observes a five-second grace period after a WebSocket
 failure. It neither shows the connection-lost indicator nor probes
@@ -52,13 +51,15 @@ runtime tests.
 
 ## Browser helpers
 
-`jawsVar` reads or writes an application-owned global and sends a `Set` frame
-for every live binding registered under its top-level name. Non-empty dotted
-components are verbatim JavaScript property names: on an array, `"1"` addresses
-an element, while `"01"` creates a side property omitted by JSON serialization
-and rejected by generic Go array and slice bindings. Exact `__proto__` path
-components are rejected, and the routing table remains a `Map` so names cannot
-mutate an object prototype. Full `JsVar` authority, validation, and
+`jawsVar(name)` reads the live path from `window` and attempts to propose its JSON
+value when bound and connected. A two-argument call sends one proposal for a bound
+path, then assigns the live variable. It returns true if assignment succeeds.
+Unbound paths work locally. A closed socket or serialization/send failure for a
+bound write returns false without a local change. Binding nodes hold the store
+name, Jid, and initial JSON; later values live on `window`. Paths reject empty,
+delimiter, and prototype-sensitive components. Bound array writes require an
+existing canonical index; a server patch may replace the root or a safe
+subtree, or delete a map key. Full store authority, validation, and
 synchronization rules belong to `lib/ui/AI.md`.
 
 Value updates avoid writes when possible and preserve text selection when a
@@ -89,8 +90,8 @@ the page security policy.
 Run `JAWS_REQUIRE_NODE=1 go test -race ./lib/assets` and
 `JAWS_REQUIRE_NODE=1 go test ./lib/assets` from the module root. Requiring Node
 prevents the browser-client behavior suite from silently skipping. Those tests
-cover event routing, connection gating, DOM mutation, reconnection, `JsVar`
-fanout, prototype safety, and batch isolation. Keep
+cover event routing, connection gating, DOM mutation, reconnection, `JsVarStore`
+proposals and patches, prototype safety, and batch isolation. Keep
 `BenchmarkJawsJSMessageDispatch` when changing the command dispatcher. Resource
 tests should assert generated markup and classification, not hashes of embedded
 repository files.
