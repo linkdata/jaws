@@ -21,7 +21,9 @@ var ErrJsVarBindingUsed = errors.New("jsvar: binding already rendered")
 // ErrJsVarReadOnly reports a browser proposal to a store without ClientCheck.
 var ErrJsVarReadOnly = errors.New("jsvar: browser writes denied")
 
-// ErrJsVarTooLarge reports a failed JSON size check and cancels the source Request.
+// ErrJsVarTooLarge reports a failed JSON size check.
+//
+// A browser proposal rejected with this error cancels its source Request.
 var ErrJsVarTooLarge = errors.New("jsvar: JSON size check failed")
 
 type errJsVarClientWrite struct{ cause error }
