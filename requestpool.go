@@ -10,6 +10,7 @@ package jaws
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net/http"
 	"net/netip"
@@ -263,7 +264,11 @@ func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 			}
 		}
 		jw.mu.Unlock()
-		_ = jw.Log(err)
+		// Cancellation was reported when the Request was canceled. Repeated
+		// claims must not re-log its initial URI.
+		if !errors.Is(err, ErrRequestCancelled) {
+			_ = jw.Log(err)
+		}
 	}
 	return
 }
