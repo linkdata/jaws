@@ -23,23 +23,24 @@ type uiHandler struct {
 	dot  any
 }
 
-// pageTemplate wraps a [Template] used as a whole-page document template.
+// pageTemplate holds a [Template] without promoting its event methods. Only
+// rendered widgets may delegate events to the page dot.
 type pageTemplate struct {
-	Template
+	tmpl Template
 }
 
 // The per-request page UI is a *pageTemplate; see [uiHandler.ServeHTTP].
 var _ jaws.UI = (*pageTemplate)(nil)
 
 // JawsUpdate is a no-op because a page-level template is render-only: the
-// embedded [Template.JawsUpdate] would re-render the entire document into itself
+// [Template.JawsUpdate] would re-render the entire document into itself
 // when OuterHTMLTag is set, so it is deliberately silenced here.
 func (*pageTemplate) JawsUpdate(*jaws.Element) {}
 
 // JawsRender renders the whole-page template, looking it up and executing it
 // directly.
 //
-// Unlike the embedded [Template], the page dot is ordinary [html/template] data
+// Unlike [Template], the page dot is ordinary [html/template] data
 // and is never treated as a JaWS tag: there is no tag expansion, no generated
 // wrapper element, and [pageTemplate.JawsUpdate] is a no-op. Because the page
 // element cannot re-render itself, deriving tag identity from the page dot would
@@ -52,10 +53,10 @@ func (pt *pageTemplate) JawsRender(elem *jaws.Element, w io.Writer, params []any
 	st := &templateState{}
 	if err = jaws.SetElementState(elem, st); err == nil {
 		var lookedUp *template.Template
-		if lookedUp, err = pt.lookup(elem); err == nil {
+		if lookedUp, err = pt.tmpl.lookup(elem); err == nil {
 			// A failed execution needs no cleanup here: RequestWriter.NewUI unregisters
 			// the page Element and, through the state slot, everything it owns.
-			err = pt.execute(elem, w, lookedUp, st)
+			err = pt.tmpl.execute(elem, w, lookedUp, st)
 		}
 	}
 	return
@@ -98,12 +99,12 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Build a fresh per-request pointer so the UI is comparable as a map key
 	// regardless of the page dot: ordinary html/template data such as a slice or map
 	// is not usable as a tag and would fail the runtime comparability check in
-	// Request.NewElement if a bare pageTemplate value (whose Dot is any) were used.
+	// Request.NewElement if a bare pageTemplate value were used.
 	// The pointer identity is always comparable and fresh per request. Element tracking
 	// lives in the page Element's state slot claimed by pageTemplate.JawsRender.
 	// The private constructor bypasses NewTemplate's "div" default. pageTemplate
 	// executes the document directly and deliberately emits no generated wrapper.
-	pt := &pageTemplate{Template: newTemplate("", h.name, h.dot)}
+	pt := &pageTemplate{tmpl: newTemplate("", h.name, h.dot)}
 	if err := rw.NewUI(pt); err != nil {
 		_ = h.Log(err)
 		// A failure before any output (for example a missing template) can still

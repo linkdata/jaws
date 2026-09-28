@@ -604,7 +604,7 @@ func TestPageTemplate_RenderFailureDeletesOwnedElements(t *testing.T) {
 	dot := &ownedDot{fail: errOwnedDotCheck}
 	var sb strings.Builder
 	rw := RequestWriter{Request: rq, Writer: &sb}
-	err := rw.NewUI(&pageTemplate{Template: Template{Name: "owned-failafter", Dot: dot}})
+	err := rw.NewUI(&pageTemplate{tmpl: Template{Name: "owned-failafter", Dot: dot}})
 	if !errors.Is(err, errOwnedDotCheck) {
 		t.Fatalf("render error = %v, want %v", err, errOwnedDotCheck)
 	}
