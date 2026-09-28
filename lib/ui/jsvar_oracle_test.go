@@ -1,5 +1,7 @@
 package ui
 
+//lint:file-ignore SA5008 The embed tags intentionally test encoder behavior across Go versions.
+
 import (
 	"encoding/json"
 	"errors"

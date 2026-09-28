@@ -26,7 +26,7 @@ const (
 	maxJsVarNameBytes = 4096
 )
 
-var jsVarNameRx = regexp.MustCompile("^[A-Za-z_$][A-Za-z0-9_$]*$")
+var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`)
 
 func validateJsVarName(name string) error {
 	if len(name) > maxJsVarNameBytes {
@@ -35,8 +35,10 @@ func validateJsVarName(name string) error {
 	if !jsVarNameRx.MatchString(name) {
 		return fmt.Errorf("%w: illegal syntax", ErrIllegalJsVarName)
 	}
-	if name == "__proto__" || name == "constructor" || name == "prototype" {
-		return fmt.Errorf("%w: reserved", ErrIllegalJsVarName)
+	for component := range strings.SplitSeq(name, ".") {
+		if component == "__proto__" || component == "constructor" || component == "prototype" {
+			return fmt.Errorf("%w: reserved", ErrIllegalJsVarName)
+		}
 	}
 	return nil
 }
@@ -95,10 +97,11 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 
 // JsVarStore owns one authoritative Go value and its browser name.
 //
-// Use [JsVarStore.Bind] for each rendered binding. The store never retains a
-// Request or Element. ClientCheck and ExtraTags are configured before first use
-// and must not be changed while the store is active. Every binding sees the same
-// JSON value; ClientCheck controls writes, not disclosure.
+// Use [JsVarStore.Bind] once per Request during initial page rendering. The
+// store never retains a Request or Element. ClientCheck and ExtraTags are
+// configured before first use and must not be changed while the store is active.
+// Every binding sees the same JSON value; ClientCheck controls writes, not
+// disclosure.
 //
 // All reads and writes of the bound value must use the supplied locker. Server
 // mutations must use SetPath, DeletePath, or WriteLocked to publish changes.
@@ -122,9 +125,11 @@ type JsVarStore[T any] struct {
 
 // NewJsVarStore creates a store with an application-owned browser name.
 //
-// The name is one JavaScript identifier using ASCII letters, digits,
-// underscore, or dollar sign; it cannot start with a digit or equal
-// "__proto__", "constructor", or "prototype", and is at most 4096 bytes.
+// The name is a dot-separated path from window using JavaScript identifiers
+// with ASCII letters, digits, underscore, or dollar sign. No component may be
+// "__proto__", "constructor", or "prototype"; the limit is 4096 bytes.
+// Initial data and patches assign to that live path, including browser-owned
+// setters and their side effects.
 //
 // The value and locker must remain valid for the store's lifetime. An invalid
 // name returns [ErrIllegalJsVarName], and a nil value returns
@@ -149,7 +154,9 @@ func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value 
 
 // Bind creates a one-use browser binding for this store.
 //
-// Render each binding once through [RequestWriter.NewUI]. A binding can be
+// Render each binding once during the Request's initial page render, outside
+// regions that may later be replaced or removed. Browser names may neither
+// duplicate nor contain one another within a Request. A binding can be
 // deactivated during a connection redirect to suppress provisional traffic.
 func (store *JsVarStore[T]) Bind() *JsVarBinding[T] {
 	return &JsVarBinding[T]{store: store}
@@ -293,25 +300,20 @@ func (store *JsVarStore[T]) publish(paths []string) {
 	}
 }
 
-type jsVarNameTag struct{ name string }
-
-type jsVarBindingRoute interface {
-	jsVarStore() any
-}
+type (
+	jsVarNameTag   struct{ name string }
+	jsVarPrefixTag struct{ name string }
+)
 
 // JsVarBinding renders one browser route to a [JsVarStore].
 //
 // Bindings are one-use and request-scoped. Deactivate makes a provisional route
 // inert before a redirect; it is safe to call concurrently with input dispatch.
-// Every active binding can handle proposals and send patches. The browser keeps
-// a value per live Jid and uses its selected binding for jawsVar reads and writes.
 type JsVarBinding[T any] struct {
 	store    *JsVarStore[T]
 	rendered atomic.Bool
 	active   atomic.Bool
 }
-
-func (binding *JsVarBinding[T]) jsVarStore() any { return binding.store }
 
 // Deactivate suppresses this binding's later proposal and patch work.
 //
@@ -357,15 +359,22 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 	defer store.locker.Unlock()
 	// Registration and snapshot share the store lock. A mutation sees either
 	// the rendered value or the registered tag, including before WS connection.
-	elem.Tag(jsVarNameTag{store.name}, store)
-	for _, other := range elem.Request.GetElements(jsVarNameTag{store.name}) {
-		if other == elem {
-			continue
+	tags := []any{jsVarNameTag{store.name}, store}
+	conflicts := []any{jsVarNameTag{store.name}, jsVarPrefixTag{store.name}}
+	for i := 0; i < len(store.name); i++ {
+		if store.name[i] == '.' {
+			prefix := store.name[:i]
+			tags = append(tags, jsVarPrefixTag{prefix})
+			conflicts = append(conflicts, jsVarNameTag{prefix})
 		}
-		route, ok := other.UI().(jsVarBindingRoute)
-		if !ok || route.jsVarStore() != store {
-			err = ErrJsVarNameConflict
-			return
+	}
+	elem.Tag(tags...)
+	for _, tag := range conflicts {
+		for _, other := range elem.Request.GetElements(tag) {
+			if other != elem {
+				err = ErrJsVarNameConflict
+				return
+			}
 		}
 	}
 	data, _, err = marshalJsVar(store.value)

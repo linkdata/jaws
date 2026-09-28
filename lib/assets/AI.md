@@ -7,8 +7,9 @@ See the [module-wide AI guidance](../../AI.md) before changing this package.
 This package embeds the thin JaWS browser client and stylesheet and contains
 helpers used while generating page metadata. The server is authoritative. The
 client attaches event forwarding to managed `Jid.*` nodes, applies explicit DOM
-commands, keeps optimistic local values for `JsVarStore` bindings, and
-reconnects after transport loss. Go remains authoritative for application state.
+commands, applies optimistic writes to live browser variables for `JsVarStore`
+bindings, and reconnects after transport loss. Go remains authoritative for
+application state.
 
 Server-sent HTML is intentionally inserted as HTML. The client must not escape
 it because trusted widget markup and replacements need full DOM semantics.
@@ -52,15 +53,16 @@ runtime tests.
 
 ## Browser helpers
 
-`jawsVar(name)` reads the attached store value without sending. A two-argument
-call serializes one JSON proposal, sends it to the store's active Jid, then
-updates local state and returns true; an unavailable socket, absent binding, or
-serialization/send failure returns false without a local change. Values live in
-a `Map`, separate from `window` properties. Paths reject empty, delimiter, and
-prototype-sensitive components. Array writes require an existing canonical
-index; a server patch may replace the root or a safe subtree, or delete a map
-key. Full store authority, validation, and synchronization rules belong to
-`lib/ui/AI.md`.
+`jawsVar(name)` reads the live path from `window` and sends its current JSON value
+when an initial binding and open socket exist. A two-argument call serializes one
+JSON proposal for a bound path, sends it to the binding's Jid, then updates the
+live variable and returns true. Unbound paths read and write locally. A closed
+socket or serialization/send failure for a bound write returns false without a
+local change. Binding nodes hold route IDs, not copies of values. Paths reject
+empty, delimiter, and prototype-sensitive components. Bound array writes require
+an existing canonical index; a server patch may replace the root or a safe
+subtree, or delete a map key. Full store authority, validation, and
+synchronization rules belong to `lib/ui/AI.md`.
 
 Value updates avoid writes when possible and preserve text selection when a
 textual value changes by insertion or removal. Managed native form reset is not

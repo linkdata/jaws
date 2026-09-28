@@ -1,5 +1,7 @@
 package ui
 
+//lint:file-ignore SA5008 The embed tags intentionally test encoder behavior across Go versions.
+
 import (
 	"bytes"
 	"encoding/json"
@@ -828,44 +830,68 @@ func TestJsVarStoreMarshalPanicReleasesLock(t *testing.T) {
 	mu.Unlock()
 }
 
-func TestJsVarStoreNameConflictAndDeactivation(t *testing.T) {
+func TestJsVarStoreNameConflicts(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		first        string
+		second       string
+		sameStore    bool
+		wantConflict bool
+	}{
+		{name: "same store", first: "client", second: "client", sameStore: true, wantConflict: true},
+		{name: "different store", first: "client", second: "client", wantConflict: true},
+		{name: "child", first: "client", second: "client.state", wantConflict: true},
+		{name: "parent", first: "client.state", second: "client", wantConflict: true},
+		{name: "sibling", first: "client.left", second: "client.right"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, rq := newCoreRequest(t)
+			var mu sync.RWMutex
+			value := 1
+			first := newTestJsVarStore(t, jw, tc.first, &mu, &value)
+			renderTestJsVar(t, rq, first)
+			second := first
+			if !tc.sameStore {
+				second = newTestJsVarStore(t, jw, tc.second, &mu, &value)
+			}
+			elem := rq.NewElement(second.Bind())
+			err := elem.JawsRender(&bytes.Buffer{}, nil)
+			if tc.wantConflict && !errors.Is(err, ErrJsVarNameConflict) {
+				t.Fatalf("render error = %v, want name conflict", err)
+			}
+			if !tc.wantConflict && err != nil {
+				t.Fatalf("render sibling: %v", err)
+			}
+			rq.DeleteElement(elem)
+		})
+	}
+}
+
+func TestJsVarBindingDeactivation(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	var mu sync.RWMutex
 	value := 1
-	first := newTestJsVarStore(t, jw, "client", &mu, &value)
-	wrapped := &struct{ *JsVarBinding[int] }{first.Bind()}
-	wrappedElem := rq.NewElement(wrapped)
-	if err := wrappedElem.JawsRender(&bytes.Buffer{}, nil); err != nil {
-		t.Fatalf("wrapped same-store binding: %v", err)
+	store := newTestJsVarStore(t, jw, "client", &mu, &value)
+	binding, _, _ := renderTestJsVar(t, rq, store)
+	binding.Deactivate()
+	if binding.active.Load() {
+		t.Fatal("Deactivate left binding active")
 	}
-	binding1, _, _ := renderTestJsVar(t, rq, first)
-	if changed, err := first.SetPath("", 2); err != nil || !changed {
-		t.Fatalf("SetPath = (%t, %v), want changed", changed, err)
-	}
-	binding2, _, html := renderTestJsVar(t, rq, first)
-	if !strings.Contains(html, `data-jawsdata="2"`) {
-		t.Fatalf("new binding snapshot = %q, want current value", html)
-	}
-	if !binding1.active.Load() || !binding2.active.Load() {
-		t.Fatal("same-store bindings did not stay active")
-	}
-	other := newTestJsVarStore(t, jw, "client", &mu, &value)
-	elem := rq.NewElement(other.Bind())
-	if err := elem.JawsRender(&bytes.Buffer{}, nil); !errors.Is(err, ErrJsVarNameConflict) {
-		t.Fatalf("different-store conflict: %v", err)
-	}
-	rq.DeleteElement(elem)
-	binding2.Deactivate()
-	if !binding1.active.Load() || binding2.active.Load() {
-		t.Fatal("Deactivate affected another binding")
-	}
-	for _, name := range []string{"__proto__", "constructor", "prototype", strings.Repeat("a", 4097)} {
+}
+
+func TestJsVarStoreNameValidation(t *testing.T) {
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	value := 1
+	for _, name := range []string{"__proto__", "client.__proto__", "client.constructor", "client.prototype", "client..state", strings.Repeat("a", 4097)} {
 		if _, err := NewJsVarStore(jw, name, &mu, &value); !errors.Is(err, ErrIllegalJsVarName) {
 			t.Fatalf("illegal name %q: %v", name, err)
 		}
 	}
-	if _, err := NewJsVarStore(jw, strings.Repeat("a", 4096), &mu, &value); err != nil {
-		t.Fatalf("maximum name length: %v", err)
+	for _, name := range []string{"client", "client.state", "location.href", strings.Repeat("a", 4096)} {
+		if _, err := NewJsVarStore(jw, name, &mu, &value); err != nil {
+			t.Fatalf("valid name %q: %v", name, err)
+		}
 	}
 }
 

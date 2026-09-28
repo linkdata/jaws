@@ -286,13 +286,15 @@ slider := ui.NewRange(binder)
 ## JavaScript variables
 
 JsVarStore owns one application value and one browser name. Its Go value is
-authoritative. Create one store for shared state, then call Bind for each
-Request render on the Jaws instance passed to NewJsVarStore; each binding is
-used once. The bundled client holds values in a private Map, so read or
-propose changes through jawsVar rather than window properties.
-When several bindings of one store remain live in a Request, each receives
-canonical patches. The browser keeps each binding's value current and uses the
-last attached live binding for `jawsVar` reads and writes.
+authoritative. Create one store for shared state, then call Bind once per
+Request during initial page rendering on the Jaws instance passed to
+NewJsVarStore. Keep the binding outside regions that may be replaced or removed.
+The browser reads and writes the live path from `window`; declare application
+globals with `var` or as `window` properties before jaws.js attaches the page.
+Names may be dot-separated paths to existing browser or package variables.
+Each Request may bind a browser path only once; overlapping names such as
+`client` and `client.x` conflict.
+Initial data and patches assign to the live path, so a browser setter may run.
 
 ```go
 store, err := ui.NewJsVarStore(jw, "client", &mu, &client)
@@ -304,8 +306,8 @@ store.ClientCheck = func(source *jaws.Element, next *Client, path string) error 
 }
 ```
 
-Assign `store` to a `ClientStore *ui.JsVarStore[Client]` field on the template
-Dot, then render a fresh binding:
+Assign `store` to a `ClientStore *ui.JsVarStore[Client]` field on the page Dot,
+then render a binding in the initial page template:
 
 ```gotemplate
 {{$.NewUI (.Dot.ClientStore.Bind)}}
@@ -322,11 +324,14 @@ the complete value: a root or parent proposal can change multiple descendants,
 so a path-only denylist cannot make a field immutable.
 
 A browser call jawsVar("client.x", value) sends one Proposal when the socket is
-open, then changes its local value optimistically and returns true. A false
-result leaves local state alone. Every accepted change schedules a canonical
-Patch for all bindings. A rejected, invalid, or unchanged proposal schedules a
-source correction; a JSON size rejection cancels the source Request so its next
-render restores canonical state. Server writes use SetPath or DeletePath;
+open, then changes the live variable optimistically and returns true. A call
+with one argument reads the live value and proposes it when bound and connected;
+this also sends direct browser-side mutations. Unbound paths read and write
+locally without a Proposal. A false write leaves local state alone. Every
+accepted change schedules a canonical Patch for all bindings. A rejected,
+invalid, or unchanged proposal schedules a source correction; a JSON size
+rejection cancels the source Request so its next render restores canonical state.
+Server writes use SetPath or DeletePath;
 grouped atomic read-modify-write operations use WriteLocked's borrowed,
 read-only value and its SetPath/DeletePath writer. ReadLocked borrows the
 complete value under its read lock. Neither callback may retain mutable

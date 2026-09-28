@@ -12,8 +12,8 @@ var ErrIllegalJsVarName = errors.New("illegal jsvar name")
 // ErrIllegalJsVarPath reports an invalid or reserved dotted path.
 var ErrIllegalJsVarPath = errors.New("jsvar: invalid path")
 
-// ErrJsVarNameConflict reports different stores using one browser name in a Request.
-var ErrJsVarNameConflict = errors.New("jsvar: browser name bound to another store")
+// ErrJsVarNameConflict reports duplicate or overlapping browser names in a Request.
+var ErrJsVarNameConflict = errors.New("jsvar: browser name already bound")
 
 // ErrJsVarBindingUsed reports a binding rendered more than once.
 var ErrJsVarBindingUsed = errors.New("jsvar: binding already rendered")
