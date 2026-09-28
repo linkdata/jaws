@@ -1,6 +1,6 @@
 module github.com/linkdata/jaws
 
-go 1.25.0
+go 1.27.0
 
 require (
 	github.com/coder/websocket v1.8.15

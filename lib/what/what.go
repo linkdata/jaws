@@ -30,11 +30,11 @@ const (
 
 	// Commands associated with an Element
 
-	// Set carries a JsVar update between server and browser.
+	// JsVar carries a JavaScript variable update between server and browser.
 	//
 	// Server-to-browser Data uses path=json for assignment or path= for deletion.
 	// Browser-to-server Data uses path=json as an untrusted proposal.
-	Set
+	JsVar
 	// Inner sets the element's inner HTML.
 	Inner
 	// Delete deletes the element.

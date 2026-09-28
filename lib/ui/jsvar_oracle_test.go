@@ -68,7 +68,7 @@ func TestJsVarStoreHiddenNoOpProposalRejects(t *testing.T) {
 		{name: "different hidden value", proposal: `secret="wrong"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := jaws.CallEventHandlers(binding, elem, what.Set, tc.proposal); !errors.Is(err, ErrIllegalJsVarPath) {
+			if err := jaws.CallEventHandlers(binding, elem, what.JsVar, tc.proposal); !errors.Is(err, ErrIllegalJsVarPath) {
 				t.Fatalf("hidden proposal error = %v, want ErrIllegalJsVarPath", err)
 			}
 			if state.Secret != "hidden" || checks != 0 {
@@ -120,7 +120,7 @@ func TestJsVarStoreEmbeddedAliasNoOpProposalRejects(t *testing.T) {
 		{name: "different Go alias", proposal: `Meta={"owner":"mallory"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := jaws.CallEventHandlers(binding, elem, what.Set, tc.proposal); !errors.Is(err, ErrIllegalJsVarPath) {
+			if err := jaws.CallEventHandlers(binding, elem, what.JsVar, tc.proposal); !errors.Is(err, ErrIllegalJsVarPath) {
 				t.Fatalf("alias proposal error = %v, want ErrIllegalJsVarPath", err)
 			}
 			if state.Meta.Owner != "alice" || checks != 0 {

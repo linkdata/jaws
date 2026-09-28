@@ -87,28 +87,26 @@ type requestBuffers struct {
 // non-running Request is retired. It then remains cancelled and unregistered. Its
 // pointer identity is never reused for another connection.
 type Request struct {
-	Jaws             *Jaws                      // (read-only) the JaWS instance the Request belongs to
-	JawsKey          key.Key                    // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
-	remoteIP         netip.Addr                 // (read-only) remote IP, or the zero netip.Addr if unset
-	state            atomic.Int32               // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
-	lastWriteSeconds atomic.Int32               // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
-	mu               deadlock.RWMutex           // protects following
-	lastJid          Jid                        // last element Jid allocated within this Request
-	initial          *http.Request              // initial HTTP request passed to Jaws.NewRequest
-	session          *Session                   // session, if established
-	todoDirt         []any                      // pending dirty tags and exact Element targets
-	todoDirtSeen     map[any]struct{}           // membership for selectors retained across dirty passes
-	todoPaths        map[*Element]*dirtyPathSet // pending path updates for live Elements
-	ctx              context.Context            // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
-	httpDoneCh       <-chan struct{}            // once claimed, set to http.Request.Context().Done()
-	cancelFn         context.CancelCauseFunc    // cancel function
-	connectFn        ConnectFn                  // a ConnectFn to call before starting message processing for the Request
-	buffers          *requestBuffers            // reusable storage borrowed from Jaws.requestBufferPool; returned to the pool on completion, kept on retirement
-	elems            []*Element                 // our Elements
-	deletedElems     int                        // deleted tombstones retained in elems until amortized compaction
-	tagMap           map[any][]*Element         // maps tags to Elements
-	muQueue          deadlock.Mutex             // protects wsQueue and tailsent
-	wsQueue          []wire.WsMsg               // queued messages to send
+	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
+	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
+	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
+	state            atomic.Int32            // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
+	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
+	mu               deadlock.RWMutex        // protects following
+	lastJid          Jid                     // last element Jid allocated within this Request
+	initial          *http.Request           // initial HTTP request passed to Jaws.NewRequest
+	session          *Session                // session, if established
+	todoDirt         []any                   // pending dirty tags and exact Element targets
+	ctx              context.Context         // current context, derived from either Jaws or WS HTTP req; stored in the struct because there is no call chain between Request creation and its use once the WebSocket exists
+	httpDoneCh       <-chan struct{}         // once claimed, set to http.Request.Context().Done()
+	cancelFn         context.CancelCauseFunc // cancel function
+	connectFn        ConnectFn               // a ConnectFn to call before starting message processing for the Request
+	buffers          *requestBuffers         // reusable storage borrowed from Jaws.requestBufferPool; returned to the pool on completion, kept on retirement
+	elems            []*Element              // our Elements
+	deletedElems     int                     // deleted tombstones retained in elems until amortized compaction
+	tagMap           map[any][]*Element      // maps tags to Elements
+	muQueue          deadlock.Mutex          // protects wsQueue and tailsent
+	wsQueue          []wire.WsMsg            // queued messages to send
 	tailsent         bool
 }
 
@@ -186,7 +184,6 @@ func (rq *Request) finishLocked() {
 	}
 	rq.killSessionLocked(prev.claimed())
 	rq.storeState(reqFinished)
-	rq.todoPaths = nil
 	if prev == reqRunning {
 		rq.Jaws.markStatusDirty(StatusMetricActiveRequests)
 	}
@@ -395,10 +392,9 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 // returns it for the caller to return to [Jaws.requestBufferPool].
 //
 // It detaches and clears the reusable collections (the element list, tag map, dirt
-// list and message queue) and discards pending path invalidations. It does NOT
-// cancel the context, detach the session, or change the lifecycle state: the
-// caller (recycleLockedWithCause) has already cancelled the context and called
-// [Request.finishLocked], which detaches the session
+// list and message queue) only. It does NOT cancel the context, detach the session,
+// or change the lifecycle state: the caller (recycleLockedWithCause) has already
+// cancelled the context and called [Request.finishLocked], which detaches the session
 // and transitions the Request to reqFinished. It also does not mutate the individual
 // Element objects' fields or the Jid counter. The Request keeps its identity key and
 // canceled context, so a pointer retained by the initial renderer or by background
@@ -446,8 +442,6 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 	}
 	rq.buffers = nil
 	rq.todoDirt = nil
-	rq.todoDirtSeen = nil
-	rq.todoPaths = nil
 	rq.elems = nil
 	rq.deletedElems = 0
 	rq.tagMap = nil
@@ -908,11 +902,10 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	return
 }
 
-// appendDirtyTags queues an already-expanded, unique selector list onto this
-// request's pending-dirt list. Exact Element targets are kept only by their
-// owning Request.
-// The Serve loop's update tick later drains the list (see makeUpdateList) and
-// re-renders the affected elements. Takes rq.mu.
+// appendDirtyTags queues already-expanded selectors onto this request's pending-dirt
+// list. Exact Element targets are kept only by their owning Request. The Serve loop's
+// update tick later drains the list (see makeUpdateList) and re-renders the affected
+// elements. Takes rq.mu.
 //
 // It may run after the caller's dirt snapshot was taken but before rq finished
 // (see distributeDirt). A finished Request is unregistered (registered is false), so
@@ -920,71 +913,13 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Lock()
 	if rq.loadState().registered() {
-		// distributeDirt supplies distinct map keys, so an empty queue needs no set.
-		if len(rq.todoDirt) > 0 && len(tags) > 0 && rq.todoDirtSeen == nil {
-			rq.todoDirtSeen = make(map[any]struct{}, len(rq.todoDirt)+len(tags))
-			for _, tagValue := range rq.todoDirt {
-				rq.todoDirtSeen[tagValue] = struct{}{}
-			}
-		}
 		for _, tagValue := range tags {
 			if elem, exact := tagValue.(*Element); exact {
 				if elem == nil || elem.Request != rq || elem.deleted.Load() {
 					continue
 				}
 			}
-			// Pending Requests can cross many dirty passes before connecting.
-			// Keep each selector once while preserving late tag registration.
-			if rq.todoDirtSeen != nil {
-				if _, exists := rq.todoDirtSeen[tagValue]; exists {
-					continue
-				}
-				rq.todoDirtSeen[tagValue] = struct{}{}
-			}
 			rq.todoDirt = append(rq.todoDirt, tagValue)
-		}
-	}
-	rq.mu.Unlock()
-}
-
-// appendDirtyPaths merges path invalidations into the live targets on this
-// Request. The store renders its initial value and registers its tag under one
-// value lock: a mutation before registration is present in that render, and a
-// later mutation sees the registered tag here.
-func (rq *Request) appendDirtyPaths(paths map[any]*dirtyPathSet) {
-	if len(paths) == 0 {
-		return
-	}
-	rq.mu.Lock()
-	if rq.loadState().registered() {
-		// ponytail: This fanout runs on Serve's tick. Resolve selectors in each
-		// Request's drain if wide tags measurably delay that loop.
-		appendTo := func(elem *Element, incoming *dirtyPathSet) {
-			if rq.todoPaths == nil {
-				rq.todoPaths = make(map[*Element]*dirtyPathSet)
-			}
-			set := rq.todoPaths[elem]
-			if set == nil {
-				set = new(dirtyPathSet)
-				rq.todoPaths[elem] = set
-			}
-			for _, path := range incoming.paths {
-				set.add(path)
-			}
-		}
-		for tagValue, incoming := range paths {
-			if elem, exact := tagValue.(*Element); exact {
-				if elem == nil || elem.Request != rq || elem.deleted.Load() {
-					continue
-				}
-				appendTo(elem, incoming)
-			} else {
-				for _, elem := range rq.tagMap[tagValue] {
-					if !elem.deleted.Load() {
-						appendTo(elem, incoming)
-					}
-				}
-			}
 		}
 	}
 	rq.mu.Unlock()
@@ -1322,7 +1257,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // be running so the request can subscribe to broadcasts and unsubscribe on exit.
 //
 // Each inbound WebSocket message is limited to 32 KiB. The bundled client does
-// not chunk Input, Set, Click, ContextMenu, or Remove messages; oversized
+// not chunk Input, JsVar, Click, ContextMenu, or Remove messages; oversized
 // messages close the connection. The limit covers the entire protocol payload
 // after UTF-8 encoding, so no fixed application-value length is guaranteed. The
 // resulting read-limit error is retained in the Request cancellation cause,

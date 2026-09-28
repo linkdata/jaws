@@ -674,16 +674,16 @@ func Test_CallEventHandlers_InputAndProposalDispatchCombinations(t *testing.T) {
 			inputVal:   "typed",
 		},
 		{
-			name:       "input-only handles Set",
-			wht:        what.Set,
+			name:       "input-only handles JsVar",
+			wht:        what.JsVar,
 			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
 			wantErr:    nil,
 			wantInputs: 1,
 			inputVal:   `x=1`,
 		},
 		{
-			name:       "input-only Set returns ErrEventUnhandled",
-			wht:        what.Set,
+			name:       "input-only JsVar returns ErrEventUnhandled",
+			wht:        what.JsVar,
 			make:       func(rec *clickInputSetRecorder) any { return inputOnlyComboHandler{rec: rec} },
 			inputRet:   ErrEventUnhandled,
 			wantErr:    ErrEventUnhandled,
@@ -691,8 +691,8 @@ func Test_CallEventHandlers_InputAndProposalDispatchCombinations(t *testing.T) {
 			inputVal:   `x=1`,
 		},
 		{
-			name:       "click-only not used for Set",
-			wht:        what.Set,
+			name:       "click-only not used for JsVar",
+			wht:        what.JsVar,
 			make:       func(rec *clickInputSetRecorder) any { return clickOnlyComboHandler{rec: rec} },
 			wantErr:    ErrEventUnhandled,
 			wantClicks: 0,
@@ -784,7 +784,7 @@ func Test_CallEventHandlers_ExtrasOverrideUI_InputAndProposal(t *testing.T) {
 		val  string
 	}{
 		{name: "input", wht: what.Input, val: "typed"},
-		{name: "proposal", wht: what.Set, val: `x=1`},
+		{name: "proposal", wht: what.JsVar, val: `x=1`},
 	}
 
 	for _, tt := range tests {
@@ -882,7 +882,7 @@ func Test_CallEventHandlers_ExtraHandlersAreLIFO_InputAndProposal(t *testing.T) 
 		val  string
 	}{
 		{name: "input", wht: what.Input, val: "typed"},
-		{name: "proposal", wht: what.Set, val: `x=1`},
+		{name: "proposal", wht: what.JsVar, val: `x=1`},
 	}
 
 	for _, tt := range tests {

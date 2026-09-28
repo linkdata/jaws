@@ -187,7 +187,7 @@ single-select `named.BoolArray` of distinct names, or one synchronized mutation
 that clears peers and dirties every changed binding.
 
 Every browser-to-server WebSocket message must fit the 32 KiB inbound limit.
-The client does not chunk input, Set, click, context-menu, or removal payloads.
+The client does not chunk input, JsVar, click, context-menu, or removal payloads.
 An oversized message fails the WebSocket read and closes the Request connection.
 The resulting read-limit error is retained in the Request cancellation cause,
 which is passed to `Jaws.Log`; the message is not merely rejected for one
@@ -323,12 +323,12 @@ JSON value. Put data with different visibility in separate stores. Validate
 the complete value: a root or parent proposal can change multiple descendants,
 so a path-only denylist cannot make a field immutable.
 
-A browser call jawsVar("client.x", value) sends one Set proposal when the socket is
+A browser call jawsVar("client.x", value) sends one JsVar proposal when the socket is
 open, then changes the live variable optimistically and returns true. A call
 with one argument reads the live value and proposes it when bound and connected;
 this also sends direct browser-side mutations. Unbound paths read and write
 locally without a proposal. A false write leaves local state alone. Every
-accepted change schedules a canonical Set update for all bindings. A rejected,
+accepted change schedules a canonical JsVar update for all bindings. A rejected,
 invalid, or unchanged proposal schedules a source correction; a JSON size
 rejection cancels the source Request so its next render restores canonical state.
 Server writes use SetPath or DeletePath;
@@ -351,15 +351,18 @@ removes a string-keyed map entry.
 An unchanged proposal to a complex Go shape is rejected and corrected. Its Go
 equality could otherwise reveal a field hidden by the JSON encoding.
 
-The store reads and encodes current Go state when a Request handles a path
-invalidation, including one accumulated while its WebSocket was pending. It
-extracts partial JSON from that root encoding for ordinary JSON trees. Custom
-marshalers, promoted fields, slices, dynamic interfaces, and other complex
-shapes use root patches. Map trees receiving partial patches must have no
-shared mutable aliases between separately addressable paths; changing one
-aliased map can change another JSON path. Every bound value must remain JSON
-encodable with unique object member names. Changed browser proposals are checked
-for encodability; JSONSizeCheck can also bound their encoded size.
+The store records changed paths under its value lock and dirties its tag. Each
+binding reads changes since its own rendered version when its Request updates,
+including changes accumulated while the WebSocket was pending. The log keeps at
+most 64 paths and 16 KiB of path bytes; a binding behind it receives a root
+patch. The binding extracts partial JSON from one current root encoding for
+ordinary JSON trees. Custom marshalers, promoted fields, slices, dynamic
+interfaces, and other complex shapes use root patches. Map trees receiving
+partial patches must have no shared mutable aliases between separately
+addressable paths; changing one aliased map can change another JSON path.
+Every bound value must remain JSON encodable with unique object member names.
+Changed browser proposals are checked for encodability; JSONSizeCheck can also
+bound their encoded size.
 Complex custom encoders may accept root proposals while rejecting a non-root
 proposal that changes another visible field. ExtraTags can dirty derived UI
 after changed writes.

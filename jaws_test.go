@@ -4059,7 +4059,7 @@ func BenchmarkDistributeDirt(b *testing.B) {
 }
 
 // BenchmarkDistributeDirtRegistered measures selector fan-out to live Requests,
-// including the deduplication needed when a pending Request retains selectors.
+// including pending Requests that retain selectors until connection.
 func BenchmarkDistributeDirtRegistered(b *testing.B) {
 	for _, c := range []struct{ reqs, tags, pending int }{
 		{reqs: 100, tags: 100},
@@ -4269,7 +4269,7 @@ func BenchmarkRequestIncomingEventDispatch(b *testing.B) {
 		bubbled bool
 	}{
 		{name: "direct/Input", wht: what.Input},
-		{name: "direct/Set", wht: what.Set},
+		{name: "direct/JsVar", wht: what.JsVar},
 		{name: "bubbled/Click", wht: what.Click, bubbled: true},
 		{name: "bubbled/ContextMenu", wht: what.ContextMenu, bubbled: true},
 	} {

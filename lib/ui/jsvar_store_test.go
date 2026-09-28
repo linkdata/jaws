@@ -5,12 +5,14 @@ package ui
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +44,26 @@ func renderTestJsVar[T any](t *testing.T, rq *jaws.Request, store *JsVarStore[T]
 		t.Fatal(err)
 	}
 	return binding, elem, out.String()
+}
+
+func (binding *JsVarBinding[T]) snapshotPatches(paths []string) (patches []string, err error) {
+	store := binding.store
+	var data []byte
+	store.ReadLocked(func(value *T) {
+		data, err = json.Marshal(value)
+	})
+	if err == nil {
+		patches, err = store.projectPatches(slices.Clone(paths), data)
+	}
+	return
+}
+
+func (store *JsVarStore[T]) projectPatch(path string, data []byte) string {
+	visible, err := decodeJsVarJSON(data)
+	if err != nil {
+		return "=" + string(data)
+	}
+	return store.projectVisiblePatch(path, data, visible)
 }
 
 func TestJsVarStorePolicyAndCorrection(t *testing.T) {
@@ -135,7 +157,7 @@ func TestJsVarStoreCheckPanicCorrectsSource(t *testing.T) {
 		panic("check")
 	}
 	binding, elem, _ := renderTestJsVar(t, tr.Request, store)
-	if err := jaws.CallEventHandlers(binding, elem, what.Set, "value=2"); err == nil {
+	if err := jaws.CallEventHandlers(binding, elem, what.JsVar, "value=2"); err == nil {
 		t.Fatal("panicking check returned nil")
 	}
 	if state.Value != 1 {
@@ -150,7 +172,7 @@ func TestJsVarStoreCheckPanicCorrectsSource(t *testing.T) {
 	for {
 		select {
 		case msg := <-tr.OutCh:
-			if msg.What == what.Set {
+			if msg.What == what.JsVar {
 				if msg.Data != `={"value":1}` {
 					t.Fatalf("panic correction = %q", msg.Data)
 				}
@@ -177,7 +199,7 @@ func TestJsVarStoreRejectedUnhandledCheckIsHandled(t *testing.T) {
 		return rejection
 	}
 	binding, elem, _ := renderTestJsVar(t, rq, store)
-	err := jaws.CallEventHandlers(binding, elem, what.Set, "value=2")
+	err := jaws.CallEventHandlers(binding, elem, what.JsVar, "value=2")
 	if err == nil || errors.Is(err, jaws.ErrEventUnhandled) || !errors.Is(err, rejection) {
 		t.Fatalf("rejected proposal dispatch = %v", err)
 	}
@@ -220,6 +242,277 @@ func TestJsVarStorePathsAndDeletion(t *testing.T) {
 	}
 	if !reflect.DeepEqual(state, map[string]map[string]int{"players": {"alice": 3}}) {
 		t.Fatalf("invalid paths changed state: %#v", state)
+	}
+}
+
+func TestJsVarStoreChangesAcrossBindings(t *testing.T) {
+	jw, firstRequest := newCoreRequest(t)
+	secondRequest := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	var mu sync.RWMutex
+	state := struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	}{X: 1, Y: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	first, _, _ := renderTestJsVar(t, firstRequest, store)
+	second, _, _ := renderTestJsVar(t, secondRequest, store)
+
+	if changed, err := store.SetPath("x", 2); err != nil || !changed {
+		t.Fatalf("SetPath(x) = (%t, %v)", changed, err)
+	}
+	if patches, err := first.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{"x=2"}) {
+		t.Fatalf("first update = %q, %v", patches, err)
+	}
+	if changed, err := store.SetPath("y", 3); err != nil || !changed {
+		t.Fatalf("SetPath(y) = (%t, %v)", changed, err)
+	}
+	if patches, err := first.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{"y=3"}) {
+		t.Fatalf("first later update = %q, %v", patches, err)
+	}
+	if patches, err := second.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{"x=2", "y=3"}) {
+		t.Fatalf("second delayed update = %q, %v", patches, err)
+	}
+	if patches, err := second.pendingPatches(); err != nil || len(patches) != 0 {
+		t.Fatalf("second repeated update = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreDirtySendsPatch(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	t.Cleanup(jw.Close)
+	tr := jawstest.NewTestRequest(jw, nil)
+	t.Cleanup(func() {
+		tr.Close()
+		<-tr.DoneCh
+	})
+	<-tr.ReadyCh
+
+	var mu sync.RWMutex
+	state := struct {
+		Value int `json:"value"`
+	}{Value: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	renderTestJsVar(t, tr.Request, store)
+	if changed, err := store.SetPath("value", 2); err != nil || !changed {
+		t.Fatalf("SetPath = (%t, %v)", changed, err)
+	}
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case msg := <-tr.OutCh:
+			if msg.What == what.JsVar {
+				if msg.Data != "value=2" {
+					t.Fatalf("store patch = %q", msg.Data)
+				}
+				return
+			}
+		case <-timer.C:
+			t.Fatal("timed out waiting for store patch")
+		}
+	}
+}
+
+func TestJsVarStorePendingRequestReceivesPatch(t *testing.T) {
+	jw, err := jaws.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	t.Cleanup(jw.Close)
+	active := jawstest.NewTestRequest(jw, nil)
+	t.Cleanup(func() {
+		active.Close()
+		<-active.DoneCh
+	})
+	<-active.ReadyCh
+	selector := tag.Tag("tick")
+	probe := &jsVarOrdinaryUpdateProbe{updates: make(chan struct{}, 1)}
+	active.Request.NewElement(probe).Tag(selector)
+
+	initial := httptest.NewRequest(http.MethodGet, "/", nil)
+	pending := jw.NewRequest(httptest.NewRecorder(), initial)
+	var mu sync.RWMutex
+	state := struct {
+		Value int `json:"value"`
+	}{Value: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	store.ExtraTags = []any{selector}
+	renderTestJsVar(t, pending, store)
+	for value := 2; value <= 3; value++ {
+		if changed, err := store.SetPath("value", value); err != nil || !changed {
+			t.Fatalf("SetPath(%d) = (%t, %v)", value, changed, err)
+		}
+		select {
+		case <-probe.updates:
+		case <-time.After(5 * time.Second):
+			t.Fatal("dirty pass did not run while Request was pending")
+		}
+	}
+	if claimed := jw.UseRequest(pending.JawsKey, initial); claimed != pending {
+		t.Fatal("could not claim pending Request")
+	}
+	in, out, _, ready, done := jw.TestServe(pending, func(any) {})
+	defer func() {
+		close(in)
+		<-done
+	}()
+	<-ready
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case msg := <-out:
+			if msg.What == what.JsVar {
+				if msg.Data != "value=3" {
+					t.Fatalf("pending patch = %q", msg.Data)
+				}
+				return
+			}
+		case <-timer.C:
+			t.Fatal("pending Request missed store patch")
+		}
+	}
+}
+
+func TestJsVarStoreBoundedChangeLog(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := make(map[string]int)
+	for i := range maxJsVarChanges + 1 {
+		state[fmt.Sprintf("k%d", i)] = 0
+	}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding, _, _ := renderTestJsVar(t, rq, store)
+	for i := range maxJsVarChanges + 1 {
+		if changed, err := store.SetPath(fmt.Sprintf("k%d", i), i+1); err != nil || !changed {
+			t.Fatalf("SetPath(%d) = (%t, %v)", i, changed, err)
+		}
+	}
+	if len(store.changes) != maxJsVarChanges || store.floor != 1 {
+		t.Fatalf("unbounded log: changes=%d floor=%d version=%d", len(store.changes), store.floor, store.version)
+	}
+	patches, err := binding.pendingPatches()
+	if err != nil || len(patches) != 1 || !strings.HasPrefix(patches[0], "=") {
+		t.Fatalf("overflow correction = %q, %v", patches, err)
+	}
+	if patches, err := binding.pendingPatches(); err != nil || len(patches) != 0 {
+		t.Fatalf("repeated overflow correction = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreChangeLogByteLimit(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := make(map[string]int)
+	keys := make([]string, 5)
+	for i := range keys {
+		keys[i] = strings.Repeat("k", maxJsVarPathBytes-1) + string(rune('a'+i))
+		state[keys[i]] = 0
+	}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding, _, _ := renderTestJsVar(t, rq, store)
+	for i, key := range keys {
+		if changed, err := store.SetPath(key, i+1); err != nil || !changed {
+			t.Fatalf("SetPath(%d) = (%t, %v)", i, changed, err)
+		}
+	}
+	if store.logBytes > maxJsVarLogBytes || store.floor != 1 {
+		t.Fatalf("unbounded path bytes: bytes=%d floor=%d", store.logBytes, store.floor)
+	}
+	if patches, err := binding.pendingPatches(); err != nil || len(patches) != 1 || !strings.HasPrefix(patches[0], "=") {
+		t.Fatalf("old binding patch = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreChangeLogDeduplicatesPath(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Value int `json:"value"`
+	}{}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding, _, _ := renderTestJsVar(t, rq, store)
+	for i := range maxJsVarChanges + 1 {
+		if changed, err := store.SetPath("value", i+1); err != nil || !changed {
+			t.Fatalf("SetPath(%d) = (%t, %v)", i, changed, err)
+		}
+	}
+	if len(store.changes) != 1 || store.floor != 0 {
+		t.Fatalf("repeated path log: changes=%d floor=%d", len(store.changes), store.floor)
+	}
+	if patches, err := binding.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{fmt.Sprintf("value=%d", state.Value)}) {
+		t.Fatalf("repeated path update = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreCorrectionTargetsSource(t *testing.T) {
+	jw, sourceRequest := newCoreRequest(t)
+	otherRequest := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	var mu sync.RWMutex
+	state := struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	}{X: 1, Y: 2}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	source, elem, _ := renderTestJsVar(t, sourceRequest, store)
+	other, _, _ := renderTestJsVar(t, otherRequest, store)
+	if err := source.JawsInput(elem, "x=3"); !errors.Is(err, ErrJsVarReadOnly) {
+		t.Fatalf("read-only proposal = %v", err)
+	}
+	if patches, err := source.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{"x=1"}) {
+		t.Fatalf("source correction = %q, %v", patches, err)
+	}
+	if patches, err := other.pendingPatches(); err != nil || len(patches) != 0 {
+		t.Fatalf("peer correction = %q, %v", patches, err)
+	}
+	for _, input := range []string{"x=3", "y=4"} {
+		if err := source.JawsInput(elem, input); !errors.Is(err, ErrJsVarReadOnly) {
+			t.Fatalf("read-only proposal %q = %v", input, err)
+		}
+	}
+	if patches, err := source.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{`={"x":1,"y":2}`}) {
+		t.Fatalf("combined correction = %q, %v", patches, err)
+	}
+}
+
+func TestJsVarStoreParentPatchPrecedesChild(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		M map[string]map[string]int `json:"m"`
+	}{M: map[string]map[string]int{"a": nil, "a-b": nil}}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	for _, edit := range []struct {
+		path  string
+		value any
+	}{
+		{"m.a", map[string]int{"k": 1}},
+		{"m.a.k", 2},
+		{"m.a-b", map[string]int{"k": 9}},
+		{"m.a", map[string]int{"k": 3}},
+	} {
+		if changed, err := store.SetPath(edit.path, edit.value); err != nil || !changed {
+			t.Fatalf("SetPath(%q) = (%t, %v)", edit.path, changed, err)
+		}
+	}
+	patches, err := binding.pendingPatches()
+	if err != nil || !reflect.DeepEqual(patches, []string{`m.a={"k":3}`, `m.a-b={"k":9}`}) {
+		t.Fatalf("parent and child patches = %q, %v", patches, err)
+	}
+	if err := binding.JawsInput(elem, "m.a=5"); !errors.Is(err, ErrJsVarReadOnly) {
+		t.Fatalf("read-only parent proposal = %v", err)
+	}
+	if changed, err := store.SetPath("m.a.k", 4); err != nil || !changed {
+		t.Fatalf("SetPath(m.a.k) = (%t, %v)", changed, err)
+	}
+	if patches, err := binding.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{`m.a={"k":4}`}) {
+		t.Fatalf("correction before child = %q, %v", patches, err)
 	}
 }
 
@@ -438,6 +731,18 @@ func (value customJsVarState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]int{"value": value.Value, "double": 2 * value.Value})
 }
 
+type customJsVarToState struct{ Value int }
+
+func (*customJsVarToState) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteValue(jsontext.Value(`{"value":1}`))
+}
+
+type customJsVarTextState struct{ Value int }
+
+func (value customJsVarTextState) AppendText(b []byte) ([]byte, error) {
+	return strconv.AppendInt(b, int64(value.Value), 10), nil
+}
+
 type panicMarshalJsVarState struct {
 	Panic bool
 	Value int
@@ -453,8 +758,14 @@ func (value panicMarshalJsVarState) MarshalJSON() ([]byte, error) {
 }
 
 func TestJsVarStoreProjectionFallback(t *testing.T) {
-	if plainJsVarType(reflect.TypeFor[customJsVarState]()) {
-		t.Fatal("custom marshaler considered independently patchable")
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[customJsVarState](),
+		reflect.TypeFor[customJsVarToState](),
+		reflect.TypeFor[customJsVarTextState](),
+	} {
+		if plainJsVarType(typ) {
+			t.Errorf("custom marshaler %v considered independently patchable", typ)
+		}
 	}
 	custom := JsVarStore[customJsVarState]{partial: plainJsVarType(reflect.TypeFor[customJsVarState]())}
 	if got := custom.projectPatch("value", []byte(`{"value":2,"double":4}`)); got != `={"value":2,"double":4}` {
@@ -615,11 +926,11 @@ func TestDecodeJsVarJSONRejectsDuplicateMembers(t *testing.T) {
 		`{"outer":{"x":1,"x":2}}`,
 		`[{"x":1,"x":2}]`,
 	} {
-		if _, err := decodeJsVarJSON([]byte(data)); err == nil {
-			t.Errorf("accepted duplicate members in %s", data)
+		if _, err := decodeJsVarJSON([]byte(data)); !errors.Is(err, jsontext.ErrDuplicateName) {
+			t.Errorf("duplicate members in %s: %v", data, err)
 		}
 	}
-	if value, err := decodeJsVarJSON([]byte(`{"x":[1,2]}`)); err != nil || !reflect.DeepEqual(value, map[string]any{"x": []any{json.Number("1"), json.Number("2")}}) {
+	if value, err := decodeJsVarJSON([]byte(`{"x":[1e1000,0.12345678901234567890]}`)); err != nil || !reflect.DeepEqual(value, map[string]any{"x": []any{json.Number("1e1000"), json.Number("0.12345678901234567890")}}) {
 		t.Fatalf("valid JSON = %#v, %v", value, err)
 	}
 }
@@ -636,6 +947,24 @@ func TestJsVarStoreRejectsCollidingMapKeysOnRender(t *testing.T) {
 	elem := rq.NewElement(binding)
 	if _, err := binding.renderSnapshot(elem); err == nil {
 		t.Fatal("rendered colliding encoded map keys")
+	}
+}
+
+func TestJsVarStoreRejectsCollidingMapKeysOnUpdate(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := map[string]int{"a": 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding, _, _ := renderTestJsVar(t, rq, store)
+	value := map[string]int{
+		string([]byte{0xff, 0xfe}): 1,
+		string([]byte{0x80, 0x81}): 2,
+	}
+	if changed, err := store.SetPath("", value); err != nil || !changed {
+		t.Fatalf("SetPath = (%t, %v)", changed, err)
+	}
+	if _, err := binding.pendingPatches(); err == nil {
+		t.Fatal("patched colliding encoded map keys")
 	}
 }
 
@@ -825,7 +1154,7 @@ func TestJsVarStoreMarshalPanicReleasesLock(t *testing.T) {
 				t.Fatal("patch did not panic")
 			}
 		}()
-		binding.JawsUpdatePaths(elem, []string{"Value"})
+		binding.JawsUpdate(elem)
 	}()
 	if !mu.TryLock() {
 		t.Fatal("patch panic retained store lock")

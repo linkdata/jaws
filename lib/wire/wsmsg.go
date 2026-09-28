@@ -3,69 +3,23 @@ package wire
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"html"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/what"
 )
 
-const hexDigits = "0123456789abcdef"
-
-// appendJSONQuote appends s to b as a double-quoted JSON string literal.
-//
-// Unlike strconv.AppendQuote (Go string-literal grammar) it emits only escapes
-// that the browser's JSON.parse accepts: it never produces \a, \v, \xNN or
-// \UXXXXXXXX. Control bytes use \uXXXX, except \n, \r and \t which use their short
-// escapes; " and \ are escaped, and everything else
-// (including '<', '>', '&' and astral runes) is written as literal UTF-8 to keep
-// payloads compact. Invalid UTF-8 is replaced with U+FFFD so the result is always
-// valid JSON and valid UTF-8 for a WebSocket text message. The output remains
-// decodable by strconv.Unquote, so the server-side Append->Parse round trip is
-// preserved.
-func appendJSONQuote(b []byte, s string) []byte {
-	// PROVISIONAL: this hand-rolled quoter exists only because the stable standard
-	// library has no zero-allocation "append a non-HTML-escaped JSON string to a
-	// []byte" primitive: encoding/json.Marshal HTML-escapes '<', '>' and '&' (which
-	// bloats the HTML payloads this protocol carries), and json.Encoder with
-	// SetEscapeHTML(false) needs a buffer and is not an append API. The exact
-	// primitive, jsontext.AppendQuote (encoding/json/v2), is gated behind
-	// GOEXPERIMENT=jsonv2 as of Go 1.26. Replace this with jsontext.AppendQuote once
-	// that package builds without the experiment; Fuzz_appendJSONQuote pins the
-	// behavior to the standard library until then.
-	b = append(b, '"')
-	for _, r := range s {
-		switch r {
-		case '"':
-			b = append(b, '\\', '"')
-		case '\\':
-			b = append(b, '\\', '\\')
-		case '\n':
-			b = append(b, '\\', 'n')
-		case '\r':
-			b = append(b, '\\', 'r')
-		case '\t':
-			b = append(b, '\\', 't')
-		default:
-			if r < 0x20 {
-				b = append(b, '\\', 'u', '0', '0', hexDigits[r>>4], hexDigits[r&0x0f])
-			} else {
-				b = utf8.AppendRune(b, r)
-			}
-		}
-	}
-	return append(b, '"')
-}
-
 // AppendJSONQuote appends s to b as a JSON string literal accepted by JSON.parse.
 //
-// Use it instead of [strconv.AppendQuote] when quoted data is written into a
-// protocol record: strconv emits Go-only escapes (\xNN, \UXXXXXXXX) for control
-// bytes, DEL, and invalid UTF-8 that JSON.parse rejects.
+// Invalid UTF-8 is replaced with U+FFFD. Unlike [strconv.AppendQuote], the
+// result uses JSON escapes and does not HTML-escape the data.
 func AppendJSONQuote(b []byte, s string) []byte {
-	return appendJSONQuote(b, s)
+	// Invalid UTF-8 still produces valid output with replacement runes.
+	quoted, _ := jsontext.AppendQuote(b, s)
+	return quoted
 }
 
 // WsMsg is a protocol record sent to or from a WebSocket.
@@ -78,7 +32,7 @@ type WsMsg struct {
 // Append appends m in wire format to b and returns the extended buffer.
 //
 // The record is What<TAB>Jid<TAB>Data<LF>, where the Jid field is empty if Jid
-// is zero. The Data field is written verbatim for [what.Set] and [what.Call],
+// is zero. The Data field is written verbatim for [what.JsVar] and [what.Call],
 // and JSON-quoted for every other command. Append panics if Jid is negative.
 //
 // Verbatim Data must contain no tab or newline bytes, which would corrupt the
@@ -94,10 +48,10 @@ func (m *WsMsg) Append(b []byte) []byte {
 	}
 	b = append(b, '\t')
 	switch m.What {
-	case what.Set, what.Call:
+	case what.JsVar, what.Call:
 		b = append(b, m.Data...)
 	default:
-		b = appendJSONQuote(b, m.Data)
+		b = AppendJSONQuote(b, m.Data)
 	}
 	b = append(b, '\n')
 	return b
@@ -112,19 +66,19 @@ func (m *WsMsg) Format() string {
 
 // Parse parses one LF-terminated protocol record.
 //
-// The wire format mirrors [WsMsg.Append]. For commands other than [what.Set]
+// The wire format mirrors [WsMsg.Append]. For commands other than [what.JsVar]
 // and [what.Call], if the Data field begins with a double quote
 // it is decoded as a JSON string: [strconv.Unquote] handles the common case,
 // with a fallback to a JSON
 // string decode for inputs it rejects but the browser's JSON.stringify can produce
 // (notably a lone UTF-16 surrogate, which the fallback maps to U+FFFD). The message
 // is rejected only if both decoders fail. Data that does not begin with a double
-// quote is taken verbatim, as is all Set and Call data. In all cases the resulting
+// quote is taken verbatim, as is all JsVar and Call data. In all cases the resulting
 // data is sanitized with [strings.ToValidUTF8].
 //
-// Inbound [what.Set] and [what.Call] data is taken verbatim at the field
+// Inbound [what.JsVar] and [what.Call] data is taken verbatim at the field
 // boundaries and is best-effort: the field ends at the first tab, so a tab
-// inside an inbound Set or Call payload truncates the field.
+// inside an inbound JsVar or Call payload truncates the field.
 func Parse(txt []byte) (WsMsg, bool) {
 	// Parse reports success with ok rather than an error: the only failure is "txt is
 	// not a valid record", with no sub-cause any caller branches on, and the sole caller
@@ -145,8 +99,8 @@ func Parse(txt []byte) (WsMsg, bool) {
 				if wht := what.Parse(string(txt[0:nl1])); wht.IsValid() {
 					if id := jid.ParseString(string(txt[nl1+1 : nl2])); id.IsValid() {
 						raw := txt[nl2+1 : len(txt)-1]
-						if wht == what.Set || wht == what.Call {
-							// Set and Call data is taken verbatim and is best-effort:
+						if wht == what.JsVar || wht == what.Call {
+							// JsVar and Call data is taken verbatim and is best-effort:
 							// the field ends at the first tab, so drop any tab-separated
 							// suffix an untrusted record appended past that boundary.
 							if i := bytes.IndexByte(raw, '\t'); i >= 0 {
@@ -154,7 +108,7 @@ func Parse(txt []byte) (WsMsg, bool) {
 							}
 						}
 						data := string(raw)
-						if txt[nl2+1] == '"' && wht != what.Set && wht != what.Call {
+						if txt[nl2+1] == '"' && wht != what.JsVar && wht != what.Call {
 							// The browser encodes this data with JSON.stringify.
 							// strconv.Unquote decodes the common case cheaply and
 							// allocation-free, but its grammar is not a superset of

@@ -701,7 +701,7 @@ process.stdout.write(JSON.stringify({
 	}
 	for i, want := range []string{"state.value=1", "state.value=42", "state.value=42", "items=[10,20]", "items.1=21"} {
 		msg, ok := wire.Parse([]byte(got.Frames[i]))
-		if !ok || msg.What != what.Set || msg.Jid != 9 || msg.Data != want {
+		if !ok || msg.What != what.JsVar || msg.Jid != 9 || msg.Data != want {
 			t.Fatalf("proposal %d = %+v, parseable %t; want Jid.9 %q", i, msg, ok, want)
 		}
 	}
@@ -722,13 +722,13 @@ let attached = true;
 document.getElementById = function(id) { return attached && id === elem.id ? elem : null; };
 document.querySelector = function(selector) { return attached && selector === '[data-jawsstore="app"]' ? elem : null; };
 jawsAttach(elem, true);
-jawsPerform("Set", "Jid.9", "items.1=3");
-jawsPerform("Set", "Jid.9", "obsolete=");
+jawsPerform("JsVar", "Jid.9", "items.1=3");
+jawsPerform("JsVar", "Jid.9", "obsolete=");
 const deleted = !Object.hasOwn(jawsVar("app"), "obsolete");
-jawsPerform("Set", "Jid.9", '={"state":7}');
+jawsPerform("JsVar", "Jid.9", '={"state":7}');
 const state = jawsVar("app");
 attached = false;
-jawsPerform("Set", "Jid.9", "state=8");
+jawsPerform("JsVar", "Jid.9", "state=8");
 const afterRemoval = jawsVar("app");
 const unboundWrite = jawsVar("app", {state: 9});
 process.stdout.write(JSON.stringify({
@@ -797,12 +797,12 @@ document.getElementById = function(id) {
 };
 jawsAttach(elem, true);
 jawsAttach(functionElem, true);
-jawsPerform("Set", "Jid.13", '={"count":5}');
+jawsPerform("JsVar", "Jid.13", '={"count":5}');
 const initial = window.vendor.chart.count;
 const wrote = jawsVar("vendor.chart.count", 2);
-jawsPerform("Set", "Jid.12", "count=3");
+jawsPerform("JsVar", "Jid.12", "count=3");
 const patched = window.vendor.chart;
-jawsPerform("Set", "Jid.12", '={"count":3}');
+jawsPerform("JsVar", "Jid.12", '={"count":3}');
 const retained = patched === window.vendor.chart;
 const read = jawsVar("vendor.chart.count");
 window.vendor.chart.count = 4;
@@ -859,7 +859,7 @@ process.stdout.write(JSON.stringify({
 	}
 	for i, want := range []string{"count=2", "count=3", `={"count":4}`} {
 		msg, ok := wire.Parse([]byte(got.Frames[i]))
-		if !ok || msg.What != what.Set || msg.Jid != 12 || msg.Data != want {
+		if !ok || msg.What != what.JsVar || msg.Jid != 12 || msg.Data != want {
 			t.Fatalf("proposal %d = %+v, parseable %t; want Jid.12 %q", i, msg, ok, want)
 		}
 	}
@@ -914,7 +914,7 @@ document.getElementById = function(id) { return id === elem.id ? elem : null; };
 document.querySelector = function(selector) { return selector === '[data-jawsstore="app"]' ? elem : null; };
 jawsAttach(elem, true);
 jawsVar("app.state", 0);
-jawsMessage({data: "Set\tJid.9\tstate.value=2\nSet\tJid.9\tstate=9\n"});
+jawsMessage({data: "JsVar\tJid.9\tstate.value=2\nJsVar\tJid.9\tstate=9\n"});
 process.stdout.write(JSON.stringify({reloads: reloads, errors: errors, state: jawsVar("app.state")}));
 `)
 	var got struct {
@@ -1078,7 +1078,7 @@ process.stdout.write(JSON.stringify({ called: called, lookedUp: lookedUp, thrown
 }
 
 func TestJawsJS_IsCommandRoutesElementBoundPatch(t *testing.T) {
-	patch := wire.WsMsg{What: what.Set, Data: "state=2"}
+	patch := wire.WsMsg{What: what.JsVar, Data: "state=2"}
 	if !patch.What.IsCommand() {
 		patch.Jid = 1
 	}

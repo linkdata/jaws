@@ -1,14 +1,16 @@
 package ui
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +26,14 @@ import (
 const (
 	maxJsVarPathBytes = 4096
 	maxJsVarNameBytes = 4096
+	maxJsVarChanges   = 64
+	maxJsVarLogBytes  = 16 * 1024
 )
+
+type jsVarChange struct {
+	version uint64
+	path    string
+}
 
 var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`)
 
@@ -110,17 +119,23 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // maps, or slices across different paths: changing one alias can change another
 // browser path. Complex Go types fall back to a root patch. Custom JSON methods
 // reached while locked must not re-enter the store or its locker.
+// The store keeps at most 64 changed paths and 16 KiB of path bytes; a binding
+// behind the log receives a root patch.
 //
 // A JsVarStore must not be copied after first use.
 type JsVarStore[T any] struct {
 	ClientCheck JsVarCheck[T] // nil denies browser proposals
 	ExtraTags   []any         // dirtied after each changed mutation
 
-	jaws    *jaws.Jaws
-	name    string
-	locker  bind.RWLocker
-	value   *T
-	partial bool // plain JSON tree with matching jq paths and safe partial patches
+	jaws     *jaws.Jaws
+	name     string
+	locker   bind.RWLocker
+	value    *T
+	partial  bool // plain JSON tree with matching jq paths and safe partial patches
+	version  uint64
+	floor    uint64 // older bindings need a root patch
+	changes  []jsVarChange
+	logBytes int
 }
 
 // NewJsVarStore creates a store with an application-owned browser name.
@@ -186,14 +201,15 @@ type JsVarPathWriter interface {
 }
 
 type jsVarPathWriter[T any] struct {
-	store *JsVarStore[T]
-	paths []string
+	store   *JsVarStore[T]
+	changed bool
 }
 
 func (writer *jsVarPathWriter[T]) SetPath(path string, value any) (changed bool, err error) {
 	if err = validateJsVarPath(path); err == nil {
 		if changed, err = jq.Set(writer.store.value, path, value); err == nil && changed {
-			writer.paths = append(writer.paths, path)
+			writer.store.record(path)
+			writer.changed = true
 		}
 	}
 	return
@@ -202,7 +218,8 @@ func (writer *jsVarPathWriter[T]) SetPath(path string, value any) (changed bool,
 func (writer *jsVarPathWriter[T]) DeletePath(path string) (changed bool, err error) {
 	if err = validateJsVarPath(path); err == nil {
 		if changed, err = writer.store.deletePathLocked(path); err == nil && changed {
-			writer.paths = append(writer.paths, path)
+			writer.store.record(path)
+			writer.changed = true
 		}
 	}
 	return
@@ -221,7 +238,7 @@ func (store *JsVarStore[T]) WriteLocked(fn func(value *T, writer JsVarPathWriter
 	store.locker.Lock()
 	defer func() {
 		store.locker.Unlock()
-		store.publish(writer.paths)
+		store.publish(writer.changed)
 	}()
 	err = fn(store.value, writer)
 	return
@@ -290,14 +307,36 @@ func (store *JsVarStore[T]) deletePathLocked(path string) (changed bool, err err
 	return
 }
 
-func (store *JsVarStore[T]) publish(paths []string) {
-	for _, path := range paths {
-		store.jaws.DirtyPath(store, path)
+func (store *JsVarStore[T]) publish(changed bool) {
+	if changed {
+		store.jaws.Dirty(append([]any{store}, store.ExtraTags...)...)
 	}
-	if len(paths) > 0 && len(store.ExtraTags) > 0 {
-		// A pending page may register a dependency tag after this dirty pass.
-		store.jaws.Dirty(store.ExtraTags...)
+}
+
+// record runs under the store's write lock. A binding older than floor gets
+// a root patch instead of retaining unbounded history.
+func (store *JsVarStore[T]) record(path string) {
+	store.version++
+	if path == "" || !store.partial {
+		store.changes = nil
+		store.logBytes = 0
+		store.floor = store.version
+		return
 	}
+	for i, change := range store.changes {
+		if change.path == path {
+			store.changes = slices.Delete(store.changes, i, i+1)
+			store.changes = append(store.changes, jsVarChange{store.version, path})
+			return
+		}
+	}
+	for len(store.changes) == maxJsVarChanges || store.logBytes+len(path) > maxJsVarLogBytes {
+		store.floor = store.changes[0].version
+		store.logBytes -= len(store.changes[0].path)
+		store.changes = slices.Delete(store.changes, 0, 1)
+	}
+	store.changes = append(store.changes, jsVarChange{store.version, path})
+	store.logBytes += len(path)
 }
 
 type (
@@ -310,9 +349,13 @@ type (
 // Bindings are one-use and request-scoped. Deactivate makes a provisional route
 // inert before a redirect; it is safe to call concurrently with input dispatch.
 type JsVarBinding[T any] struct {
-	store    *JsVarStore[T]
-	rendered atomic.Bool
-	active   atomic.Bool
+	store         *JsVarStore[T]
+	rendered      atomic.Bool
+	active        atomic.Bool
+	lastVersion   atomic.Uint64
+	correctionMu  sync.Mutex
+	correction    string
+	hasCorrection bool
 }
 
 // Deactivate suppresses this binding's later proposal and patch work.
@@ -378,68 +421,117 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 		}
 	}
 	data, _, err = marshalJsVar(store.value)
+	if err == nil {
+		binding.lastVersion.Store(store.version)
+	}
 	return
 }
 
-// JawsUpdate does not change a browser route without a path invalidation.
-func (binding *JsVarBinding[T]) JawsUpdate(*jaws.Element) {}
-
-// JawsUpdatePaths sends current canonical state for invalidated paths.
+// JawsUpdate sends canonical patches for store changes and browser corrections.
 //
 // Complex JSON shapes use a root patch. Plain value trees use partial patches
 // extracted from one full root encoding, preserving JSON tags and exact numbers.
 // A failed encoding cancels the Request.
-func (binding *JsVarBinding[T]) JawsUpdatePaths(elem *jaws.Element, paths []string) {
+func (binding *JsVarBinding[T]) JawsUpdate(elem *jaws.Element) {
 	if !binding.active.Load() {
 		return
 	}
-	patches, err := binding.snapshotPatches(paths)
+	patches, err := binding.pendingPatches()
 	if err != nil {
 		elem.Request.Cancel(fmt.Errorf("jsvar: encode store %q: %w", binding.store.name, err))
 		return
 	}
 	if binding.active.Load() {
 		for _, patch := range patches {
-			elem.Patch(patch)
+			elem.JsVar(patch)
 		}
 	}
 }
 
-func (binding *JsVarBinding[T]) snapshotPatches(paths []string) (patches []string, err error) {
-	store := binding.store
-	var data []byte
-	store.ReadLocked(func(value *T) {
-		data, err = json.Marshal(value)
-	})
-	var visible any
-	if err == nil {
-		visible, err = decodeJsVarJSON(data)
+func (binding *JsVarBinding[T]) correct(elem *jaws.Element, path string) {
+	binding.correctionMu.Lock()
+	if binding.hasCorrection && binding.correction != path {
+		binding.correction = ""
+	} else {
+		binding.correction = path
 	}
+	binding.hasCorrection = true
+	binding.correctionMu.Unlock()
+	binding.store.jaws.Dirty(elem)
+}
+
+func (binding *JsVarBinding[T]) takeCorrection() (path string, ok bool) {
+	binding.correctionMu.Lock()
+	path, ok = binding.correction, binding.hasCorrection
+	binding.correction = ""
+	binding.hasCorrection = false
+	binding.correctionMu.Unlock()
+	return
+}
+
+func (binding *JsVarBinding[T]) pendingPatches() (patches []string, err error) {
+	store := binding.store
+	correction, needsCorrection := binding.takeCorrection()
+	var paths []string
+	var data []byte
+	var version uint64
+	store.ReadLocked(func(value *T) {
+		version = store.version
+		lastVersion := binding.lastVersion.Load()
+		if lastVersion < store.floor {
+			paths = append(paths, "")
+		} else {
+			for _, change := range store.changes {
+				if change.version > lastVersion {
+					paths = append(paths, change.path)
+				}
+			}
+		}
+		if needsCorrection {
+			paths = append(paths, correction)
+		}
+		if len(paths) > 0 {
+			data, err = json.Marshal(value)
+		}
+	})
+	if err == nil && len(paths) > 0 {
+		patches, err = store.projectPatches(paths, data)
+	}
+	if err == nil {
+		binding.lastVersion.Store(version)
+	}
+	return
+}
+
+func (store *JsVarStore[T]) projectPatches(paths []string, data []byte) (patches []string, err error) {
+	var visible any
+	visible, err = decodeJsVarJSON(data)
 	if err == nil {
 		rootPatch := "=" + string(data)
 		seen := make(map[string]bool, len(paths))
+		slices.Sort(paths)
 		for _, path := range paths {
+			covered := seen[path]
+			for i := range len(path) {
+				if path[i] == '.' && seen[path[:i]] {
+					covered = true
+					break
+				}
+			}
+			if covered {
+				continue
+			}
 			patch := store.projectVisiblePatch(path, data, visible)
 			if patch == rootPatch {
 				patches = []string{rootPatch}
 				break
 			}
 			key, _, _ := strings.Cut(patch, "=")
-			if !seen[key] {
-				seen[key] = true
-				patches = append(patches, patch)
-			}
+			seen[key] = true
+			patches = append(patches, patch)
 		}
 	}
 	return
-}
-
-func (store *JsVarStore[T]) projectPatch(path string, data []byte) string {
-	visible, err := decodeJsVarJSON(data)
-	if err != nil {
-		return "=" + string(data)
-	}
-	return store.projectVisiblePatch(path, data, visible)
 }
 
 func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visible any) string {
@@ -489,7 +581,7 @@ func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err
 	}
 	defer func() {
 		if panicValue := recover(); panicValue != nil {
-			binding.store.jaws.DirtyPath(elem, "")
+			binding.correct(elem, "")
 			panic(panicValue)
 		}
 	}()
@@ -500,19 +592,19 @@ func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err
 		err = validateJsVarPath(path)
 	}
 	if err != nil {
-		binding.store.jaws.DirtyPath(elem, "")
+		binding.correct(elem, "")
 		return errJsVarClientWrite{err}
 	}
 	var value any
 	if err = json.Unmarshal([]byte(raw), &value); err != nil {
-		binding.store.jaws.DirtyPath(elem, "")
+		binding.correct(elem, "")
 		return errJsVarClientWrite{err}
 	}
 	changed, err := binding.applyProposal(elem, path, value)
 	if changed {
-		binding.store.publish([]string{path})
+		binding.store.publish(true)
 	} else {
-		binding.store.jaws.DirtyPath(elem, path)
+		binding.correct(elem, path)
 	}
 	if err != nil {
 		if errors.Is(err, ErrJsVarTooLarge) {
@@ -542,8 +634,8 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 		}
 	}
 	if store.partial {
-		// Plain trees have one-to-one jq/JSON paths and no duplicate members.
-		// Their changed subtree alone needs an encodability check.
+		// Plain trees map decoded proposals to the same jq/JSON paths.
+		// Check the changed subtree before accepting it.
 		changed, err = jq.SetChecked(store.value, path, value, func() error {
 			var next any = store.value
 			if path != "" {
@@ -557,6 +649,9 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 			}
 			return store.ClientCheck(elem, store.value, path)
 		})
+		if changed {
+			store.record(path)
+		}
 		return
 	}
 	_, before, err := marshalJsVar(store.value)
@@ -578,6 +673,9 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 		// accepting that no-op could reveal a field absent from browser JSON.
 		err = ErrIllegalJsVarPath
 	}
+	if changed {
+		store.record(path)
+	}
 	return
 }
 
@@ -590,48 +688,20 @@ func marshalJsVar(value any) (data []byte, visible any, err error) {
 }
 
 func decodeJsVarJSON(data []byte) (visible any, err error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	return readJsVarJSON(decoder)
-}
-
-func readJsVarJSON(decoder *json.Decoder) (value any, err error) {
-	var token json.Token
-	if token, err = decoder.Token(); err != nil {
-		return
-	}
-	switch token {
-	case json.Delim('{'):
-		object := make(map[string]any)
-		for decoder.More() {
-			if token, err = decoder.Token(); err != nil {
-				return
-			}
-			name := token.(string)
-			if _, found := object[name]; found {
-				return nil, fmt.Errorf("jsvar: duplicate JSON member %q", name)
-			}
-			if object[name], err = readJsVarJSON(decoder); err != nil {
-				return
-			}
-		}
-		value = object
-	case json.Delim('['):
-		array := make([]any, 0)
-		for decoder.More() {
-			var item any
-			if item, err = readJsVarJSON(decoder); err != nil {
-				return
-			}
-			array = append(array, item)
-		}
-		value = array
-	default:
-		return token, nil
-	}
-	_, err = decoder.Token()
+	err = jsonv2.Unmarshal(data, &visible, jsVarNumberOption)
 	return
 }
+
+var jsVarNumberOption = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(decoder *jsontext.Decoder, value *any) error {
+	if decoder.PeekKind() != '0' {
+		return errors.ErrUnsupported
+	}
+	raw, err := decoder.ReadValue()
+	if err == nil {
+		*value = json.Number(raw)
+	}
+	return err
+}))
 
 func visibleJsVarChange(before, after any, path string) bool {
 	if path == "" {
@@ -674,10 +744,12 @@ func visibleJsVarChange(before, after any, path string) bool {
 	return false
 }
 
-var (
-	jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
-	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
-)
+var jsVarMarshalers = [...]reflect.Type{
+	reflect.TypeFor[jsonv2.MarshalerTo](),
+	reflect.TypeFor[json.Marshaler](),
+	reflect.TypeFor[encoding.TextAppender](),
+	reflect.TypeFor[encoding.TextMarshaler](),
+}
 
 // plainJsVarType is conservative about encoder paths and reference aliases.
 // Map branches are partial under the documented JSON-tree/no-alias contract.
@@ -701,18 +773,8 @@ func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
 	}
 	seen[t] = true
 	defer delete(seen, t)
-	if t.Implements(jsonMarshalerType) || t.Implements(textMarshalerType) {
-		return false
-	}
-	if _, found := t.MethodByName("MarshalJSONTo"); found {
-		return false
-	}
-	if t.Kind() != reflect.Pointer &&
-		(reflect.PointerTo(t).Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(textMarshalerType)) {
-		return false
-	}
-	if t.Kind() != reflect.Pointer {
-		if _, found := reflect.PointerTo(t).MethodByName("MarshalJSONTo"); found {
+	for _, marshaler := range jsVarMarshalers {
+		if t.Implements(marshaler) || reflect.PointerTo(t).Implements(marshaler) {
 			return false
 		}
 	}
