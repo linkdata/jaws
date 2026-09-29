@@ -16,6 +16,95 @@ import (
 
 var jsVarBenchmarkPatch string
 
+// BenchmarkJsVarStoreManyBindings measures one changed leaf projected to every
+// binding of a shared store.
+func BenchmarkJsVarStoreManyBindings(b *testing.B) {
+	for _, count := range []int{1, 100} {
+		b.Run("bindings="+strconv.Itoa(count), func(b *testing.B) {
+			jw, err := jaws.New()
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.Cleanup(jw.Close)
+			players := make(map[string]map[string]int, 512)
+			for i := range 512 {
+				players["player"+strconv.Itoa(i)] = map[string]int{"x": i}
+			}
+			players["alice"] = map[string]int{"x": -1}
+			state := map[string]map[string]map[string]int{"players": players}
+			var mu sync.RWMutex
+			store, err := NewJsVarStore(jw, "client", &mu, &state)
+			if err != nil {
+				b.Fatal(err)
+			}
+			bindings := make([]*JsVarBinding[map[string]map[string]map[string]int], count)
+			for i := range bindings {
+				bindings[i] = store.Bind()
+			}
+			root, err := json.Marshal(state)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := range b.N {
+				if _, err := store.SetPath("players.alice.x", i); err != nil {
+					b.Fatal(err)
+				}
+				for _, binding := range bindings {
+					patches, err := binding.pendingPatches()
+					if err != nil || len(patches) != 1 {
+						b.Fatalf("pendingPatches = %q, %v", patches, err)
+					}
+					jsVarBenchmarkPatch = patches[0]
+				}
+			}
+			b.StopTimer()
+			b.ReportMetric(float64(len(root)), "root_B")
+		})
+	}
+}
+
+// BenchmarkJsVarStorePendingParallel measures concurrent bindings reading the
+// same changed version, including contention on the shared snapshot.
+func BenchmarkJsVarStorePendingParallel(b *testing.B) {
+	jw, err := jaws.New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(jw.Close)
+	players := make(map[string]map[string]int, 512)
+	for i := range 512 {
+		players["player"+strconv.Itoa(i)] = map[string]int{"x": i}
+	}
+	players["alice"] = map[string]int{"x": -1}
+	state := map[string]map[string]map[string]int{"players": players}
+	var mu sync.RWMutex
+	store, err := NewJsVarStore(jw, "client", &mu, &state)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if _, err := store.SetPath("players.alice.x", 0); err != nil {
+		b.Fatal(err)
+	}
+	var failed atomic.Bool
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		binding := store.Bind()
+		for pb.Next() {
+			binding.lastVersion.Store(0)
+			patches, err := binding.pendingPatches()
+			if err != nil || len(patches) != 1 {
+				failed.Store(true)
+			}
+		}
+	})
+	if failed.Load() {
+		b.Fatal("pendingPatches failed")
+	}
+}
+
 // BenchmarkJsVarStoreChangedLeaf measures a changed nested leaf and its
 // canonical per-binding projection against a large JSON tree.
 func BenchmarkJsVarStoreChangedLeaf(b *testing.B) {
