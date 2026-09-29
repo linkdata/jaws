@@ -380,8 +380,8 @@ second := ui.NewContainer("div", rows) // equal to first
 Equal rebuilt definitions let the same parent retain its Element. Equal values
 can back several live Elements only when providers and reused children support
 that multiplicity. Tbody embeds a Container fixed to `tbody`; replacing it is
-unsupported. Select treats a nil-interface handler as a no-op; typed nils are
-called normally.
+unsupported. `Select.JawsInput` ignores a nil-interface handler; render and
+update require one. Typed nils are called normally.
 
 Each child must render one addressable direct DOM node with its Element Jid.
 `NewTemplate` supplies that wrapper. The slice returned by `JawsContains` becomes
