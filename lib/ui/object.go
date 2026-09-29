@@ -11,8 +11,7 @@ import (
 
 // ObjectClickedHook handles a click event for an [Object].
 //
-// obj is the chain node containing the hook. See [Object] for composition
-// semantics.
+// obj is the Object on which JawsClick was invoked.
 //
 // Unlike [bind.ClickedHook], ObjectClickedHook receives an [Object] rather than
 // a [bind.Binder].
@@ -20,14 +19,12 @@ type ObjectClickedHook func(obj Object, elem *jaws.Element, click jaws.Click) (e
 
 // ObjectContextMenuHook handles a context menu event for an [Object].
 //
-// obj is the chain node containing the hook. See [Object] for composition
-// semantics.
+// obj is the Object on which JawsContextMenu was invoked.
 type ObjectContextMenuHook func(obj Object, elem *jaws.Element, click jaws.Click) (err error)
 
 // ObjectInitialHTMLAttrHook provides attributes when an [Object] is initially rendered.
 //
-// obj is the chain node containing the hook. See [Object] for composition
-// semantics.
+// obj is the Object on which JawsInitialHTMLAttr was invoked.
 //
 // ObjectInitialHTMLAttrHook is a type alias so a value of a defined function type
 // with this signature can be passed to [Object.InitialHTMLAttr] without explicit
@@ -43,13 +40,14 @@ type ObjectInitialHTMLAttrHook = func(obj Object, elem *jaws.Element) (s templat
 // newest to oldest. Dispatch continues while the result matches
 // [jaws.ErrEventUnhandled] according to [errors.Is], including when wrapped,
 // and stops at the first other result. If no hook handles the event, the invoked
-// method returns an error matching [jaws.ErrEventUnhandled]. Each hook receives
-// the node containing it as its Object argument; that node includes the hook and
-// all older links, but no newer links.
+// method returns an error matching [jaws.ErrEventUnhandled].
 //
 // [jaws.InitialHTMLAttrHandler.JawsInitialHTMLAttr] runs all initial-attribute
 // hooks from newest to oldest. Their non-empty results are joined in that order
 // with one space inserted between results.
+//
+// Every event and initial-attribute hook receives the Object on which dispatch
+// was invoked. That Object may include links added after the hook.
 //
 // The effective expanded tag set combines the non-nil tag contributions of every
 // link, and adding a link preserves older links' contributions. The resulting
@@ -116,10 +114,11 @@ func (obj *object) JawsGetHTML(elem *jaws.Element) (html template.HTML) {
 }
 
 func (obj *object) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
+	invoked := obj
 	err = jaws.ErrEventUnhandled
 	for obj != nil {
 		if fn, ok := obj.handler.(ObjectClickedHook); ok {
-			if err = fn(obj, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+			if err = fn(invoked, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
@@ -129,10 +128,11 @@ func (obj *object) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 }
 
 func (obj *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
+	invoked := obj
 	err = jaws.ErrEventUnhandled
 	for obj != nil {
 		if fn, ok := obj.handler.(ObjectContextMenuHook); ok {
-			if err = fn(obj, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
+			if err = fn(invoked, elem, click); !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
@@ -142,9 +142,10 @@ func (obj *object) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err er
 }
 
 func (obj *object) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAttr) {
+	invoked := obj
 	for obj != nil {
 		if fn, ok := obj.handler.(ObjectInitialHTMLAttrHook); ok {
-			if s := fn(obj, elem); s != "" {
+			if s := fn(invoked, elem); s != "" {
 				if attr != "" {
 					attr += " "
 				}
