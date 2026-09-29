@@ -16,7 +16,7 @@ type Tag string
 // Expansion limits guarding against runaway recursion or pathological input.
 const (
 	// maxTagDepth is the maximum [TagGetter]/slice nesting depth that tag
-	// expansion (and the [FindTagGetter] hint search) will follow.
+	// expansion (and the findTagGetter hint search) will follow.
 	maxTagDepth = 10
 	// maxTagCount is the maximum number of unique tags a single expansion may
 	// produce before returning [ErrTooManyTags].
@@ -137,7 +137,7 @@ func hasNonNilTag(tags []any) bool {
 }
 
 func expand(depth int, tagValue any, result []any, active []any, inGetter *bool) ([]any, error) {
-	if depth > maxTagDepth || len(result) > maxTagCount {
+	if depth > maxTagDepth {
 		return result, ErrTooManyTags
 	}
 	switch data := tagValue.(type) {

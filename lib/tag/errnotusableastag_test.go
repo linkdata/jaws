@@ -20,7 +20,7 @@ type testFindTagGetterDepth struct {
 }
 
 func TestFindTagGetter_NoMatchCases(t *testing.T) {
-	if path, tgType, found := FindTagGetter(nil); found || path != "" || tgType != nil {
+	if path, tgType, found := findTagGetter(nil); found || path != "" || tgType != nil {
 		t.Fatalf("expected no match for nil input, got found=%v path=%q type=%v", found, path, tgType)
 	}
 
@@ -45,7 +45,7 @@ func TestFindTagGetter_NoMatchCases(t *testing.T) {
 		SB:   shared, // same backing array triggers seen-slice path
 	}
 
-	if path, tgType, found := FindTagGetter(noMatch); found || path != "" || tgType != nil {
+	if path, tgType, found := findTagGetter(noMatch); found || path != "" || tgType != nil {
 		t.Fatalf("expected no match, got found=%v path=%q type=%v", found, path, tgType)
 	}
 }
@@ -57,7 +57,7 @@ func TestFindTagGetter_DepthLimit(t *testing.T) {
 		curr.Next = &testFindTagGetterDepth{}
 		curr = curr.Next
 	}
-	if path, tgType, found := FindTagGetter(root); found || path != "" || tgType != nil {
+	if path, tgType, found := findTagGetter(root); found || path != "" || tgType != nil {
 		t.Fatalf("expected no match when depth limit is hit, got found=%v path=%q type=%v", found, path, tgType)
 	}
 }
@@ -69,7 +69,7 @@ func TestFindTagGetter_ArrayAndSliceMatches(t *testing.T) {
 		}
 	}{}
 	withArray.Outer.Arr[3] = testFindTagGetter{}
-	path, tgType, found := FindTagGetter(withArray)
+	path, tgType, found := findTagGetter(withArray)
 	if !found {
 		t.Fatal("expected array TagGetter match")
 	}
@@ -87,7 +87,7 @@ func TestFindTagGetter_ArrayAndSliceMatches(t *testing.T) {
 	}{}
 	withSlice.Outer.S = make([]any, 5)
 	withSlice.Outer.S[2] = testFindTagGetter{}
-	path, tgType, found = FindTagGetter(withSlice)
+	path, tgType, found = findTagGetter(withSlice)
 	if !found {
 		t.Fatal("expected slice TagGetter match")
 	}

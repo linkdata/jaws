@@ -787,25 +787,34 @@ func TestTagExpand_TooDeepAndTooManySliceTags(t *testing.T) {
 	}
 }
 
-// TestTagExpand_PartialResultOnCountLimit pins the documented contract that on
-// the count-limit path TagExpand returns the tags expanded before the failure.
-// The cap is inclusive (the over-limit tag is appended before the check), so the
-// partial result holds maxTagCount+1 elements in input order.
+// TestTagExpand_PartialResultOnCountLimit checks the count-limit partial result.
+//
+// The over-limit tag is appended before the error, in input order.
 func TestTagExpand_PartialResultOnCountLimit(t *testing.T) {
-	tags := make([]Tag, maxTagCount+1)
+	tags := make([]Tag, maxTagCount+20)
 	for i := range tags {
 		tags[i] = Tag(fmt.Sprintf("t%d", i))
 	}
-	result, err := TagExpand(tags)
-	if !errors.Is(err, ErrTooManyTags) {
-		t.Fatalf("TagExpand([]Tag) error = %v, want %v", err, ErrTooManyTags)
-	}
-	if len(result) != maxTagCount+1 {
-		t.Fatalf("partial result len = %d, want %d", len(result), maxTagCount+1)
-	}
-	for i, got := range result {
-		if want := Tag(fmt.Sprintf("t%d", i)); got != want {
-			t.Errorf("result[%d] = %v, want %v", i, got, want)
-		}
+	for _, tt := range []struct {
+		name  string
+		input any
+	}{
+		{"flat", tags},
+		{"nested", []any{tags[:maxTagCount/2], &testDeepTagGetter{next: tags[maxTagCount/2:]}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := TagExpand(tt.input)
+			if !errors.Is(err, ErrTooManyTags) {
+				t.Fatalf("TagExpand error = %v, want %v", err, ErrTooManyTags)
+			}
+			if len(result) != maxTagCount+1 {
+				t.Fatalf("partial result len = %d, want %d", len(result), maxTagCount+1)
+			}
+			for i, got := range result {
+				if want := tags[i]; got != want {
+					t.Errorf("result[%d] = %v, want %v", i, got, want)
+				}
+			}
+		})
 	}
 }
