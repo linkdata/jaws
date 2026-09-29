@@ -34,10 +34,9 @@ type GetHook[T comparable] func(bind Binder[T], elem *jaws.Element) (value T)
 // Do not lock or unlock the [Binder] in the function. Do not call [Getter.JawsGet]
 // or [HTMLGetter.JawsGetHTML] (either would deadlock or recurse).
 //
-// Unlike [GetHook] and [SetHook], the bind argument is the current Binder (the
-// one whose hook is being invoked), not the previous one. Read the bound value
-// with bind.JawsGetLocked(elem) to render it; that skips this hook and so does
-// not recurse.
+// Unlike [GetHook] and [SetHook], the bind argument is the Binder on which
+// JawsGetHTML was called. Read the bound value with bind.JawsGetLocked(elem)
+// to render it; that skips HTML hooks and so does not recurse.
 type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTML)
 
 // ClickedHook is a function to call when a click event is received.
@@ -45,7 +44,7 @@ type GetHTMLHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s templ
 // The [Binder] locks are not held when the function is called.
 //
 // Like [GetHTMLHook] and unlike [GetHook] and [SetHook], the bind argument is the
-// current Binder (the one whose hook is being invoked), not the previous one.
+// Binder on which JawsClick was called.
 type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // ContextMenuHook is a function to call when a context menu event is received.
@@ -53,7 +52,7 @@ type ClickedHook[T comparable] func(bind Binder[T], elem *jaws.Element, click ja
 // The [Binder] locks are not held when the function is called.
 //
 // Like [GetHTMLHook] and unlike [GetHook] and [SetHook], the bind argument is the
-// current Binder (the one whose hook is being invoked), not the previous one.
+// Binder on which JawsContextMenu was called.
 type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, click jaws.Click) (err error)
 
 // InitialHTMLAttrHook is a function to call when an Element is initially rendered.
@@ -171,7 +170,7 @@ type Binder[T comparable] interface {
 	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
 	//
 	// Unlike [Binder.GetLocked] and [Binder.SetLocked], the bind argument to fn is
-	// the current Binder, not the previous one; read the value with its
+	// the Binder on which JawsGetHTML was called; read the value with its
 	// JawsGetLocked to render it. See [GetHTMLHook].
 	//
 	// GetHTML and [Binder.Format] are both HTML-rendering overrides resolved
@@ -241,7 +240,7 @@ func (b *binder[T]) jawsGetHTMLLocked(elem *jaws.Element) template.HTML {
 	for bnd := b; bnd != nil; bnd = bnd.prev {
 		switch hook := bnd.hook.(type) {
 		case GetHTMLHook[T]:
-			return hook(bnd, elem)
+			return hook(b, elem)
 		case string:
 			var s string
 			v := b.JawsGetLocked(elem)
@@ -326,28 +325,26 @@ func (b *binder[T]) JawsGetTag() any {
 
 func (b *binder[T]) JawsClick(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for b != nil {
-		if fn, ok := b.hook.(ClickedHook[T]); ok {
+	for current := b; current != nil; current = current.prev {
+		if fn, ok := current.hook.(ClickedHook[T]); ok {
 			err = fn(b, elem, click)
 			if !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
-		b = b.prev
 	}
 	return
 }
 
 func (b *binder[T]) JawsContextMenu(elem *jaws.Element, click jaws.Click) (err error) {
 	err = jaws.ErrEventUnhandled
-	for b != nil {
-		if fn, ok := b.hook.(ContextMenuHook[T]); ok {
+	for current := b; current != nil; current = current.prev {
+		if fn, ok := current.hook.(ContextMenuHook[T]); ok {
 			err = fn(b, elem, click)
 			if !errors.Is(err, jaws.ErrEventUnhandled) {
 				break
 			}
 		}
-		b = b.prev
 	}
 	return
 }
