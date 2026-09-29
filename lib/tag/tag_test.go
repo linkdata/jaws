@@ -521,6 +521,24 @@ type testPanicTagGetter struct{}
 
 func (testPanicTagGetter) JawsGetTag() any { panic("boom") }
 
+type testComparabilityPanicTagGetter struct{}
+
+func (testComparabilityPanicTagGetter) JawsGetTag() any {
+	var a, b any = []int{1}, []int{1}
+	_ = a == b
+	return nil
+}
+
+func TestTagExpand_RepanicsComparabilityPanicFromGetter(t *testing.T) {
+	defer func() {
+		r, ok := recover().(runtime.Error)
+		if !ok || !strings.Contains(r.Error(), "comparing uncomparable type") {
+			t.Fatalf("expected getter's comparability panic, got %v", r)
+		}
+	}()
+	_, _ = TagExpand(testComparabilityPanicTagGetter{})
+}
+
 // uncomparablePanic returns a real "comparing uncomparable type" runtime panic
 // value by comparing two non-comparable interface values.
 func uncomparablePanic() (r any) {
@@ -530,9 +548,8 @@ func uncomparablePanic() (r any) {
 	return
 }
 
-// Test_recoverComparabilityPanic exercises the recovery helper directly, since the
-// comparability panic it handles only occurs in production builds (debug builds
-// reject such tags in ensureUsableTag before the dedup compares them).
+// Test_recoverComparabilityPanic exercises the defense-in-depth recovery helper
+// directly; ensureUsableTag normally rejects unusable tags before deduplication.
 func Test_recoverComparabilityPanic(t *testing.T) {
 	rerr := uncomparablePanic()
 	if _, ok := rerr.(runtime.Error); !ok {
