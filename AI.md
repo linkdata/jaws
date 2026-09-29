@@ -390,7 +390,7 @@ baseline and replaces its Content-Security-Policy with
 
 ```go
 page := ui.Handler(jw, "index", bind.New(&mu, &value))
-http.DefaultServeMux.Handle("GET /", jw.SecureHeadersMiddleware(page))
+http.DefaultServeMux.Handle("GET /{$}", jw.SecureHeadersMiddleware(page))
 ```
 
 When a resource needs an explicit CSP destination, build a custom

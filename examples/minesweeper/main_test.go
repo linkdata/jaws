@@ -995,6 +995,10 @@ func TestRunServesApplication(t *testing.T) {
 		if page.Code != http.StatusOK {
 			t.Errorf("GET / status = %d, want %d", page.Code, http.StatusOK)
 		}
+		favicon := serve("/favicon.ico")
+		if favicon.Code != http.StatusNotFound {
+			t.Errorf("GET /favicon.ico status = %d, want %d", favicon.Code, http.StatusNotFound)
+		}
 		body := page.Body.String()
 		for _, fragment := range []string{
 			"<!doctype html>",

@@ -20,6 +20,8 @@ const indexhtml = `
 </html>
 `
 
+type Percent uint8
+
 // Example is a compile-checked illustration of a minimal JaWS application. It
 // starts a blocking HTTP server, so it has no testable Output and is not
 // executed by "go test".
@@ -41,9 +43,9 @@ func Example() {
 	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
 
 	var mu sync.Mutex
-	var f float64
+	percent := Percent(50)
 
-	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &f)))
+	http.DefaultServeMux.Handle("GET /{$}", ui.Handler(jw, "index", bind.New(&mu, &percent)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 
@@ -71,6 +73,6 @@ func Example_secureSession() {
 	var f float64
 
 	page := ui.Handler(jw, "index", bind.New(&mu, &f))
-	mux.Handle("GET /", jw.SessionMiddleware(jw.SecureHeadersMiddleware(page)))
+	mux.Handle("GET /{$}", jw.SessionMiddleware(jw.SecureHeadersMiddleware(page)))
 	slog.Error(http.ListenAndServe("localhost:8080", mux).Error())
 }
