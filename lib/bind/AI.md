@@ -21,8 +21,9 @@ formatting and initial-attribute hooks run while the binder lock is held.
 Each builder returns a new head wrapping the previous binder. `GetLocked` and
 `SetLocked` hooks receive the previous binder and normally delegate to it while
 the appropriate lock is already held. `GetHTML`, click, and context-menu hooks
-receive the current binder. Do not reacquire the binder lock or call the public
-locking getter/setter from a locked hook.
+receive the binder on which rendering or event dispatch was invoked, including
+hooks later in that binder's chain. Do not reacquire the binder lock or call the
+public locking getter/setter from a locked hook.
 
 Lookup and event ordering are deliberately head-first:
 

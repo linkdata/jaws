@@ -623,6 +623,28 @@ func TestBind_Hook_Clicked_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	}
 }
 
+func TestBind_Hook_Clicked_UsesInvokingBinder(t *testing.T) {
+	var mu deadlock.Mutex
+	var value, successCalls int
+	var seen Binder[int]
+	click := New(&mu, &value).Clicked(func(b Binder[int], elem *jaws.Element, _ jaws.Click) error {
+		seen = b
+		return b.JawsSet(elem, 5)
+	})
+	bind := click.SetLocked(func(prev Binder[int], elem *jaws.Element, value int) error {
+		return prev.JawsSetLocked(elem, min(value, 3))
+	}).Success(func() { successCalls++ }).Clicked(func(Binder[int], *jaws.Element, jaws.Click) error {
+		return jaws.ErrEventUnhandled
+	})
+
+	if err := bind.JawsClick(nil, jaws.Click{}); err != nil {
+		t.Fatal(err)
+	}
+	if seen != bind || value != 3 || successCalls != 1 {
+		t.Fatalf("callback binder = %v, value = %d, success calls = %d", seen == bind, value, successCalls)
+	}
+}
+
 func TestBind_Hook_Clicked_bindingHook_fallsThroughWrappedUnhandled(t *testing.T) {
 	var mu deadlock.Mutex
 	var val string
@@ -729,6 +751,28 @@ func TestBind_Hook_ContextMenu_bindingHook_fallsThroughUnhandled(t *testing.T) {
 	}
 	if !reflect.DeepEqual(order, []int{2, 1}) {
 		t.Error(order)
+	}
+}
+
+func TestBind_Hook_ContextMenu_UsesInvokingBinder(t *testing.T) {
+	var mu deadlock.Mutex
+	var value, successCalls int
+	var seen Binder[int]
+	menu := New(&mu, &value).ContextMenu(func(b Binder[int], elem *jaws.Element, _ jaws.Click) error {
+		seen = b
+		return b.JawsSet(elem, 5)
+	})
+	bind := menu.SetLocked(func(prev Binder[int], elem *jaws.Element, value int) error {
+		return prev.JawsSetLocked(elem, min(value, 3))
+	}).Success(func() { successCalls++ }).ContextMenu(func(Binder[int], *jaws.Element, jaws.Click) error {
+		return jaws.ErrEventUnhandled
+	})
+
+	if err := bind.JawsContextMenu(nil, jaws.Click{}); err != nil {
+		t.Fatal(err)
+	}
+	if seen != bind || value != 3 || successCalls != 1 {
+		t.Fatalf("callback binder = %v, value = %d, success calls = %d", seen == bind, value, successCalls)
 	}
 }
 
@@ -1033,6 +1077,26 @@ func TestBind_Hook_GetHTML(t *testing.T) {
 	}
 	if tags := mustExpand(t, getHTML2); !reflect.DeepEqual(tags, []any{&val}) {
 		t.Fatal(tags)
+	}
+}
+
+func TestBind_Hook_GetHTML_UsesInvokingBinder(t *testing.T) {
+	var mu deadlock.RWMutex
+	value := "x"
+	var seen Binder[string]
+	html := New(&mu, &value).GetHTML(func(b Binder[string], elem *jaws.Element) template.HTML {
+		seen = b
+		return template.HTML(b.JawsGetLocked(elem))
+	})
+	bind := html.GetLocked(func(prev Binder[string], elem *jaws.Element) string {
+		return strings.ToUpper(prev.JawsGetLocked(elem))
+	})
+
+	if got := MakeHTMLGetter(bind).JawsGetHTML(nil); got != "X" || seen != bind {
+		t.Fatalf("HTML = %q, callback binder is invoked binder = %v", got, seen == bind)
+	}
+	if got := MakeHTMLGetter(html).JawsGetHTML(nil); got != "x" || seen != html {
+		t.Fatalf("intermediate HTML = %q, callback binder is invoked binder = %v", got, seen == html)
 	}
 }
 
