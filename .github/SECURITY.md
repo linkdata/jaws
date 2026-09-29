@@ -403,15 +403,16 @@ through `bind.MakeHTMLGetter`; the `Object` widget (constructed via `ui.New`)
 routes its innerHTML the same way. A **plain `string`** taken by that path is treated as
 **trusted HTML and is *not* escaped** — no explicit `template.HTML` cast is
 required — so that markup can be passed conveniently from templates
-(e.g. `{{$.Span "<i>text</i>"}}`). Values wrapped in a `bind.Getter[string]`,
-`bind.Binder[string]`, or `fmt.Stringer` *are* escaped. The same trust applies to
-the `named.NewBool`/`BoolArray.Add` HTML labels (typed `template.HTML`).
+(e.g. `{{$.Span "<i>text</i>"}}`). Values wrapped in `bind.Getter[string]` or
+`fmt.Stringer` are escaped. A Binder from `bind.New` escapes default and `Format`
+output, while its `GetHTML` hook returns trusted markup. A wrapper embedding
+`bind.Binder[string]` without `JawsGetHTML` uses escaped `JawsGet` output.
+The `named.NewBool`/`BoolArray.Add` HTML labels are trusted `template.HTML`.
 
-**Implication:** The framework itself does not create XSS vulnerabilities, but its
-XSS safety is **contingent on the application developer never passing untrusted
-data either as a plain `string` to an HTML-inner widget or as `template.HTML` to
-`SetInner()`** — doing so would create a stored XSS condition. Wrap user input in a
-`Getter`/`Stringer` (auto-escaped) or pre-escape it with
+**Implication:** Do not pass untrusted data as a plain `string` to an HTML-inner
+widget, as `template.HTML` to `SetInner()`, or as the result of a Binder `GetHTML`
+hook. Doing so can create stored XSS. Wrap user input in a `Getter`/`Stringer`
+(auto-escaped) or pre-escape it with
 `template.HTMLEscapeString` before casting. The CSP `script-src 'self'` mitigates
 this by blocking inline script execution.
 

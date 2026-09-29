@@ -92,6 +92,9 @@ type Formatter interface {
 // Binder holds its lock while rendering HTML, including while invoking [GetHTMLHook],
 // [Formatter.Format], [fmt.Formatter.Format] and [fmt.Stringer.String], and while
 // invoking [InitialHTMLAttrHook].
+//
+// The Binder interface omits [HTMLGetter], although Binders from [New] implement
+// it. See [MakeHTMLGetter] for wrappers embedding Binder.
 type Binder[T comparable] interface {
 	RWLocker
 	Setter[T]
