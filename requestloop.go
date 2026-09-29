@@ -571,13 +571,18 @@ func eventAlertError(err error) error {
 	return err
 }
 
-// onConnect calls the [Request]'s [ConnectFn] if it is not nil, and returns the error from it.
-// Returns nil if [ConnectFn] is nil.
+// onConnect calls the [Request]'s [ConnectFn] if it is not nil, returning its
+// error or converting its panic to an error. Returns nil if [ConnectFn] is nil.
 func (rq *Request) onConnect() (err error) {
 	rq.mu.RLock()
 	connectFn := rq.connectFn
 	rq.mu.RUnlock()
 	if connectFn != nil {
+		defer func() {
+			if x := recover(); x != nil {
+				err = fmt.Errorf("jaws: %v ConnectFn panic: %v", rq, x)
+			}
+		}()
 		err = connectFn(rq)
 	}
 	return
