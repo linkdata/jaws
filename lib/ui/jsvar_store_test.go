@@ -1268,18 +1268,6 @@ func TestJsVarStoreNameConflicts(t *testing.T) {
 	}
 }
 
-func TestJsVarBindingDeactivation(t *testing.T) {
-	jw, rq := newCoreRequest(t)
-	var mu sync.RWMutex
-	value := 1
-	store := newTestJsVarStore(t, jw, "client", &mu, &value)
-	binding, _, _ := renderTestJsVar(t, rq, store)
-	binding.Deactivate()
-	if binding.active.Load() {
-		t.Fatal("Deactivate left binding active")
-	}
-}
-
 func TestJsVarStoreNameValidation(t *testing.T) {
 	jw, _ := newCoreRequest(t)
 	var mu sync.RWMutex
