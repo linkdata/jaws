@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/linkdata/jaws"
@@ -77,61 +78,66 @@ func TestContainerUpdate(t *testing.T) {
 	}
 }
 
-// TestContainer_UpdateEmitsWireOps pins the browser-visible wire output of an
-// update: appending a child must emit an Append carrying that child's
-// rendered HTML and an Order reflecting the new sequence. Asserting the ops (not
-// just the in-memory contents slice) catches regressions that line coverage misses.
+// TestContainer_UpdateEmitsWireOps checks browser wire output for an appended child.
+//
+// The update sends Append with rendered HTML and Order for the new sequence.
 func TestContainer_UpdateEmitsWireOps(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
-	defer tr.Close()
-	<-tr.ReadyCh
-
-	span1 := NewSpan(testHTMLGetter("span1"))
-	span2 := NewSpan(testHTMLGetter("span2"))
-	tc := &testContainer{contents: []jaws.UI{span1}}
-	container := NewContainer("div", tc)
-	elem := tr.NewElement(container)
-	var sb strings.Builder
-	if err := elem.JawsRender(&sb, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	tc.contents = []jaws.UI{span1, span2}
-	elem.JawsUpdate()
-	// Wake the harness loop so the queued ops flush to OutCh.
-	tr.InCh <- wire.WsMsg{}
-
-	var sawAppend, sawOrder bool
-collect:
-	for {
-		select {
-		case msg := <-tr.OutCh:
-			switch msg.What {
-			case what.Append:
-				sawAppend = true
-				if !strings.Contains(msg.Data, "span2") {
-					t.Errorf("Append data %q does not contain the new child's HTML", msg.Data)
-				}
-			case what.Order:
-				sawOrder = true
-			}
-		case <-time.After(300 * time.Millisecond):
-			break collect
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := jaws.New()
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	if !sawAppend || !sawOrder {
-		t.Fatalf("want both Append and Order ops, got append=%v order=%v", sawAppend, sawOrder)
-	}
+		defer jw.Close()
+		go jw.Serve()
+
+		tr := jawstest.NewTestRequest(jw, nil)
+		if tr == nil {
+			t.Fatal("expected test request")
+		}
+		defer tr.Close()
+		<-tr.ReadyCh
+
+		span1 := NewSpan(testHTMLGetter("span1"))
+		span2 := NewSpan(testHTMLGetter("span2"))
+		tc := &testContainer{contents: []jaws.UI{span1}}
+		container := NewContainer("div", tc)
+		elem := tr.NewElement(container)
+		var sb strings.Builder
+		if err := elem.JawsRender(&sb, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		tc.contents = []jaws.UI{span1, span2}
+		elem.JawsUpdate()
+		// Wake the harness loop so the queued ops flush to OutCh.
+		tr.InCh <- wire.WsMsg{}
+
+		synctest.Wait()
+		var sawAppend, sawOrder bool
+	collect:
+		for {
+			select {
+			case msg, ok := <-tr.OutCh:
+				if !ok {
+					t.Fatal("test request closed before wire ops were collected")
+				}
+				switch msg.What {
+				case what.Append:
+					sawAppend = true
+					if !strings.Contains(msg.Data, "span2") {
+						t.Errorf("Append data %q does not contain the new child's HTML", msg.Data)
+					}
+				case what.Order:
+					sawOrder = true
+				}
+			default:
+				break collect
+			}
+		}
+		if !sawAppend || !sawOrder {
+			t.Fatalf("want both Append and Order ops, got append=%v order=%v", sawAppend, sawOrder)
+		}
+	})
 }
 
 func TestContainer_AppendsSelectBeforeSettingInitialValue(t *testing.T) {
@@ -370,49 +376,58 @@ func TestContainerRenderErrorPaths(t *testing.T) {
 }
 
 func TestContainerUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) {
-	jw, err := jaws.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-	jw.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	go jw.Serve()
-
-	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
-	defer tr.Close()
-	<-tr.ReadyCh
-
-	tc := &testContainer{}
-	container := NewContainer("div", tc)
-	elem := tr.NewElement(container)
-	var sb strings.Builder
-	if err := elem.JawsRender(&sb, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	renderErr := errors.New("append render failed")
-	failingChild := &testRenderErrorCaptureUI{err: renderErr}
-	tc.contents = []jaws.UI{failingChild}
-	elem.JawsUpdate()
-
-	if !failingChild.jid.IsValid() {
-		t.Fatal("expected failing child jid to be captured")
-	}
-	if leaked := tr.GetElementByJid(failingChild.jid); leaked != nil {
-		t.Fatalf("failed append child %v leaked into the request registry", failingChild.jid)
-	}
-
-	tr.InCh <- wire.WsMsg{}
-	select {
-	case msg := <-tr.OutCh:
-		if msg.What == what.Append || msg.What == what.Order {
-			t.Fatalf("failed append render emitted browser mutation: %+v", msg)
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := jaws.New()
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(300 * time.Millisecond):
-	}
+		defer jw.Close()
+		jw.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		go jw.Serve()
+
+		tr := jawstest.NewTestRequest(jw, nil)
+		if tr == nil {
+			t.Fatal("expected test request")
+		}
+		defer tr.Close()
+		<-tr.ReadyCh
+
+		tc := &testContainer{}
+		container := NewContainer("div", tc)
+		elem := tr.NewElement(container)
+		var sb strings.Builder
+		if err := elem.JawsRender(&sb, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		renderErr := errors.New("append render failed")
+		failingChild := &testRenderErrorCaptureUI{err: renderErr}
+		tc.contents = []jaws.UI{failingChild}
+		elem.JawsUpdate()
+
+		if !failingChild.jid.IsValid() {
+			t.Fatal("expected failing child jid to be captured")
+		}
+		if leaked := tr.GetElementByJid(failingChild.jid); leaked != nil {
+			t.Fatalf("failed append child %v leaked into the request registry", failingChild.jid)
+		}
+
+		tr.InCh <- wire.WsMsg{}
+		synctest.Wait()
+		for {
+			select {
+			case msg, ok := <-tr.OutCh:
+				if !ok {
+					t.Fatal("test request closed before wire ops were checked")
+				}
+				if msg.What == what.Append || msg.What == what.Order {
+					t.Fatalf("failed append render emitted browser mutation: %+v", msg)
+				}
+			default:
+				return
+			}
+		}
+	})
 }
 
 type testRenderErrorUI struct {
