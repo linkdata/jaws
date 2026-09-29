@@ -92,8 +92,7 @@ accepted WebSocket invokes it with the `jaws.ConnectFn` lifecycle. An
 implementation available only on a nested Template Dot is ignored without a
 diagnostic. Handler reuses its Dot across Requests, so its state and callbacks
 must support concurrent execution. The bundled client connects after parsing
-the document, while a custom client can dial once flushed response bytes expose
-the request key and overlap initial rendering.
+the document.
 
 The Template's Dot contributes both identity and tags. It must be nil or
 comparable at runtime, equal to itself, and usable under `tag.TagExpand`.

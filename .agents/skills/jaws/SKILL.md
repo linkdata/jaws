@@ -133,12 +133,11 @@ WebSocket upgrade and is too late for initial page state.
 top-level Dot's method set, including promoted methods. It installs `JawsConnect`
 before page template execution; the plain GET does not invoke it. An
 implementation available only on a nested Template Dot is ignored without a
-diagnostic. The bundled client connects after parsing the document. A custom
-client can invoke the hook during rendering once flushed response bytes expose
-the request key. Other Request setup requires a custom page handler. A
-full-document Template is not a supported workaround. A connection identifies a
-JaWS-capable client, not affirmative human intent; use a semantic click action
-when that distinction matters.
+diagnostic. The bundled client connects after parsing the document. Other
+Request setup requires a custom page handler. A full-document Template is not a
+supported workaround. A connection identifies a JaWS-capable client, not
+affirmative human intent; use a semantic click action when that distinction
+matters.
 
 A retained Template update keeps its wrapper Element and Jid, sends new inner
 HTML, and unregisters/recreates managed descendants. It does not preserve

@@ -554,8 +554,7 @@ func TestJaws_PendingRequestCountTagConvergesBetweenMaintenancePasses(t *testing
 	requireDirtyTags(t, jw, jw.PendingRequestCountTag())
 
 	target := jw.NewRequest(httptest.NewRecorder(), newStatusHTTPRequest(server.URL, "/target"))
-	// A custom client may connect while the initial HTTP renderer continues. Render
-	// the status Element through that supported overlap while target is pending.
+	// Render the status Element on the connected observer while target is pending.
 	pendingValues := renderStatusCount(t, observer, jw.PendingRequestCountTag(), jw.Pending)
 	requireStatusCount(t, pendingValues, 1)
 
