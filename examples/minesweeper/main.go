@@ -45,7 +45,7 @@ func run(listenAndServe func(addr string, handler http.Handler) error) (err erro
 						mux := http.NewServeMux()
 						mux.Handle("GET /jaws/", jw)
 						mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
-						mux.Handle("GET /", page)
+						mux.Handle("GET /{$}", page)
 
 						slog.Info("Minesweeper is listening", "url", "http://localhost:8080")
 						err = listenAndServe(addr, mux)

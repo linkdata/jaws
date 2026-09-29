@@ -59,7 +59,7 @@ func ExampleHandler_connectHandler() {
 	go jw.Serve()
 	mux := http.NewServeMux()
 	mux.Handle("GET /jaws/", jw)
-	mux.Handle("GET /", ui.Handler(jw, "connections", new(exampleConnections)))
+	mux.Handle("GET /{$}", ui.Handler(jw, "connections", new(exampleConnections)))
 
 	_ = mux // serve mux with an HTTP server
 }

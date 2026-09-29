@@ -99,7 +99,9 @@ func main() {
 
 	// parse our template and inform JaWS about it
 	templates := template.Must(template.New("index").Parse(indexhtml))
-	_ = jw.AddTemplateLookuper(templates)
+	if err := jw.AddTemplateLookuper(templates); err != nil {
+		panic(err)
+	}
 
 	go jw.Serve()                                 // start the JaWS processing loop
 	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
@@ -107,7 +109,7 @@ func main() {
 	var mu sync.Mutex
 	percent := Percent(50)
 
-	http.DefaultServeMux.Handle("GET /", ui.Handler(jw, "index", bind.New(&mu, &percent)))
+	http.DefaultServeMux.Handle("GET /{$}", ui.Handler(jw, "index", bind.New(&mu, &percent)))
 	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
 }
 ```
