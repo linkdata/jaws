@@ -123,7 +123,8 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // For partial map patches, the bound JSON tree must not share mutable pointers,
 // maps, or slices across different paths. Complex Go types use root patches.
 // Custom JSON methods reached while locked must not re-enter the store or its
-// locker, and must produce the same JSON until the next published change.
+// locker, and must produce the same JSON until the next store change.
+// The last rendered JSON snapshot stays in memory until a newer one replaces it.
 //
 // A JsVarStore must not be copied after first use.
 type JsVarStore[T any] struct {
@@ -431,8 +432,7 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data string,
 			}
 		}
 	}
-	var snapshot *jsVarSnapshot
-	snapshot, err = store.snapshotLocked(store.value)
+	snapshot, err := store.snapshotLocked(store.value)
 	if err == nil {
 		data = snapshot.root[1:]
 		binding.lastVersion.Store(store.version)
