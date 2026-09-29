@@ -136,7 +136,7 @@ func hasNonNilTag(tags []any) bool {
 	return false
 }
 
-func expand(depth int, tagValue any, result []any, active []any) ([]any, error) {
+func expand(depth int, tagValue any, result []any, active []any, inGetter *bool) ([]any, error) {
 	if depth > maxTagDepth || len(result) > maxTagCount {
 		return result, ErrTooManyTags
 	}
@@ -160,7 +160,10 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 		if idx := findActiveIndex(active, data); idx >= 0 {
 			return addActiveTags(result, active[idx:])
 		}
-		return expand(depth+1, data.JawsGetTag(), result, append(active, data))
+		*inGetter = true
+		value := data.JawsGetTag()
+		*inGetter = false
+		return expand(depth+1, value, result, append(active, data), inGetter)
 	case []any:
 		if !hasNonNilTag(data) {
 			return result, nil
@@ -174,7 +177,7 @@ func expand(depth int, tagValue any, result []any, active []any) ([]any, error) 
 		active = append(active, data)
 		var err error
 		for _, v := range data {
-			if result, err = expand(depth+1, v, result, active); err != nil {
+			if result, err = expand(depth+1, v, result, active, inGetter); err != nil {
 				return result, err
 			}
 		}
@@ -234,14 +237,18 @@ func TagExpand(tagValue any) (result []any, err error) {
 	// stays as a defense-in-depth net: should a non-comparable value ever reach
 	// that comparison, recoverComparabilityPanic turns the specific "comparing
 	// uncomparable type" runtime panic into [ErrNotUsableAsTag] and re-raises
-	// anything else.
+	// anything else. A panic raised inside JawsGetTag must pass through unchanged.
+	var inGetter bool
 	defer func() {
 		if r := recover(); r != nil {
+			if inGetter {
+				panic(r)
+			}
 			result, err = recoverComparabilityPanic(r, tagValue)
 		}
 	}()
 	var activeArr [12]any
-	return expand(0, tagValue, nil, activeArr[:0])
+	return expand(0, tagValue, nil, activeArr[:0], &inGetter)
 }
 
 // recoverComparabilityPanic maps a panic recovered from tag expansion to a
