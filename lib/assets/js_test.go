@@ -616,7 +616,7 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_MissingJsVarParent(t *testing.T) {
+func TestJawsJS_MissingPathParent(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function attach(path) {
 	const elem = {
@@ -627,10 +627,15 @@ function attach(path) {
 	try { jawsAttach(elem, true); return ""; }
 	catch (err) { return String(err); }
 }
+function call(path) {
+	try { jawsCall(path, 1); return ""; }
+	catch (err) { return String(err); }
+}
 window.ok = {};
 process.stdout.write(JSON.stringify({
 	shallow: attach("app.state"),
 	deep: attach("a.b.c"),
+	call: call("app.refresh"),
 	valid: attach("ok.state"),
 	value: window.ok.state,
 }));
@@ -638,15 +643,17 @@ process.stdout.write(JSON.stringify({
 	var got struct {
 		Shallow string `json:"shallow"`
 		Deep    string `json:"deep"`
+		Call    string `json:"call"`
 		Valid   string `json:"valid"`
 		Value   int    `json:"value"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if got.Shallow != "jaws: JsVar path undefined: app.state" ||
-		got.Deep != "jaws: JsVar path undefined: a.b.c" || got.Valid != "" || got.Value != 1 {
-		t.Fatalf("JsVar parent handling = %+v", got)
+	if got.Shallow != "jaws: path undefined: app.state" ||
+		got.Deep != "jaws: path undefined: a.b.c" ||
+		got.Call != "jaws: path undefined: app.refresh" || got.Valid != "" || got.Value != 1 {
+		t.Fatalf("path parent handling = %+v", got)
 	}
 }
 
@@ -1074,7 +1081,7 @@ func TestJawsJS_RequestScopedCallDoesNotRequireElement(t *testing.T) {
 let called = null;
 let lookedUp = false;
 window.app = Object.create({
-	refresh: function(value) { called = value; }
+	refresh: function(value) { called = value; this.received = value.source; }
 });
 document.getElementById = function() {
 	lookedUp = true;
@@ -1087,13 +1094,14 @@ try {
 } catch (err) {
 	thrown = String(err);
 }
-process.stdout.write(JSON.stringify({ called: called, lookedUp: lookedUp, thrown: thrown }));
+process.stdout.write(JSON.stringify({ called: called, receiver: window.app.received, lookedUp: lookedUp, thrown: thrown }));
 `)
 
 	var got struct {
 		Called struct {
 			Source string `json:"source"`
 		} `json:"called"`
+		Receiver string `json:"receiver"`
 		LookedUp bool   `json:"lookedUp"`
 		Thrown   string `json:"thrown"`
 	}
@@ -1108,6 +1116,9 @@ process.stdout.write(JSON.stringify({ called: called, lookedUp: lookedUp, thrown
 	}
 	if got.Called.Source != "server" {
 		t.Fatalf("request-scoped Call argument = %+v, want source=server", got.Called)
+	}
+	if got.Receiver != "server" {
+		t.Fatalf("request-scoped Call receiver = %q, want server", got.Receiver)
 	}
 }
 
