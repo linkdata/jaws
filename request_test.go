@@ -4717,6 +4717,18 @@ func TestWS_ConnectFnSubscriptionCleanup(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal("ConnectFn subscription was not released")
 			}
+			if _, _, err := conn.Read(ctx); err == nil || ctx.Err() != nil {
+				t.Fatal("WebSocket remained open after ConnectFn failure")
+			}
+			if got := jw.ErrorCount(); got != 1 {
+				t.Fatalf("ErrorCount() = %d, want 1", got)
+			}
+			if tt.name == "panic" {
+				cause := context.Cause(rq.Context())
+				if cause == nil || !strings.Contains(cause.Error(), "ConnectFn panic: connect panic") {
+					t.Fatalf("cancellation cause = %v, want ConnectFn panic", cause)
+				}
+			}
 		})
 	}
 }
