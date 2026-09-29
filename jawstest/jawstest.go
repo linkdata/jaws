@@ -5,9 +5,8 @@
 // directly. Start [jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout] before
 // constructing a [TestRequest], wait for [TestRequest.ReadyCh] before driving it,
 // and drain [TestRequest.OutCh] while output can be produced. [TestRequest.Close]
-// closes only the inbound channel; callers should then wait for
-// [TestRequest.DoneCh] and must not close [TestRequest.OutCh] or
-// [TestRequest.BcastCh].
+// closes only the inbound channel; the loop closes OutCh before DoneCh. Drain
+// OutCh before waiting for DoneCh, and do not close [TestRequest.BcastCh].
 package jawstest
 
 import (
@@ -29,8 +28,8 @@ import (
 // The embedded [jaws.Request] provides the usual request methods (NewElement,
 // JawsKeyString, and so on). The channels expose the loop's wiring: send incoming
 // WebSocket messages on InCh, read outbound messages from OutCh, and inject
-// broadcasts on BcastCh. ReadyCh is closed once the loop is running and DoneCh
-// once it has stopped.
+// broadcasts on BcastCh. ReadyCh is closed once the loop is running. OutCh
+// closes before DoneCh, which closes once the loop and its cleanup have stopped.
 //
 // OutCh is buffered but must be drained: a test that produces more outbound
 // messages than the buffer holds without reading OutCh stalls the loop, and a
@@ -44,17 +43,11 @@ type TestRequest struct {
 	ReadyCh  chan struct{}              // closed once the processing loop is running
 	DoneCh   chan struct{}              // closed once the processing loop has stopped
 	InCh     chan wire.WsMsg            // send inbound WebSocket messages here
-	OutCh    chan wire.WsMsg            // outbound messages; buffered but must be drained or the loop stalls
+	OutCh    <-chan wire.WsMsg          // outbound messages; buffered but must be drained or the loop stalls
 	BcastCh  chan wire.Message          // inject broadcasts here
 
 	closeOnce sync.Once // guards InCh so Close is idempotent
 }
-
-// newRequest constructs the pending [jaws.Request] that NewTestRequest then
-// claims and serves. It is a package variable so tests can substitute a
-// constructor returning an already-claimed request, exercising the
-// claim-failure path in NewTestRequest.
-var newRequest = (*jaws.Jaws).NewRequest
 
 // repanic re-raises a panic value recovered from the request's processing loop.
 // A nil value means the loop exited normally and is ignored; any other value is
@@ -72,9 +65,9 @@ func repanic(recovered any) {
 // Unexpected request-loop panics are re-raised on the loop goroutine. Use
 // [NewTestRequestWithPanic] to capture an expected panic.
 //
-// It panics if the request cannot be created or claimed. It requires the Jaws
-// processing loop ([jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout]) to be running;
-// if it is not, the underlying [jaws.Jaws.TestServe] panics.
+// It panics if the new request cannot be claimed, including after jw is closed.
+// The Jaws processing loop ([jaws.Jaws.Serve] or [jaws.Jaws.ServeWithTimeout])
+// must be running; otherwise [jaws.Jaws.TestServe] panics.
 func NewTestRequest(jw *jaws.Jaws, r *http.Request) *TestRequest {
 	return NewTestRequestWithPanic(jw, r, repanic)
 }
@@ -91,14 +84,9 @@ func NewTestRequestWithPanic(jw *jaws.Jaws, r *http.Request, onPanic func(recove
 		r = httptest.NewRequest(http.MethodGet, "/", nil)
 	}
 	rr := httptest.NewRecorder()
-	rq := newRequest(jw, rr, r)
-	// The rq == nil guard is defensive against the newRequest seam (NewRequest loops
-	// until a key is allocated and never returns nil in production); the claim check is
-	// the disjunct that fails in practice. Panic rather than returning nil so the
-	// failure surfaces at the call site instead of as a later nil dereference, matching
-	// how TestServe fails on a stopped loop.
-	if rq == nil || jw.UseRequest(rq.JawsKey, r) != rq {
-		panic("jawstest: request could not be claimed; another claim is already active")
+	rq := jw.NewRequest(rr, r)
+	if jw.UseRequest(rq.JawsKey, r) != rq {
+		panic("jawstest: request could not be claimed (Jaws closed or request retired)")
 	}
 	tr := &TestRequest{
 		Request:  rq,
