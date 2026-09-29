@@ -2007,6 +2007,14 @@ func TestRequest_ConnectFn(t *testing.T) {
 	th.Equal(rq.onConnect(), wantErr)
 }
 
+func TestDefaultPort(t *testing.T) {
+	for scheme, want := range map[string]string{"http": ":80", "https": ":443", "ws": ""} {
+		if got := defaultPort(scheme); got != want {
+			t.Errorf("defaultPort(%q) = %q, want %q", scheme, got, want)
+		}
+	}
+}
+
 func TestRequest_validateWebSocketOrigin_MatchesInitialRequestOrigin(t *testing.T) {
 	tests := []struct {
 		name                  string

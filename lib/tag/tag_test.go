@@ -748,6 +748,10 @@ func TestSameActiveNode_NilAndDefaultCases(t *testing.T) {
 	if sameActiveNode(a, b) {
 		t.Fatal("expected non-comparable structs to compare by identity, not contents")
 	}
+	m := map[string]int{"x": 1}
+	if !sameActiveNode(m, m) || sameActiveNode(m, map[string]int{"x": 1}) {
+		t.Fatal("expected maps to compare by identity")
+	}
 }
 
 func TestSameActiveNode_AliasedSliceViews(t *testing.T) {

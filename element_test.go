@@ -137,6 +137,22 @@ func TestElement_JsCallQueuesElementScopedCall(t *testing.T) {
 	}
 }
 
+func TestElement_JsVarQueuesElementScopedPatch(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := jw.newRequest(nil)
+	elem := rq.NewElement(&testUi{})
+	elem.JsVar("value=1")
+	rq.muQueue.Lock()
+	defer rq.muQueue.Unlock()
+	if len(rq.wsQueue) != 1 || rq.wsQueue[0] != (wire.WsMsg{Jid: elem.Jid(), What: what.JsVar, Data: "value=1"}) {
+		t.Fatalf("JsVar queue = %+v", rq.wsQueue)
+	}
+}
+
 func TestElement_Tag(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
@@ -1549,6 +1565,11 @@ func TestNewErrUnusableUI(t *testing.T) {
 			}
 			if err == nil {
 				t.Fatal("NewErrUnusableUI = nil, want error")
+			}
+			if got := err.Error(); !strings.Contains(got, "not usable as a jaws.UI value") {
+				t.Errorf("error text = %q", got)
+			} else if tt.ui == nil && !strings.HasPrefix(got, "nil ") {
+				t.Errorf("nil UI error text = %q", got)
 			}
 			// The error stands in for both tag identities so callers can match either.
 			if !errors.Is(err, tag.ErrNotUsableAsTag) {
