@@ -34,6 +34,8 @@ type Container struct {
 var _ jaws.UI = Container{}
 
 // NewContainer returns a Container that renders children inside outerHTMLTag.
+//
+// An empty outerHTMLTag selects "div".
 func NewContainer(outerHTMLTag string, children jaws.Container) Container {
 	if outerHTMLTag == "" {
 		outerHTMLTag = "div"

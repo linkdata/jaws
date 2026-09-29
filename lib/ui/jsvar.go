@@ -92,6 +92,7 @@ type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 //
 // A non-positive limit returns nil, which denies browser writes if used as the
 // store's sole ClientCheck. The check bounds JSON bytes, not Go heap capacity.
+// An encoding failure returns an error matching [ErrJsVarTooLarge].
 func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 	if maxBytes > 0 {
 		check = func(_ *jaws.Element, value *T, _ string) (err error) {

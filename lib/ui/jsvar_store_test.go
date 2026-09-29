@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -132,6 +133,15 @@ func TestJsVarStoreJSONSizeRollback(t *testing.T) {
 	}
 }
 
+func TestJSONSizeCheckEncodingError(t *testing.T) {
+	value := math.NaN()
+	err := JSONSizeCheck[float64](16)(nil, &value, "")
+	var unsupported *json.UnsupportedValueError
+	if !errors.Is(err, ErrJsVarTooLarge) || !errors.As(err, &unsupported) {
+		t.Fatalf("non-JSON value error = %v, want size check and encoding errors", err)
+	}
+}
+
 func TestJsVarStoreCheckPanicCorrectsSource(t *testing.T) {
 	jw, err := jaws.New()
 	if err != nil {
@@ -243,6 +253,33 @@ func TestJsVarStorePathsAndDeletion(t *testing.T) {
 	}
 	if !reflect.DeepEqual(state, map[string]map[string]int{"players": {"alice": 3}}) {
 		t.Fatalf("invalid paths changed state: %#v", state)
+	}
+}
+
+func TestJsVarStoreDeletePathMissingParents(t *testing.T) {
+	jw, _ := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := struct {
+		Pointer *map[string]int
+		Map     map[string]int
+	}{}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	for _, tt := range []struct {
+		name    string
+		path    string
+		wantErr error
+	}{
+		{name: "empty path", wantErr: ErrIllegalJsVarPath},
+		{name: "missing parent", path: "Missing.key", wantErr: jq.ErrPathNotFound},
+		{name: "nil pointer parent", path: "Pointer.key", wantErr: jq.ErrPathNotFound},
+		{name: "nil map parent", path: "Map.key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			changed, err := store.DeletePath(tt.path)
+			if changed || !errors.Is(err, tt.wantErr) {
+				t.Fatalf("DeletePath(%q) = (%t, %v), want (false, %v)", tt.path, changed, err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -1136,6 +1173,20 @@ func TestJsVarStoreVisibleArrayWrite(t *testing.T) {
 	}
 }
 
+func TestJsVarStorePlainArrayPatchUsesRoot(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := [2]int{1, 2}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	binding, _, _ := renderTestJsVar(t, rq, store)
+	if changed, err := store.SetPath("0", 3); err != nil || !changed {
+		t.Fatalf("SetPath(0) = (%t, %v)", changed, err)
+	}
+	if patches, err := binding.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{"=[3,2]"}) {
+		t.Fatalf("array patch = (%q, %v), want root patch", patches, err)
+	}
+}
+
 func TestJsVarStoreRejectsNonFiniteConversion(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	var mu sync.RWMutex
@@ -1281,6 +1332,9 @@ func TestJsVarStoreNameValidation(t *testing.T) {
 		if _, err := NewJsVarStore(jw, name, &mu, &value); err != nil {
 			t.Fatalf("valid name %q: %v", name, err)
 		}
+	}
+	if _, err := NewJsVarStore[int](jw, "client", &mu, nil); !errors.Is(err, jq.ErrInvalidReceiver) {
+		t.Fatalf("nil value error = %v, want ErrInvalidReceiver", err)
 	}
 }
 
