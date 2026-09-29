@@ -2974,6 +2974,30 @@ func TestRequest_getSendMsgsDropsCallFromDeletedElement(t *testing.T) {
 	}
 }
 
+func TestRequest_getSendMsgsSparseAndDeletedJids(t *testing.T) {
+	rq := &Request{elems: []*Element{{jid: 2}, {jid: 5}, {jid: 9}}}
+	rq.elems[1].deleted.Store(true)
+	rq.wsQueue = []wire.WsMsg{
+		{Jid: 9, What: what.Inner},
+		{Jid: 5, What: what.Inner},
+		{Jid: 7, What: what.Inner},
+		{Jid: 2, What: what.Inner},
+		{Jid: 5, What: what.Delete},
+		{Jid: 5, What: what.Order},
+		{Jid: 0, What: what.Reload},
+	}
+	want := []wire.WsMsg{
+		{Jid: 0, What: what.Reload},
+		{Jid: 2, What: what.Inner},
+		{Jid: 5, What: what.Delete},
+		{Jid: 5, What: what.Order},
+		{Jid: 9, What: what.Inner},
+	}
+	if got := rq.getSendMsgs(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("getSendMsgs() = %+v, want %+v", got, want)
+	}
+}
+
 // TestRequest_queueEventOverloadCancels verifies that when the event-call channel is
 // full, the Request is cancelled with a cause that wraps ErrRequestOverloaded (and is
 // still matchable as ErrRequestCancelled). It drives queueEvent with an unbuffered
@@ -3508,20 +3532,19 @@ func TestRequest_NewElement_DebugComparableCheck(t *testing.T) {
 	rq.NewElement(testUnhashableUI{m: map[string]int{"x": 1}})
 }
 
-func TestRequest_getElementByJidLocked_DebugUnsortedPanics(t *testing.T) {
+func TestRequest_newElementLocked_DebugUnsortedAppendPanics(t *testing.T) {
 	if !deadlock.Debug {
 		t.Skip("debug checks not enabled")
 	}
 
-	// rq.elems must stay sorted ascending by Jid for the binary search; a debug
-	// build asserts it rather than silently returning wrong lookups.
-	rq := &Request{elems: []*Element{{jid: 2}, {jid: 1}}}
+	// Appending a duplicate or out-of-order Jid would break binary search.
+	rq := &Request{lastJid: 1, elems: []*Element{{jid: 2}}}
 	defer func() {
 		if recover() == nil {
-			t.Fatal("expected panic when rq.elems is not sorted by Jid")
+			t.Fatal("expected panic when appending a duplicate Jid")
 		}
 	}()
-	rq.getElementByJidLocked(1)
+	rq.newElementLocked(nil)
 }
 
 func TestRequest_IncomingRemoveDoesNotDeleteMessageJid(t *testing.T) {

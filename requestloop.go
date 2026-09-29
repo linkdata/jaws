@@ -374,23 +374,10 @@ func (rq *Request) getSendMsgs() (toSend []wire.WsMsg) {
 	rq.muQueue.Lock()
 	defer rq.muQueue.Unlock()
 	if len(rq.wsQueue) > 0 {
-		// validJids is built lazily and at most once: only messages addressed to a
-		// specific element (Jid >= 1, not Delete) need it, so an idle drain — the
-		// common case on the process loop's hot path — allocates nothing. Holding
-		// rq.mu (read) keeps rq.elems stable while the map is built.
-		var validJids map[Jid]struct{}
 		for i := range rq.wsQueue {
 			ok := rq.wsQueue[i].Jid < 1 || rq.wsQueue[i].What == what.Delete || rq.wsQueue[i].What == what.Order
 			if !ok {
-				if validJids == nil {
-					validJids = make(map[Jid]struct{}, len(rq.elems))
-					for _, elem := range rq.elems {
-						if !elem.deleted.Load() {
-							validJids[elem.Jid()] = struct{}{}
-						}
-					}
-				}
-				_, ok = validJids[rq.wsQueue[i].Jid]
+				ok = rq.getElementByJidLocked(rq.wsQueue[i].Jid) != nil
 			}
 			if ok {
 				toSend = append(toSend, rq.wsQueue[i])
