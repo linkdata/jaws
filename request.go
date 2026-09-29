@@ -804,6 +804,10 @@ func (rq *Request) wantMessage(msg *wire.Message) (yes bool) {
 // and appending it to the request's element list. Caller must hold rq.mu.
 func (rq *Request) newElementLocked(ui UI) (elem *Element) {
 	rq.lastJid++
+	// Deletion preserves order, so check the append rather than every lookup.
+	if deadlock.Debug && len(rq.elems) > 0 && rq.elems[len(rq.elems)-1].Jid() >= rq.lastJid {
+		panic("jaws: rq.elems not sorted ascending by Jid")
+	}
 	elem = &Element{
 		jid:     rq.lastJid,
 		ui:      ui,
@@ -853,14 +857,6 @@ func (rq *Request) getElementByJidLocked(jid Jid) (elem *Element) {
 	// incrementing lastJid; deletes preserve order), so binary search resolves a
 	// Jid in O(log n). Jids are not dense (deletes leave gaps) so we cannot index
 	// rq.elems by Jid directly.
-	if deadlock.Debug && !slices.IsSortedFunc(rq.elems, func(a, b *Element) int {
-		return cmp.Compare(a.Jid(), b.Jid())
-	}) {
-		// A future insertion path that breaks the ordering would make the binary
-		// search below silently miss elements; fail loudly in debug builds (CI runs
-		// -tags debug -race) instead of returning wrong lookups in production.
-		panic("jaws: rq.elems not sorted ascending by Jid")
-	}
 	if i, ok := slices.BinarySearchFunc(rq.elems, jid, func(e *Element, target Jid) int {
 		return cmp.Compare(e.Jid(), target)
 	}); ok {

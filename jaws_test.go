@@ -4153,15 +4153,33 @@ func BenchmarkRequestWantMessage(b *testing.B) {
 }
 
 // BenchmarkGetSendMsgs measures the process loop's outbound-queue drain, which it
-// invokes at least twice per iteration. The common case is an idle drain (empty
-// wsQueue) on a page with many Elements: building the valid-Jid set only when the
-// queue actually holds element-targeted messages should allocate nothing here.
+// invokes at least twice per iteration. It covers idle drains and element-targeted
+// messages on pages with both live and deleted Elements.
 func BenchmarkGetSendMsgs(b *testing.B) {
 	for _, n := range []int{10, 100, 1000} {
 		b.Run("idle/elems="+strconv.Itoa(n), func(b *testing.B) {
 			rq := newBenchRequest(b, n)
 			b.ReportAllocs()
 			for b.Loop() {
+				_ = rq.getSendMsgs()
+			}
+		})
+	}
+	for _, tc := range []struct{ elems, msgs int }{
+		{1000, 1}, {1000, 1000}, {10000, 10}, {10000, 10000},
+	} {
+		b.Run(fmt.Sprintf("queued/elems=%d/msgs=%d", tc.elems, tc.msgs), func(b *testing.B) {
+			rq := newBenchRequest(b, tc.elems)
+			for i := 0; i < tc.elems; i += 3 {
+				rq.elems[i].deleted.Store(true)
+			}
+			msgs := make([]wire.WsMsg, tc.msgs)
+			for i := range msgs {
+				msgs[i] = wire.WsMsg{Jid: Jid((i+1)%tc.elems + 1), What: what.Inner}
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				rq.wsQueue = append(rq.wsQueue[:0], msgs...)
 				_ = rq.getSendMsgs()
 			}
 		})
