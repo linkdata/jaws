@@ -1661,6 +1661,59 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_ReplaceAttachFailureLeavesDOMAndServerInSync(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function FakeSocket() { this.readyState = 1; this.sent = []; }
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+
+const oldChild = { id: "Jid.7" };
+const old = {
+	id: "Jid.4",
+	children: [oldChild],
+	querySelectorAll: function() { return this.children; },
+	replaceWith: function(node) { current = node; },
+};
+let current = old;
+document.getElementById = function(id) { return id === "Jid.4" ? current : null; };
+
+const binding = {
+	id: "Jid.9",
+	hasAttribute: function(name) { return name === "data-jawsstore"; },
+};
+const replacement = {
+	querySelectorAll: function(selector) {
+		return selector === '[id^="' + jawsIdPrefix + '"]' ? [binding] : [];
+	},
+};
+jawsElement = function(html) {
+	if (html !== "<x>") throw new Error("unexpected replacement");
+	return replacement;
+};
+const errors = [];
+console.error = function(err) { errors.push(String(err)); };
+jawsMessage({ data: "Replace\tJid.4\t" + JSON.stringify("<x>") + "\n" });
+process.stdout.write(JSON.stringify({
+	frames: jaws.sent,
+	oldStillMounted: current === old && current.children[0] === oldChild,
+	errors: errors,
+}));
+`)
+	var got struct {
+		Frames          []string `json:"frames"`
+		OldStillMounted bool     `json:"oldStillMounted"`
+		Errors          []string `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if len(got.Frames) != 0 || !got.OldStillMounted || len(got.Errors) != 1 ||
+		!strings.Contains(got.Errors[0], "JsVar binding outside initial render") {
+		t.Fatalf("failed Replace = %+v, want old DOM and no Remove frame", got)
+	}
+}
+
 func TestJawsJS_AlertAppendsDismissibleElementDirectly(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 global.bootstrap = {};
