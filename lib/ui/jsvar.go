@@ -140,6 +140,9 @@ type JsVarStore[T any] struct {
 // The name is a dot-separated path from window using JavaScript identifiers
 // with ASCII letters, digits, underscore, or dollar sign. No component may be
 // "__proto__", "constructor", or "prototype"; the limit is 4096 bytes.
+// For dotted names, every parent object must exist on window before jaws.js runs;
+// otherwise the client stops before opening its WebSocket. A top-level name
+// needs no existing property.
 // Initial data and patches assign to that live path, including browser-owned
 // properties and setters.
 //
@@ -168,6 +171,8 @@ func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value 
 // Render each binding once during the Request's initial page render, outside
 // regions that may later be replaced or removed. Browser names may neither
 // duplicate nor contain one another within a Request.
+// For dotted names, the parent objects must exist on window before jaws.js runs;
+// otherwise the client stops before opening its WebSocket.
 func (store *JsVarStore[T]) Bind() *JsVarBinding[T] {
 	return &JsVarBinding[T]{store: store}
 }
