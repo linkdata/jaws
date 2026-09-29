@@ -201,6 +201,48 @@ func TestRequest_DeleteElements(t *testing.T) {
 	}
 }
 
+func TestRequest_BroadcastDeleteRetainsFrames(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	rq := &Request{Jaws: jw, tagMap: make(map[any][]*Element)}
+	target := tag.Tag("broadcast-delete")
+	deleted := []*Element{
+		rq.NewElement(&testUi{}),
+		rq.NewElement(&testUi{}),
+		rq.NewElement(&testUi{}),
+	}
+	for _, elem := range deleted {
+		elem.Tag(target)
+	}
+	keep := rq.NewElement(&testUi{})
+	rq.queue(wire.WsMsg{Jid: deleted[0].Jid(), What: what.Inner, Data: "stale"})
+
+	rq.handleBroadcast(wire.Message{Dest: target, What: what.Delete}, nil)
+
+	for _, elem := range deleted {
+		if !elem.Deleted() || rq.GetElementByJid(elem.Jid()) != nil {
+			t.Errorf("element %v remains registered", elem.Jid())
+		}
+	}
+	if got := rq.GetElements(target); len(got) != 0 {
+		t.Errorf("deleted tag still has %d elements", len(got))
+	}
+	if got := rq.GetElementByJid(keep.Jid()); got != keep {
+		t.Errorf("untargeted element = %p, want %p", got, keep)
+	}
+	want := []wire.WsMsg{
+		{Jid: deleted[0].Jid(), What: what.Delete},
+		{Jid: deleted[1].Jid(), What: what.Delete},
+		{Jid: deleted[2].Jid(), What: what.Delete},
+	}
+	if got := rq.getSendMsgs(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("outbound messages = %+v, want %+v", got, want)
+	}
+}
+
 func TestRequest_Registrations(t *testing.T) {
 	is := newTestHelper(t)
 	rq := newTestRequest(t)
