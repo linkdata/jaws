@@ -31,6 +31,9 @@ func TestContainerAndTbodyRender(t *testing.T) {
 	container := NewContainer("div", tc)
 	_, got := renderUI(t, rq, container, "hidden")
 	mustMatch(t, `^<div id="Jid\.[0-9]+" hidden><span id="Jid\.[0-9]+">foo</span><span id="Jid\.[0-9]+">bar</span></div>$`, got)
+	if got := NewContainer("", tc); got != container {
+		t.Fatalf("empty tag Container = %#v, want %#v", got, container)
+	}
 
 	tbody := NewTbody(tc)
 	if want := NewContainer("tbody", tc); tbody.Container != want {

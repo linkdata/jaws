@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -105,6 +106,58 @@ func TestErrJsVarClientWriteError(t *testing.T) {
 	err := errJsVarClientWrite{cause}
 	if got := err.Error(); got != cause.Error() {
 		t.Fatalf("server error = %q, want %q", got, cause)
+	}
+}
+
+func TestJsVarBindingInactive(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	value := 1
+	store := newTestJsVarStore(t, jw, "client", &mu, &value)
+	binding := store.Bind()
+	elem := rq.NewElement(binding)
+	if err := binding.JawsInput(elem, "=2"); err != nil || value != 1 {
+		t.Fatalf("input before render: value=%d err=%v", value, err)
+	}
+	if changed, err := store.SetPath("", 3); err != nil || !changed {
+		t.Fatalf("SetPath before render = (%t, %v)", changed, err)
+	}
+	binding.JawsUpdate(elem)
+	if got := binding.lastVersion.Load(); got != 0 {
+		t.Fatalf("inactive binding advanced to version %d", got)
+	}
+}
+
+var errRejectJsVarTestValue = errors.New("reject test value")
+
+type marshalRejectJsVarState struct{ Value int }
+
+func (state marshalRejectJsVarState) MarshalJSON() ([]byte, error) {
+	if state.Value < 0 {
+		return nil, errRejectJsVarTestValue
+	}
+	return json.Marshal(struct{ Value int }{Value: state.Value})
+}
+
+func TestJsVarProposalEncodingRollback(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := marshalRejectJsVarState{Value: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	checks := 0
+	store.ClientCheck = func(*jaws.Element, *marshalRejectJsVarState, string) error {
+		checks++
+		return nil
+	}
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if err := binding.JawsInput(elem, "Value=-1"); !errors.Is(err, errRejectJsVarTestValue) {
+		t.Fatalf("invalid proposal error = %v, want encoding error", err)
+	}
+	if state.Value != 1 || checks != 0 {
+		t.Fatalf("rejected proposal: value=%d checks=%d", state.Value, checks)
+	}
+	if patches, err := binding.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{`={"Value":1}`}) {
+		t.Fatalf("rejected proposal correction = (%q, %v)", patches, err)
 	}
 }
 
