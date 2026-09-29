@@ -53,6 +53,8 @@ values.
 6. Other values formatted with `fmt.Sprint` and escaped.
 
 Do not reorder these cases: interface overlap makes precedence observable.
+A wrapper embedding `Binder[string]` without `JawsGetHTML` uses its own
+`JawsGet`; the embedded `Format` and `GetHTML` hooks do not run.
 Getter and Stringer adapters expose their wrapped value as an implicit tag; it
 must expand to usable tag keys or intentionally return nil through
 `tag.TagGetter`. Function-backed HTML/string getters snapshot only the top-level
