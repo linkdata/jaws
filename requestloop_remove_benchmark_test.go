@@ -1,6 +1,7 @@
 package jaws
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -77,5 +78,28 @@ func BenchmarkRequestIncomingRemoveCleanup(b *testing.B) {
 				jw.Close()
 			}
 		})
+	}
+}
+
+func BenchmarkRequestBroadcastDelete(b *testing.B) {
+	const total, matched = 1000, 100
+	rq := newBenchRequest(b, total)
+	rq.tagMap = make(map[any][]*Element)
+	all := slices.Clone(rq.elems)
+	targets := slices.Clone(all[:matched])
+	dest := tag.Tag("broadcast-delete")
+	msg := wire.Message{Dest: dest, What: what.Delete}
+	b.ReportAllocs()
+	for range b.N {
+		b.StopTimer()
+		rq.elems = slices.Clone(all)
+		rq.tagMap[dest] = slices.Clone(targets)
+		for _, elem := range targets {
+			elem.deleted.Store(false)
+		}
+		rq.wsQueue = rq.wsQueue[:0]
+		b.StartTimer()
+		rq.handleBroadcast(msg, nil)
+		b.StopTimer()
 	}
 }

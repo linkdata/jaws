@@ -165,6 +165,9 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 	default:
 		todo = rq.GetElements(v)
 	}
+	if tagmsg.What == what.Delete && len(todo) > 0 {
+		rq.DeleteElements(todo)
+	}
 
 	for _, elem := range todo {
 		switch tagmsg.What {
@@ -173,7 +176,6 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 				Jid:  elem.Jid(),
 				What: what.Delete,
 			})
-			rq.DeleteElement(elem)
 		case what.Input, what.Click, what.ContextMenu:
 			// Input, Click or ContextMenu messages received here come from broadcasts;
 			// primarily used in tests by injecting a wire.WsMsg on the inbound channel.
