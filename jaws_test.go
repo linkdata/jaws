@@ -4771,7 +4771,7 @@ func BenchmarkRetirePendingRequests(b *testing.B) {
 				}
 				jw.mu.Lock()
 				for _, rq := range requests {
-					jw.retireNonRunningRequestLocked(rq)
+					_ = jw.retireNonRunningRequestLocked(rq, nil)
 				}
 				jw.mu.Unlock()
 			}

@@ -999,7 +999,7 @@ func TestJaws_ActiveSessionCount(t *testing.T) {
 	}
 	requireSessionCounts(t, jw, 2, 0)
 	jw.mu.Lock()
-	jw.retireNonRunningRequestLocked(waiting)
+	_ = jw.retireNonRunningRequestLocked(waiting, nil)
 	jw.mu.Unlock()
 
 	firstTab := NewTestRequest(jw, newSessionTestRequest(firstSession, "/first-tab"))

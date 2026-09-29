@@ -5473,52 +5473,6 @@ func TestDelRequestNilsVacatedSlot(t *testing.T) {
 	})
 }
 
-// TestRequest_JawsKeyReadsAreLockedDuringRecycle verifies that the request-key
-// readers used while the application renders the initial HTML page (JawsKeyString,
-// String, HeadHTML and TailHTML) read rq.JawsKey under rq.mu, so they do not race
-// the rq.mu-guarded writers active during the same window: getRequestLocked assigns
-// rq.JawsKey under rq.mu, and claim and releaseBuffersLocked mutate rq.mu-guarded
-// fields when a Request is claimed or finishes. The writer goroutine drives a
-// concurrent rq.mu-guarded key write to prove the readers hold the lock. Run with
-// -race.
-func TestRequest_JawsKeyReadsAreLockedDuringRecycle(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(jw.Close)
-
-	rq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
-
-	const iterations = 2000
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Writer: mimic getRequestLocked, which assigns rq.JawsKey while holding rq.mu.
-	go func() {
-		defer wg.Done()
-		for i := range iterations {
-			rq.mu.Lock()
-			rq.JawsKey = key.Key(uint64(i) + 1)
-			rq.mu.Unlock()
-		}
-	}()
-
-	// Reader: the lock-free render-path readers that previously read rq.JawsKey
-	// without holding rq.mu.
-	go func() {
-		defer wg.Done()
-		for range iterations {
-			_ = rq.JawsKeyString()
-			_ = rq.String()
-			_ = rq.HeadHTML(io.Discard)
-			_ = rq.TailHTML(io.Discard)
-		}
-	}()
-
-	wg.Wait()
-}
-
 // TestServe_MarksRequestRunningSoMaintenanceSkips verifies that TestServe marks
 // the request running before driving rq.process, mirroring ServeHTTP/startServe.
 // The maintenance pass retires only not-running requests, so a request whose
@@ -5909,7 +5863,7 @@ func TestRequestStateTransitions(t *testing.T) {
 			t.Fatalf("state = %v, want claimed", got)
 		}
 		jw.mu.Lock()
-		jw.retireNonRunningRequestLocked(rq)
+		_ = jw.retireNonRunningRequestLocked(rq, nil)
 		jw.mu.Unlock()
 		if got := rq.loadState(); got != reqFinished {
 			t.Fatalf("after retire = %v, want finished", got)
@@ -5984,7 +5938,7 @@ func TestFinishLockedTerminalStatePanicsInDebug(t *testing.T) {
 		}
 	}()
 	// finishLocked requires both jw.mu and rq.mu (jw.mu is acquired first, matching the
-	// production lock order in recycleLockedWithCause/retireNonRunningRequestCoreLocked).
+	// production lock order in recycle/retireNonRunningRequestLocked).
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	rq.mu.Lock()

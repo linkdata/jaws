@@ -88,7 +88,7 @@ type requestBuffers struct {
 // pointer identity is never reused for another connection.
 type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
-	JawsKey          key.Key                 // (read-only) random key assigned to this Request; routes JaWS URLs and request-targeted broadcasts only while registered
+	JawsKey          key.Key                 // (read-only) random key assigned before publication, immutable thereafter; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
 	state            atomic.Int32            // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
@@ -195,9 +195,7 @@ func (rq *Request) finishLocked() {
 func (rq *Request) JawsKeyString() string {
 	jawsKey := key.Key(0)
 	if rq != nil {
-		rq.mu.RLock()
 		jawsKey = rq.JawsKey
-		rq.mu.RUnlock()
 	}
 	return jawsKey.String()
 }
@@ -393,7 +391,7 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 //
 // It detaches and clears the reusable collections (the element list, tag map, dirt
 // list and message queue) only. It does NOT cancel the context, detach the session,
-// or change the lifecycle state: the caller (recycleLockedWithCause) has already
+// or change the lifecycle state: the caller (recycle) has already
 // cancelled the context and called [Request.finishLocked], which detaches the session
 // and transitions the Request to reqFinished. It also does not mutate the individual
 // Element objects' fields or the Jid counter. The Request keeps its identity key and
@@ -411,7 +409,7 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 // under rq.mu so Jids stay monotonic and unique, and wsQueue is transferred under
 // muQueue — so there is no data race, no reused identity, and no duplicated Jid.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
-	// Pure buffer mechanics: the caller (recycleLockedWithCause) has already cancelled
+	// Pure buffer mechanics: the caller (recycle) has already cancelled
 	// the context, called finishLocked (which detached the session and transitioned to
 	// reqFinished), and removed the map entry. This only detaches the reusable
 	// collections for the pool.
@@ -467,9 +465,7 @@ func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
 // HeadHTML does not modify response headers. [Jaws.NewRequest] sets
 // "Cache-Control: no-store" when it creates the Request.
 func (rq *Request) HeadHTML(w io.Writer) (err error) {
-	rq.mu.RLock()
 	jawsKey := rq.JawsKey
-	rq.mu.RUnlock()
 	var b []byte
 	rq.Jaws.mu.RLock()
 	b = append(b, rq.Jaws.headPrefix...)
@@ -1045,7 +1041,6 @@ func (rq *Request) validateWebSocketOriginWithTrust(r *http.Request, trustForwar
 			err = ErrWebsocketOriginNoInitial
 			if initial := rq.Initial(); initial != nil {
 				secure := secureheaders.RequestIsSecure(initial, trustForwardedHeaders)
-				port := ""
 				uhost := u.Host
 				ihost := initial.Host
 				err = ErrWebsocketOriginWrongScheme
@@ -1054,15 +1049,14 @@ func (rq *Request) validateWebSocketOriginWithTrust(r *http.Request, trustForwar
 					if secure {
 						return
 					}
-					port = ":80"
 				case "https":
 					if !secure {
 						return
 					}
-					port = ":443"
 				default:
 					return
 				}
+				port := defaultPort(u.Scheme)
 				uhost = strings.TrimSuffix(uhost, port)
 				ihost = strings.TrimSuffix(ihost, port)
 				err = ErrWebsocketOriginWrongHost
@@ -1079,6 +1073,17 @@ func (rq *Request) validateWebSocketOriginWithTrust(r *http.Request, trustForwar
 	return
 }
 
+func defaultPort(scheme string) string {
+	switch scheme {
+	case "http":
+		return ":80"
+	case "https":
+		return ":443"
+	default:
+		return ""
+	}
+}
+
 // normalizedWebSocketAcceptRequest returns a request whose Host and Origin omit
 // the Origin scheme's default port.
 //
@@ -1088,13 +1093,7 @@ func (rq *Request) validateWebSocketOriginWithTrust(r *http.Request, trustForwar
 func normalizedWebSocketAcceptRequest(r *http.Request) (normalized *http.Request) {
 	normalized = r
 	if u, err := url.Parse(r.Header.Get("Origin")); err == nil {
-		port := ""
-		switch u.Scheme {
-		case "http":
-			port = ":80"
-		case "https":
-			port = ":443"
-		}
+		port := defaultPort(u.Scheme)
 		if port != "" {
 			host := strings.TrimSuffix(r.Host, port)
 			originHost := strings.TrimSuffix(u.Host, port)
