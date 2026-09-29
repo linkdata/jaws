@@ -616,6 +616,40 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_MissingJsVarParent(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+function attach(path) {
+	const elem = {
+		id: "Jid.1",
+		dataset: { jawsstore: path, jawsdata: "1" },
+		hasAttribute: function(name) { return name === "data-jawsstore"; },
+	};
+	try { jawsAttach(elem, true); return ""; }
+	catch (err) { return String(err); }
+}
+window.ok = {};
+process.stdout.write(JSON.stringify({
+	shallow: attach("app.state"),
+	deep: attach("a.b.c"),
+	valid: attach("ok.state"),
+	value: window.ok.state,
+}));
+`)
+	var got struct {
+		Shallow string `json:"shallow"`
+		Deep    string `json:"deep"`
+		Valid   string `json:"valid"`
+		Value   int    `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
+	}
+	if got.Shallow != "jaws: JsVar path undefined: app.state" ||
+		got.Deep != "jaws: JsVar path undefined: a.b.c" || got.Valid != "" || got.Value != 1 {
+		t.Fatalf("JsVar parent handling = %+v", got)
+	}
+}
+
 func TestJawsJS_StoreReadAndOptimisticProposal(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
