@@ -161,6 +161,25 @@ func TestJsVarProposalEncodingRollback(t *testing.T) {
 	}
 }
 
+func TestJsVarInvalidServerValueRejectsInputAndCancelsUpdate(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := marshalRejectJsVarState{Value: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	store.ClientCheck = func(*jaws.Element, *marshalRejectJsVarState, string) error { return nil }
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if changed, err := store.SetPath("Value", -1); err != nil || !changed {
+		t.Fatalf("SetPath = (%t, %v)", changed, err)
+	}
+	if err := binding.JawsInput(elem, "Value=2"); !errors.Is(err, errRejectJsVarTestValue) || state.Value != -1 {
+		t.Fatalf("invalid current value: state=%d err=%v", state.Value, err)
+	}
+	binding.JawsUpdate(elem)
+	if rq.Context().Err() == nil {
+		t.Fatal("invalid server value did not cancel request")
+	}
+}
+
 func TestValidateJsVarPathLengthAndUTF8(t *testing.T) {
 	tests := []struct {
 		name    string
