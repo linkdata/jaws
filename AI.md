@@ -122,10 +122,8 @@ execution. The page GET only installs the callback; an accepted WebSocket
 invokes it with the `ConnectFn` lifecycle. Only the top-level dot's method set is
 considered, including promoted methods. An implementation available only on a
 nested `ui.Template` dot is ignored without a diagnostic. The bundled client
-connects after parsing the document, while a custom client can dial once flushed
-response bytes expose the request key and overlap initial template execution.
-Because `ui.Handler` reuses the dot, its state and callbacks must be
-concurrency-safe.
+connects after parsing the document. Because `ui.Handler` reuses the dot, its
+state and callbacks must be concurrency-safe.
 
 After changing state, use the exact-Element or dependency-tag scope described
 above. A connection identifies a JaWS-capable client, not affirmative human

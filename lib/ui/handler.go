@@ -135,9 +135,7 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ignored without a diagnostic.
 //
 // Handler reuses dot across requests, so dot and its callbacks must support
-// concurrent execution. The bundled client connects after parsing the document,
-// while a custom client can dial once flushed response bytes expose the request
-// key and overlap the initial page render.
+// concurrent execution. The bundled client connects after parsing the document.
 func Handler(jw *jaws.Jaws, name string, dot any) http.Handler {
 	return uiHandler{Jaws: jw, name: name, dot: dot}
 }
