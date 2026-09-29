@@ -49,7 +49,7 @@ func NewErrNotUsableAsTag(x any) error {
 
 func newErrNotUsableAsTag(x any) (err error) {
 	retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
-	if path, tgType, ok := FindTagGetter(x); ok {
+	if path, tgType, ok := findTagGetter(x); ok {
 		retErr.tagGetterPath = path
 		retErr.tagGetterType = tgType
 	}
@@ -59,22 +59,18 @@ func newErrNotUsableAsTag(x any) (err error) {
 var tagGetterType = reflect.TypeFor[TagGetter]()
 
 // maxHintScan is how many leading elements of an array or slice the
-// [FindTagGetter] hint search inspects. It is intentionally small: the search
+// findTagGetter hint search inspects. It is intentionally small: the search
 // only produces a human-readable diagnostic hint, so a nested TagGetter past
 // this index simply will not be mentioned in the error message.
 const maxHintScan = 4
 
-// FindTagGetter searches x recursively for a nested [TagGetter].
+// findTagGetter searches x recursively for a nested [TagGetter].
 //
 // The search is bounded: it follows at most maxTagDepth levels of nesting and
 // scans only the first maxHintScan elements of any array or slice. It is used
 // only to enrich the [ErrNotUsableAsTag] diagnostic, so these bounds trade
 // completeness for a cheap, terminating search.
-//
-// It is a best-effort diagnostic aid: the maxHintScan and maxTagDepth bounds may
-// change, and a negative result is not authoritative, so callers should not rely
-// on it for non-diagnostic purposes.
-func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
+func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 	if x == nil {
 		return
 	}
@@ -124,26 +120,17 @@ func FindTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 					return true
 				}
 			}
-		case reflect.Array:
-			n := min(v.Len(), maxHintScan)
-			for i := range n {
-				next := "[" + strconv.Itoa(i) + "]"
-				if currentPath != "" {
-					next = currentPath + next
+		case reflect.Slice, reflect.Array:
+			if v.Kind() == reflect.Slice {
+				if v.IsNil() {
+					return false
 				}
-				if walk(v.Index(i), next, depth+1) {
-					return true
+				p := seenPtr{t: t, ptr: v.Pointer()}
+				if _, ok := seen[p]; ok {
+					return false
 				}
+				seen[p] = struct{}{}
 			}
-		case reflect.Slice:
-			if v.IsNil() {
-				return false
-			}
-			p := seenPtr{t: t, ptr: v.Pointer()}
-			if _, ok := seen[p]; ok {
-				return false
-			}
-			seen[p] = struct{}{}
 			n := min(v.Len(), maxHintScan)
 			for i := range n {
 				next := "[" + strconv.Itoa(i) + "]"
