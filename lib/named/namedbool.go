@@ -52,7 +52,7 @@ func (nb *Bool) Array() *BoolArray {
 	return nb.nba
 }
 
-// Name returns the form value name for nb.
+// Name returns nb's selection key, used as an HTML option value.
 func (nb *Bool) Name() string {
 	return nb.name
 }
@@ -75,7 +75,9 @@ func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
 	return
 }
 
-// JawsSet sets the checked state and dirties the affected element tags.
+// JawsSet sets this Bool's checked state and updates affected UI.
+// Other Bools with the same name are unchanged. In a single-select array,
+// checking this Bool clears Bools with different names.
 //
 // If [Bool.Array] is non-nil, the associated array is used without checking
 // whether nb is currently one of its members. See [BoolArray.WriteLocked] for
@@ -127,10 +129,8 @@ func (nb *Bool) Checked() (checked bool) {
 
 // Set changes the checked state and reports whether it changed.
 //
-// Unlike [Bool.JawsSet], Set does not dirty any elements and does not deselect
-// siblings in single-select mode; it only changes this value. Single-select
-// consistency (at most one checked value) is an invariant maintained by going
-// through JawsSet, so prefer JawsSet for widget-driven updates.
+// Unlike [Bool.JawsSet], Set does not dirty elements or clear other names.
+// Use JawsSet for widget-driven updates.
 func (nb *Bool) Set(checked bool) (changed bool) {
 	nb.mu.Lock()
 	if nb.checked != checked {

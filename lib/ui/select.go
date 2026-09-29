@@ -10,9 +10,8 @@ import (
 // Select renders a single-selection HTML select element.
 //
 // Its handler supplies the options and represents the selection as a string.
-// Option values must be non-empty. A string that matches no option value
-// represents no selection. [named.BoolArray] is the standard handler and
-// requires non-empty [named.Bool.Name] values.
+// Option values must be non-empty and distinct. A string that matches no option
+// value represents no selection. [named.BoolArray] is the standard handler.
 //
 // The handler's dynamic value defines Select's identity and must be comparable
 // and equal to itself. Rebuilding with an equal handler lets a parent retain its

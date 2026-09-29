@@ -93,8 +93,8 @@ func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 // (e.g. template.HTML(template.HTMLEscapeString(s))) when it is derived from
 // untrusted user input. See [NewBool].
 //
-// Note that while it is legal to have multiple [Bool] values with the same
-// name because HTML allows it, it is usually not a good idea.
+// Use distinct names for options rendered in a single-selection select or
+// radio group.
 func (nba *BoolArray) Add(name string, html template.HTML) *BoolArray {
 	nba.mu.Lock()
 	nba.data = append(nba.data, NewBool(nba, name, html, false))
@@ -102,18 +102,9 @@ func (nba *BoolArray) Add(name string, html template.HTML) *BoolArray {
 	return nba
 }
 
-// Set sets the checked state for [Bool] values with the given name.
-//
-// Matching is by name, so values are addressed as logical options rather than
-// individually: every [Bool] sharing the name is set together, and in
-// single-select mode the at-most-one-checked invariant holds per distinct name
-// (selecting a name deselects all values with a different name, but leaves
-// same-named siblings checked). If the given name matches no values in
-// single-select mode, everything will be deselected.
-//
-// The result reports whether the selection changed, not that name became checked:
-// a non-matching name in single-select mode deselects all and returns true. Use
-// [BoolArray.IsChecked] or [BoolArray.Get] to read the resulting state.
+// Set updates every [Bool] named name and reports whether any state changed.
+// In single-select mode, setting state to true clears Bools with other names;
+// an absent name clears all Bools regardless of state.
 func (nba *BoolArray) Set(name string, state bool) (changed bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
@@ -214,17 +205,9 @@ func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 	return nba.Get()
 }
 
-// JawsSet selects name and dirties the changed [Bool] values and nba itself.
-//
-// This mirrors [Bool.JawsSet]: every Bool whose checked state changes is dirtied
-// in addition to the array tag, so consumers that bind individual Bools (such as
-// radio buttons) update, not only the cascading [github.com/linkdata/jaws/lib/ui.Select] widget that re-renders
-// from the array tag.
-//
-// In single-select mode a name matching no [Bool] still succeeds (returns nil) by
-// deselecting the current selection, as documented for [BoolArray.Set], leaving
-// the selected name empty. A nil return therefore means "the selection changed",
-// not "name is now selected".
+// JawsSet selects every [Bool] named name and updates affected UI. In
+// single-select mode, it clears Bools with other names, or clears all Bools if
+// name is absent. It returns [jaws.ErrValueUnchanged] if no state changed.
 func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) (err error) {
 	nba.mu.Lock()
 	changed := nba.setChangedLocked(name, true)

@@ -10,18 +10,17 @@ import (
 func ExampleBoolArray_singleSelect() {
 	choices := named.NewBoolArray(false).
 		Add("red", template.HTML("Red")).
-		Add("green", template.HTML("Green")).
-		Add("green", template.HTML("Green duplicate"))
+		Add("green", template.HTML("Green"))
 
 	fmt.Println(choices.Set("green", true))
-	fmt.Println(choices.Get(), choices.Count("green"), choices.IsChecked("red"), choices.IsChecked("green"))
+	fmt.Println(choices.Get(), choices.IsChecked("red"), choices.IsChecked("green"))
 
 	choices.Set("missing", true)
 	fmt.Println(choices.Get())
 
 	// Output:
 	// true
-	// green 2 false true
+	// green false true
 	//
 }
 

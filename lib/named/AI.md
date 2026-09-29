@@ -21,17 +21,16 @@ in [bind](../bind/AI.md), [htmlio](../htmlio/AI.md), and [ui](../ui/AI.md).
   radio grouping does not update peer Go values because the browser reports
   only the control that produced the event.
 - Use a single-select `BoolArray` for a server-side radio group. Give every
-  logical option a distinct name; same-name duplicates are legal but act as one
-  logical option.
+  option a distinct name. Duplicate `Bool` names are unsupported by `ui.Select`
+  and `ui.RadioGroup`.
 - `Bool.JawsSet` acquires the owning array lock before the value lock, changes
   the selected value, clears peers when needed, releases value locks, and then
   dirties the affected `Bool` values and the array. Preserve that order.
 - `Bool.Set` changes only one value. It neither clears peers nor dirties UI, so
   it is not a replacement for `JawsSet` in widget-driven selection.
-- `BoolArray.JawsSet` matches every entry with the submitted name. Same-name
-  duplicates change together, and every changed `Bool` plus the array itself is
-  dirtied. In single-select mode, a missing name deselects the current selection
-  and succeeds when that changes state.
+- `BoolArray.JawsSet` matches every entry with the submitted name, while
+  `Bool.JawsSet` updates only its receiver among same-name entries. In
+  single-select mode, a missing name clears the selection.
 - Removing a `Bool` from an array does not rewrite its fixed owner pointer.
   Follow the exported `WriteLocked` contract before using a removed value.
 
