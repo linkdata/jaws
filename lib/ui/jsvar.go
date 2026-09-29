@@ -356,8 +356,7 @@ type (
 
 // JsVarBinding renders one browser route to a [JsVarStore].
 //
-// Bindings are one-use and request-scoped. [JsVarBinding.Deactivate] is safe to
-// call concurrently with input dispatch.
+// Bindings are one-use and request-scoped.
 type JsVarBinding[T any] struct {
 	store         *JsVarStore[T]
 	rendered      atomic.Bool
@@ -366,14 +365,6 @@ type JsVarBinding[T any] struct {
 	correctionMu  sync.Mutex
 	correction    string
 	hasCorrection bool
-}
-
-// Deactivate suppresses this binding's later proposal and patch work.
-//
-// Patch work already in progress may queue messages after Deactivate returns,
-// and queued messages may still be delivered.
-func (binding *JsVarBinding[T]) Deactivate() {
-	binding.active.Store(false)
 }
 
 // JawsRender writes the hidden browser route and its initial JSON value.
@@ -452,10 +443,8 @@ func (binding *JsVarBinding[T]) JawsUpdate(elem *jaws.Element) {
 		elem.Request.Cancel(fmt.Errorf("jsvar: encode store %q: %w", binding.store.name, err))
 		return
 	}
-	if binding.active.Load() {
-		for _, patch := range patches {
-			elem.JsVar(patch)
-		}
+	for _, patch := range patches {
+		elem.JsVar(patch)
 	}
 }
 
@@ -589,8 +578,6 @@ func (store *JsVarStore[T]) projectVisiblePatch(path, root string, visible any) 
 
 // JawsInput applies a browser proposal allowed by ClientCheck.
 //
-// A deactivated binding ignores proposals.
-//
 // A rejected, invalid, or unchanged proposal schedules a canonical correction
 // for its source binding. A changed accepted proposal invalidates every binding.
 // An unchanged proposal to a complex Go shape is rejected.
@@ -641,9 +628,6 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 	store := binding.store
 	store.locker.Lock()
 	defer store.locker.Unlock()
-	if !binding.active.Load() {
-		return
-	}
 	if store.ClientCheck == nil {
 		return false, ErrJsVarReadOnly
 	}
