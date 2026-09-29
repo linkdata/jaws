@@ -35,6 +35,12 @@ type jsVarChange struct {
 	path    string
 }
 
+type jsVarSnapshot struct {
+	version uint64
+	root    string
+	visible any
+}
+
 var jsVarNameRx = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`)
 
 func validateJsVarName(name string) error {
@@ -117,7 +123,8 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // For partial map patches, the bound JSON tree must not share mutable pointers,
 // maps, or slices across different paths. Complex Go types use root patches.
 // Custom JSON methods reached while locked must not re-enter the store or its
-// locker.
+// locker, and must produce the same JSON until the next store change.
+// The last rendered JSON snapshot stays in memory until a newer one replaces it.
 //
 // A JsVarStore must not be copied after first use.
 type JsVarStore[T any] struct {
@@ -133,6 +140,9 @@ type JsVarStore[T any] struct {
 	floor    uint64 // older bindings need a root patch
 	changes  []jsVarChange
 	logBytes int
+
+	snapshotMu sync.Mutex
+	snapshot   *jsVarSnapshot // immutable, shared by bindings at one version
 }
 
 // NewJsVarStore creates a store for a browser variable.
@@ -388,7 +398,7 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 	b := []byte("\n<div id=")
 	b = elem.Jid().AppendQuote(b)
 	b = htmlio.AppendAttr(b, "data-jawsstore", store.name)
-	b = htmlio.AppendAttr(b, "data-jawsdata", string(data))
+	b = htmlio.AppendAttr(b, "data-jawsdata", data)
 	b = htmlio.AppendAttrs(b, elem.ApplyParams(params))
 	b = append(b, " hidden></div>"...)
 	_, err = w.Write(b)
@@ -398,7 +408,7 @@ func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, para
 	return
 }
 
-func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte, err error) {
+func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data string, err error) {
 	store := binding.store
 	store.locker.Lock()
 	defer store.locker.Unlock()
@@ -422,8 +432,9 @@ func (binding *JsVarBinding[T]) renderSnapshot(elem *jaws.Element) (data []byte,
 			}
 		}
 	}
-	data, _, err = marshalJsVar(store.value)
+	snapshot, err := store.snapshotLocked(store.value)
 	if err == nil {
+		data = snapshot.root[1:]
 		binding.lastVersion.Store(store.version)
 	}
 	return
@@ -473,7 +484,7 @@ func (binding *JsVarBinding[T]) pendingPatches() (patches []string, err error) {
 	store := binding.store
 	correction, needsCorrection := binding.takeCorrection()
 	var paths []string
-	var data []byte
+	var snapshot *jsVarSnapshot
 	var version uint64
 	store.ReadLocked(func(value *T) {
 		version = store.version
@@ -491,11 +502,11 @@ func (binding *JsVarBinding[T]) pendingPatches() (patches []string, err error) {
 			paths = append(paths, correction)
 		}
 		if len(paths) > 0 {
-			data, err = json.Marshal(value)
+			snapshot, err = store.snapshotLocked(value)
 		}
 	})
-	if err == nil && len(paths) > 0 {
-		patches, err = store.projectPatches(paths, data)
+	if err == nil && snapshot != nil {
+		patches = store.projectPatches(paths, snapshot.root, snapshot.visible)
 	}
 	if err == nil {
 		binding.lastVersion.Store(version)
@@ -503,40 +514,51 @@ func (binding *JsVarBinding[T]) pendingPatches() (patches []string, err error) {
 	return
 }
 
-func (store *JsVarStore[T]) projectPatches(paths []string, data []byte) (patches []string, err error) {
-	var visible any
-	visible, err = decodeJsVarJSON(data)
-	if err == nil {
-		rootPatch := "=" + string(data)
-		seen := make(map[string]bool, len(paths))
-		slices.Sort(paths)
-		for _, path := range paths {
-			covered := seen[path]
-			for i := range len(path) {
-				if path[i] == '.' && seen[path[:i]] {
-					covered = true
-					break
-				}
-			}
-			if covered {
-				continue
-			}
-			patch := store.projectVisiblePatch(path, data, visible)
-			if patch == rootPatch {
-				patches = []string{rootPatch}
+// snapshotLocked runs under the value's read or write lock.
+func (store *JsVarStore[T]) snapshotLocked(value *T) (snapshot *jsVarSnapshot, err error) {
+	store.snapshotMu.Lock()
+	defer store.snapshotMu.Unlock()
+	if store.snapshot != nil && store.snapshot.version == store.version {
+		return store.snapshot, nil
+	}
+	data, visible, err := marshalJsVar(value)
+	if err != nil {
+		return nil, err
+	}
+	snapshot = &jsVarSnapshot{version: store.version, root: "=" + string(data), visible: visible}
+	store.snapshot = snapshot
+	return snapshot, nil
+}
+
+func (store *JsVarStore[T]) projectPatches(paths []string, root string, visible any) (patches []string) {
+	seen := make(map[string]bool, len(paths))
+	slices.Sort(paths)
+	for _, path := range paths {
+		covered := seen[path]
+		for i := range len(path) {
+			if path[i] == '.' && seen[path[:i]] {
+				covered = true
 				break
 			}
-			key, _, _ := strings.Cut(patch, "=")
-			seen[key] = true
-			patches = append(patches, patch)
 		}
+		if covered {
+			continue
+		}
+		patch := store.projectVisiblePatch(path, root, visible)
+		if patch == root {
+			patches = []string{root}
+			break
+		}
+		key, _, _ := strings.Cut(patch, "=")
+		seen[key] = true
+		patches = append(patches, patch)
 	}
 	return
 }
 
-func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visible any) string {
+func (store *JsVarStore[T]) projectVisiblePatch(path, root string, visible any) string {
 	if path == "" || !store.partial || validateJsVarPath(path) != nil {
-		return "=" + string(data)
+		return root
 	}
 	current := visible
 	var prefix string
@@ -544,7 +566,7 @@ func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visibl
 		object, ok := current.(map[string]any)
 		if !ok {
 			if prefix == "" {
-				return "=" + string(data)
+				return root
 			}
 			break
 		}
@@ -560,7 +582,7 @@ func (store *JsVarStore[T]) projectVisiblePatch(path string, data []byte, visibl
 	}
 	encoded, err := json.Marshal(current)
 	if err != nil {
-		return "=" + string(data)
+		return root
 	}
 	return prefix + "=" + string(encoded)
 }
