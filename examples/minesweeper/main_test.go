@@ -38,13 +38,9 @@ func newRequestFor(t *testing.T, jw *jaws.Jaws) *jawstest.TestRequest {
 	<-rq.ReadyCh
 	t.Cleanup(func() {
 		rq.Close()
-		for {
-			select {
-			case <-rq.OutCh:
-			case <-rq.DoneCh:
-				return
-			}
+		for range rq.OutCh {
 		}
+		<-rq.DoneCh
 	})
 	return rq
 }

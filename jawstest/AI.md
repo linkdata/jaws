@@ -26,12 +26,12 @@ trusted test content.
    and inject broadcasts on `BcastCh`.
 5. Drain `OutCh` whenever the test can produce output. Its buffer is finite; a
    full output channel stalls the request loop and can prevent shutdown.
-6. Call `Close` to close the input side, then wait for `DoneCh`. `Close` is
-   idempotent but does not itself wait.
+6. Call `Close` to close the input side, drain `OutCh` until it closes, then
+   wait for `DoneCh`. `Close` is idempotent but does not itself wait.
 
-If a test continuously drains output in a goroutine, terminate that goroutine
-from `DoneCh` and wait for it before the test returns. Do not close output or
-broadcast channels from test code; `Close` owns only the inbound channel.
+The loop closes `OutCh` before `DoneCh`. A drain goroutine can range over
+`OutCh`; wait for it before the test returns. Do not close broadcast channels
+from test code; `Close` owns only the inbound channel.
 
 Use `NewTestRequestWithPanic` only when the test needs to observe an expected
 request-loop panic. Its callback runs on the loop goroutine and receives either
@@ -41,9 +41,8 @@ panics remain visible.
 
 ## Maintenance and tests
 
-Preserve construction failure as an immediate panic when a Request cannot be
-created or claimed. The `newRequest` package seam exists only to exercise that
-failure path; production `Jaws.NewRequest` does not return nil while open.
+Preserve an immediate panic when a Request cannot be claimed. Closing `Jaws`
+before construction exercises that path without a test seam.
 
 Run `go test -race ./jawstest` and `go test ./jawstest` from the module root.
 Keep coverage for channel directions, readiness, close idempotence, output
