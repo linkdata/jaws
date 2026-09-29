@@ -290,7 +290,7 @@ func (jw *Jaws) Close() {
 			rq.cancelFn(nil)
 			rq.mu.Unlock()
 		} else {
-			jw.retireNonRunningRequestLocked(rq)
+			_ = jw.retireNonRunningRequestLocked(rq, nil)
 		}
 	}
 	jw.closeSessionsLocked()

@@ -198,7 +198,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		}
 		if expired, cause := rq.maintenance(nowSeconds, requestTimeout); expired {
 			_ = jw.Log(cause)
-			jw.retireNonRunningRequestLocked(rq)
+			_ = jw.retireNonRunningRequestLocked(rq, nil)
 		}
 	}
 	// Unattached Sessions cannot expire until their one-minute deadline.

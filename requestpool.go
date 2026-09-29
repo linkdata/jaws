@@ -146,7 +146,7 @@ func (jw *Jaws) limitPendingRequestsLocked(bucketKey netip.Addr) {
 		for len(jw.pending[bucketKey]) >= limit {
 			before := len(jw.pending[bucketKey])
 			victim := jw.pendingEvictionVictimLocked(bucketKey, nowSeconds)
-			if cause := jw.retireNonRunningRequestWithCauseLocked(victim, newErrTooManyPendingRequests(bucketKey, limit)); cause != nil {
+			if cause := jw.retireNonRunningRequestLocked(victim, newErrTooManyPendingRequests(bucketKey, limit)); cause != nil {
 				_ = jw.Log(cause)
 			}
 			if len(jw.pending[bucketKey]) >= before {
@@ -331,93 +331,51 @@ func releaseRetiredRequestKey(retired retiredRequestKey) {
 	}
 }
 
-// retireNonRunningRequestLocked cancels and unregisters rq without an error
-// cause, clearing, or pooling it. A nil entry keeps its key reserved until a
-// runtime cleanup runs after the Request becomes unreachable. Caller must hold
-// jw.mu, and rq must not be running.
-func (jw *Jaws) retireNonRunningRequestLocked(rq *Request) {
-	jw.retireNonRunningRequestCoreLocked(rq, nil, nil)
-}
-
-// retireNonRunningRequestWithCauseLocked cancels and unregisters rq with err
-// without clearing or pooling it. Caller must hold jw.mu, rq must not be running,
-// and err must be non-nil.
-func (jw *Jaws) retireNonRunningRequestWithCauseLocked(rq *Request, err error) (cause error) {
-	jw.retireNonRunningRequestCoreLocked(rq, err, &cause)
+// unregisterLocked cancels and unregisters a registered Request. A nil entry
+// reserves its key until the Request becomes unreachable. Caller must hold
+// jw.mu and rq.mu and check that jw.requests[rq.JawsKey] == rq.
+func (jw *Jaws) unregisterLocked(rq *Request, err error) (cause error) {
+	jawsKey := rq.JawsKey
+	cause = rq.cancelLocked(err)
+	jw.removePendingRequestLocked(rq)
+	jw.requests[jawsKey] = nil
+	jw.requestCount--
+	// finishLocked captures whether the Request was claimed before detaching its
+	// session, preserving the claimed WebSocket's grace period.
+	rq.finishLocked()
+	runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
 	return
 }
 
-// retireNonRunningRequestCoreLocked implements normal and cause-bearing
-// retirement. A nil causeOut selects normal cancellation; otherwise err must be
-// non-nil and the resulting cancellation cause is stored in causeOut. Caller
-// must hold jw.mu, and rq must not be running.
-func (jw *Jaws) retireNonRunningRequestCoreLocked(rq *Request, err error, causeOut *error) {
+// retireNonRunningRequestLocked cancels and unregisters rq without clearing or
+// pooling it. Caller must hold jw.mu; rq must not be running. A nil err cancels
+// without a specific cause.
+func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
 	rq.mu.Lock()
 	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && rq.loadState() != reqRunning {
-		jawsKey := rq.JawsKey
-		if causeOut != nil {
-			*causeOut = rq.cancelLocked(err)
-		} else if rq.ctx.Err() == nil {
-			rq.cancelFn(nil)
-		}
-		jw.removePendingRequestLocked(rq)
-		jw.requests[jawsKey] = nil
-		jw.requestCount--
-		// finishLocked captures whether the Request had been claimed before it detaches
-		// the session, so a claimed WebSocket that never reached ServeHTTP still earns
-		// the session grace period granted by Session.delRequest, then transitions the
-		// state to reqFinished.
-		rq.finishLocked()
-		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
+		cause = jw.unregisterLocked(rq, err)
 	}
 	rq.mu.Unlock()
 	runtime.KeepAlive(rq)
-}
-
-// recycleLockedWithCause finishes rq and returns its reusable buffers to
-// jw.requestBufferPool. The Request itself is never pooled or reused; it keeps its
-// identity and canceled context and is reclaimed by the garbage collector once no
-// borrower retains it.
-//
-// It uses err as the cancellation cause when non-nil.
-// It returns the cancellation cause (or nil) for its caller to queue. Caller must
-// hold jw.mu.
-func (jw *Jaws) recycleLockedWithCause(rq *Request, err error) (cause error) {
-	var buffers *requestBuffers
-	rq.mu.Lock()
-	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
-		jawsKey := rq.JawsKey
-		cause = rq.cancelLocked(err)
-		jw.removePendingRequestLocked(rq)
-		// Reserve the key with a nil tombstone and free it only once the finished
-		// Request is unreachable (releaseRetiredRequestKey via runtime cleanup),
-		// rather than deleting it immediately. The Request keeps its identity key, so
-		// a page still emitting it must not be able to reach a different Request that
-		// happened to be minted the same key. This mirrors the retirement path.
-		jw.requests[jawsKey] = nil
-		jw.requestCount--
-		rq.finishLocked() // detach session (grace if claimed) + transition to reqFinished
-		buffers = rq.releaseBuffersLocked()
-		runtime.AddCleanup(rq, releaseRetiredRequestKey, retiredRequestKey{jw: weak.Make(jw), jawsKey: jawsKey})
-	}
-	rq.mu.Unlock()
-	// Return the buffers after releasing rq.mu; requestBufferPool.Put takes no lock,
-	// but keeping the pool interaction outside the Request lock mirrors the recycle
-	// path's other post-unlock work and avoids holding rq.mu longer than needed.
-	if buffers != nil {
-		jw.requestBufferPool.Put(buffers)
-	}
 	return
 }
 
-func (jw *Jaws) recycleLocked(rq *Request) {
-	_ = jw.recycleLockedWithCause(rq, nil) // nil err yields a nil cause; nothing to log
-}
-
+// recycle finishes rq and returns its reusable buffers to jw.requestBufferPool.
+// The Request itself is never pooled or reused.
 func (jw *Jaws) recycle(rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
-	jw.recycleLocked(rq)
+	var buffers *requestBuffers
+	rq.mu.Lock()
+	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
+		_ = jw.unregisterLocked(rq, nil)
+		buffers = rq.releaseBuffersLocked()
+	}
+	rq.mu.Unlock()
+	// Return the buffers after releasing rq.mu.
+	if buffers != nil {
+		jw.requestBufferPool.Put(buffers)
+	}
 }
 
 // cancelIfCurrent cancels rq only if it is still the [Request] registered for
