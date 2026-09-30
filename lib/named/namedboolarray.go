@@ -56,12 +56,16 @@ func (nba *BoolArray) ReadLocked(fn func(nbl []*Bool)) {
 // it is copied. The backing array passed to fn is cleared before return, so
 // retained aliases contain nil values.
 //
+// Every non-nil [Bool] returned by fn must have nba as its [Bool.Array].
+// WriteLocked does not change that association.
+//
 // Omitting a [Bool] does not change [Bool.Array]. Removal is supported only
 // after its live UI elements are removed and no event can remain in flight.
 // Reinsert it before calling [Bool.JawsSet].
 //
 // fn must not call methods on nba or [Bool.JawsSet] on an associated [Bool];
-// doing so deadlocks. It may call other Bool methods, including [Bool.Set].
+// doing so deadlocks. It may return pre-checked Bools or call other Bool methods,
+// including [Bool.Set]; WriteLocked does not change checked states after fn returns.
 func (nba *BoolArray) WriteLocked(fn func(nbl []*Bool) []*Bool) {
 	nba.mu.Lock()
 	defer nba.mu.Unlock()
