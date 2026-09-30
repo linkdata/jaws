@@ -31,6 +31,9 @@ type Bool struct {
 // lists and checkboxes) and is not escaped. When it is derived from untrusted
 // user input it must be pre-escaped, e.g. template.HTML(template.HTMLEscapeString(s)).
 //
+// nba is the Bool's sole array association. Pass nil for a standalone Bool.
+// To insert it with [BoolArray.WriteLocked], pass that array as nba.
+//
 // If nba is non-nil, changing the value through [Bool.JawsSet] may dirty the
 // associated [BoolArray] and deselect sibling values in single-select mode.
 func NewBool(nba *BoolArray, name string, html template.HTML, checked bool) *Bool {
