@@ -85,7 +85,8 @@ func validateJsVarPath(path string) error {
 // after jq tentatively applies a changed value. It must only inspect next;
 // an error or panic rolls the proposal back. The source can authorize a user
 // or session. Validate the complete value, including changes through parent
-// and root paths.
+// and root paths. The check sees converted Go values, not raw browser JSON;
+// see [JsVarBinding.JawsInput].
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -584,6 +585,13 @@ func (store *JsVarStore[T]) projectVisiblePatch(path, root string, visible any) 
 // An unchanged proposal to a complex Go shape is rejected.
 // A panicking check rolls back and schedules a root correction before the panic
 // continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
+//
+// Browser JSON numbers are decoded as float64 and converted by jq to the Go
+// destination before ClientCheck runs. Conversion may lose information: 300
+// becomes 44 for uint8 and 2.9 becomes 2 for int, on root or nested paths.
+// Other out-of-range float-to-integer results may vary by platform. ClientCheck
+// sees only the converted state. Send exact values as JSON strings to string
+// fields, or use [Number] for typed numeric input.
 func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err error) {
 	if !binding.active.Load() {
 		return nil
