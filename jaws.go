@@ -314,10 +314,10 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
+			defer jw.mu.Unlock()
 			if !slices.Contains(jw.tmplookers, tl) {
 				jw.tmplookers = append(jw.tmplookers, tl)
 			}
-			jw.mu.Unlock()
 		}
 	}
 	return
@@ -332,8 +332,8 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
+			defer jw.mu.Unlock()
 			jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
-			jw.mu.Unlock()
 		}
 	}
 	return

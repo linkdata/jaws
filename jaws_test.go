@@ -75,6 +75,12 @@ func (nanLookuper) Lookup(string) *template.Template {
 	return nil
 }
 
+type zeroLengthNonComparableLookuper struct {
+	value any
+}
+
+func (zeroLengthNonComparableLookuper) Lookup(string) *template.Template { return nil }
+
 type captureErrorLogger struct {
 	mu      sync.Mutex
 	errs    []error
@@ -2597,6 +2603,24 @@ func TestTemplateLookuperNonReflexiveNotRemovable(t *testing.T) {
 	}
 	if got := len(jw.tmplookers); got != 2 {
 		t.Fatalf("tmplookers = %d after remove, want 2 (a NaN-bearing value cannot be matched)", got)
+	}
+}
+
+func TestTemplateLookuperZeroLengthNonComparable(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	lookuper := zeroLengthNonComparableLookuper{value: [0]struct{ values []int }{}}
+	for range 2 {
+		if err := jw.AddTemplateLookuper(lookuper); !errors.Is(err, tag.ErrNotComparable) {
+			t.Fatalf("AddTemplateLookuper error = %v, want ErrNotComparable", err)
+		}
+	}
+	if err := jw.RemoveTemplateLookuper(lookuper); !errors.Is(err, tag.ErrNotComparable) {
+		t.Fatalf("RemoveTemplateLookuper error = %v, want ErrNotComparable", err)
 	}
 }
 

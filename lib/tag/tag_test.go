@@ -88,6 +88,30 @@ func (tt testDeepTagGetter) JawsGetTag() any {
 	return tt.next
 }
 
+type testZeroLengthNonComparableGetter struct {
+	_ [0]struct{ values []int }
+	n int
+}
+
+func (g testZeroLengthNonComparableGetter) JawsGetTag() any {
+	if g.n < 2 {
+		return testZeroLengthNonComparableGetter{n: g.n + 1}
+	}
+	return Tag("ok")
+}
+
+type testNestedZeroLengthNonComparableGetter struct {
+	value any
+	n     int
+}
+
+func (g testNestedZeroLengthNonComparableGetter) JawsGetTag() any {
+	if g.n < 2 {
+		return testNestedZeroLengthNonComparableGetter{value: g.value, n: g.n + 1}
+	}
+	return Tag("ok")
+}
+
 func TestTagStringDebug_StringerAndPointer(t *testing.T) {
 	if got := TagStringDebug(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
 		t.Fatalf("TagStringDebug(testStringTag{}) = %q, want value stringer representation", got)
@@ -444,6 +468,20 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "found nested TagGetter at <value>") {
 		t.Fatalf("expected TagGetter search result in error text, got %q", err.Error())
+	}
+}
+
+func TestTagExpand_ZeroLengthNonComparableGetterChain(t *testing.T) {
+	for _, getter := range []any{
+		testZeroLengthNonComparableGetter{},
+		testNestedZeroLengthNonComparableGetter{value: [0]struct{ values []int }{}},
+	} {
+		got, err := TagExpand(getter)
+		if err != nil {
+			t.Errorf("TagExpand(%T) error = %v", getter, err)
+			continue
+		}
+		assertTagSetEqual(t, got, []any{Tag("ok")})
 	}
 }
 
