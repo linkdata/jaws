@@ -114,6 +114,23 @@ func TestRequest_DeleteElementNil(t *testing.T) {
 	rq.DeleteElement(nil)
 }
 
+func TestRequest_HasTagReleasesLockAfterPanic(t *testing.T) {
+	rq := &Request{tagMap: make(map[any][]*Element)}
+	elem := rq.NewElement(&testUi{})
+	panicked := false
+	func() {
+		defer func() { panicked = recover() != nil }()
+		rq.HasTag(elem, []int{1})
+	}()
+	if !panicked {
+		t.Fatal("HasTag did not panic for an unhashable tag")
+	}
+	if !rq.mu.TryLock() {
+		t.Fatal("HasTag retained the request read lock after panicking")
+	}
+	rq.mu.Unlock()
+}
+
 func TestRequest_TagExpandedDoesNotRetagConcurrentDeletion(t *testing.T) {
 	rq := &Request{tagMap: make(map[any][]*Element)}
 	elem := rq.NewElement(&testUi{})

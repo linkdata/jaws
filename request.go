@@ -889,8 +889,8 @@ func (rq *Request) hasLiveTagLocked(tagValue any) bool {
 // expanded.
 func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 	rq.mu.RLock()
+	defer rq.mu.RUnlock()
 	yes = rq.hasTagLocked(elem, tagValue)
-	rq.mu.RUnlock()
 	return
 }
 
