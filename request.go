@@ -647,8 +647,8 @@ func (rq *Request) cancelLocked(err error) (cause error) {
 // ([Jaws.Log] is a no-op on a nil cause).
 func (rq *Request) cancel(err error) {
 	rq.mu.Lock()
+	defer rq.mu.Unlock()
 	_ = rq.Jaws.Log(rq.cancelLocked(err))
-	rq.mu.Unlock()
 }
 
 // Cancel aborts the Request.
@@ -1180,13 +1180,16 @@ func (rq *Request) startServe() (ok bool) {
 	default:
 	}
 	metrics := StatusMetricActiveRequests
-	rq.mu.RLock()
-	registered := rq.Jaws.requests[rq.JawsKey] == rq
-	contextLive := rq.ctx != nil && rq.ctx.Err() == nil
-	if rq.session != nil {
-		metrics |= StatusMetricActiveSessions
-	}
-	rq.mu.RUnlock()
+	var registered, contextLive bool
+	func() {
+		rq.mu.RLock()
+		defer rq.mu.RUnlock()
+		registered = rq.Jaws.requests[rq.JawsKey] == rq
+		contextLive = rq.ctx != nil && rq.ctx.Err() == nil
+		if rq.session != nil {
+			metrics |= StatusMetricActiveSessions
+		}
+	}()
 	// casState(reqClaimed, reqRunning) atomically requires the Request to be claimed
 	// (not already running, retired, or unclaimed) and transitions it to running.
 	ok = registered && contextLive && rq.casState(reqClaimed, reqRunning)

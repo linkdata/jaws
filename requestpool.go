@@ -256,14 +256,16 @@ func (jw *Jaws) nonZeroRandomLocked() key.Key {
 func (jw *Jaws) UseRequest(jawsKey key.Key, r *http.Request) (rq *Request) {
 	if jawsKey != 0 {
 		var err error
-		jw.mu.Lock()
-		if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil {
-			if err = waitingRq.claim(r); err == nil {
-				rq = waitingRq
-				jw.removePendingRequestLocked(rq)
+		func() {
+			jw.mu.Lock()
+			defer jw.mu.Unlock()
+			if waitingRq, ok := jw.requests[jawsKey]; ok && waitingRq != nil {
+				if err = waitingRq.claim(r); err == nil {
+					rq = waitingRq
+					jw.removePendingRequestLocked(rq)
+				}
 			}
-		}
-		jw.mu.Unlock()
+		}()
 		// Cancellation was reported when the Request was canceled. Repeated
 		// claims must not re-log its initial URI.
 		if !errors.Is(err, ErrRequestCancelled) {
@@ -351,11 +353,13 @@ func (jw *Jaws) unregisterLocked(rq *Request, err error) (cause error) {
 // pooling it. Caller must hold jw.mu; rq must not be running. A nil err cancels
 // without a specific cause.
 func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause error) {
-	rq.mu.Lock()
-	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && rq.loadState() != reqRunning {
-		cause = jw.unregisterLocked(rq, err)
-	}
-	rq.mu.Unlock()
+	func() {
+		rq.mu.Lock()
+		defer rq.mu.Unlock()
+		if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && rq.loadState() != reqRunning {
+			cause = jw.unregisterLocked(rq, err)
+		}
+	}()
 	runtime.KeepAlive(rq)
 	return
 }
@@ -366,12 +370,14 @@ func (jw *Jaws) recycle(rq *Request) {
 	jw.mu.Lock()
 	defer jw.mu.Unlock()
 	var buffers *requestBuffers
-	rq.mu.Lock()
-	if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
-		_ = jw.unregisterLocked(rq, nil)
-		buffers = rq.releaseBuffersLocked()
-	}
-	rq.mu.Unlock()
+	func() {
+		rq.mu.Lock()
+		defer rq.mu.Unlock()
+		if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
+			_ = jw.unregisterLocked(rq, nil)
+			buffers = rq.releaseBuffersLocked()
+		}
+	}()
 	// Return the buffers after releasing rq.mu.
 	if buffers != nil {
 		jw.requestBufferPool.Put(buffers)
@@ -387,10 +393,10 @@ func (jw *Jaws) recycle(rq *Request) {
 // keeps that check valid, since finishing requires the jw.mu write lock.
 func (jw *Jaws) cancelIfCurrent(jawsKey key.Key, rq *Request, err error) {
 	jw.mu.RLock()
+	defer jw.mu.RUnlock()
 	if jw.requests[jawsKey] == rq {
 		rq.mu.Lock()
+		defer rq.mu.Unlock()
 		_ = jw.Log(rq.cancelLocked(err))
-		rq.mu.Unlock()
 	}
-	jw.mu.RUnlock()
 }
