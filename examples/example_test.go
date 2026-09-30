@@ -73,6 +73,6 @@ func Example_secureSession() {
 	var f float64
 
 	page := ui.Handler(jw, "index", bind.New(&mu, &f))
-	mux.Handle("GET /{$}", jw.SessionMiddleware(jw.SecureHeadersMiddleware(page)))
+	mux.Handle("GET /{$}", jw.SecureHeadersMiddleware(jw.SessionMiddleware(page)))
 	slog.Error(http.ListenAndServe("localhost:8080", mux).Error())
 }
