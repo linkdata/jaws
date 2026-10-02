@@ -496,6 +496,8 @@ func (elem *Element) validChildElement(operation string, child *Element) (ok boo
 // For a live Element, it registers tags and event handlers and returns any HTML
 // attributes found by [ParseParams]. A deleted Element applies nothing and returns nil.
 //
+// Attribute parameters are trusted raw HTML attribute syntax; see [ParseParams].
+//
 // On a live, frozen Element, handler params are queued for logging and dropped
 // in production when [Jaws.Logger] is configured, after which tags and attributes
 // are processed. Debug builds and servers without a Logger panic first. Params
@@ -506,7 +508,7 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 		elem.appendHandlers(handlers...)
 		elem.Tag(tags...)
 		for _, s := range rawAttrs {
-			attr := template.HTMLAttr(s) // #nosec G203
+			attr := template.HTMLAttr(s) // #nosec G203 -- ParseParams returns caller-supplied trusted raw attribute syntax.
 			attrs = append(attrs, attr)
 		}
 	}
@@ -545,11 +547,8 @@ func (elem *Element) ApplyGetter(getter any) (tagValue any) {
 		if tagger, ok := getter.(tag.TagGetter); ok {
 			tagValue = tagger.JawsGetTag()
 		}
-		if _, ok := getter.(InputHandler); ok {
-			elem.appendHandlers(getter)
-		} else if _, ok := getter.(ClickHandler); ok {
-			elem.appendHandlers(getter)
-		} else if _, ok := getter.(ContextMenuHandler); ok {
+		switch getter.(type) {
+		case InputHandler, ClickHandler, ContextMenuHandler:
 			elem.appendHandlers(getter)
 		}
 		if eligibleAsTag(tagValue, tag.NewErrNotComparable) {
