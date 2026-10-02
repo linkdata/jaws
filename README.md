@@ -110,7 +110,7 @@ func main() {
 	percent := Percent(50)
 
 	http.DefaultServeMux.Handle("GET /{$}", ui.Handler(jw, "index", bind.New(&mu, &percent)))
-	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
+	panic(http.ListenAndServe("localhost:8080", nil))
 }
 ```
 
