@@ -120,6 +120,24 @@ The [Minesweeper example](./examples/minesweeper/) shows those patterns in a
 complete collaborative application. Introduce sessions when state should belong
 to an individual user.
 
+## Choose a UI source
+
+Widget helpers such as `$.Span` and `$.Text` choose the HTML element. Their first
+argument supplies its content or value. Choose that source by what it needs to do:
+
+| Source need | Use |
+| --- | --- |
+| Read and write a field protected by a lock | `bind.New(&mu, &value)`; its pointer is the dependency tag. Chain `Clicked`, `ContextMenu`, or `InitialHTMLAttr` on the Binder when needed. |
+| Compute read-only text or HTML | `bind.StringGetterFunc(fn, tags...)` for escaped text, or `bind.HTMLGetterFunc(fn, tags...)` for trusted HTML. Supply tags for values you need to dirty. |
+| Add actions or attributes to HTML content without a Binder | Use `ui.New(content)` and its `Clicked`, `ContextMenu`, or `InitialHTMLAttr` methods. Pass the resulting Object to an HTML widget. |
+| Use a reusable source with custom value, event, or attribute behavior | Implement `bind.HTMLGetter` for HTML widgets or `bind.Setter[T]` for inputs, together with the needed handler interfaces. Use `bind.Getter[T]` for value-only reads. |
+
+For an element that standard widgets cannot render or update, implement
+`jaws.UI`. See [`MakeHTMLGetter`](https://pkg.go.dev/github.com/linkdata/jaws/lib/bind#MakeHTMLGetter),
+[`MakeSetter`](https://pkg.go.dev/github.com/linkdata/jaws/lib/bind#MakeSetter),
+and [`ui.New`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#New) for the
+conversion rules.
+
 ## Production guidance
 
 Before deploying a JaWS application, review the [production hardening

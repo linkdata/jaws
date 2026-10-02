@@ -178,8 +178,12 @@ func (obj *object) JawsGetTag() any {
 
 // New returns a new [Object] that renders innerHTML.
 //
-// innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide
-// tags. Plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]. Its HTML and any tags exposed by
+// the adapted value's [tag.TagGetter] are used. An existing [bind.HTMLGetter]
+// without JawsGetTag contributes no tag. innerHTML's event and initial-attribute
+// methods are not inherited; add those behaviors with [Object.Clicked],
+// [Object.ContextMenu], and [Object.InitialHTMLAttr]. Plain strings are trusted
+// HTML.
 func New(innerHTML any) (obj Object) {
 	return &object{
 		handler: bind.MakeHTMLGetter(innerHTML),

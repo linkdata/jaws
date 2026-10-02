@@ -4,10 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/linkdata/jaws"
+	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/tag"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 type testObjectStringer struct {
@@ -26,6 +30,12 @@ func (g testObjectTagGetter) JawsGetTag() any {
 	return g.v
 }
 
+type testObjectHTMLGetter struct{}
+
+func (*testObjectHTMLGetter) JawsGetHTML(*jaws.Element) template.HTML { return "text" }
+
+type testObjectBinderNoHTML struct{ bind.Binder[string] }
+
 func TestObject_NewForwardsHTMLAndTag(t *testing.T) {
 	_, rq := newCoreRequest(t)
 	elem := rq.NewElement(NewSpan(testHTMLGetter("x")))
@@ -37,6 +47,83 @@ func TestObject_NewForwardsHTMLAndTag(t *testing.T) {
 	}
 	if got, want := obj.JawsGetTag(), any(inner); got != want {
 		t.Fatalf("want tag %#v got %#v", want, got)
+	}
+}
+
+func TestObject_InnerHTMLGetterWithoutTag(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	inner := new(testObjectHTMLGetter)
+	direct, _ := renderUI(t, rq, NewSpan(inner))
+	if tags := rq.TagsOf(direct); len(tags) != 1 || tags[0] != inner {
+		t.Fatalf("direct HTMLGetter tags = %#v, want inner value", tags)
+	}
+	wrapped, _ := renderUI(t, rq, NewSpan(New(inner)))
+	if tags := rq.TagsOf(wrapped); len(tags) != 0 {
+		t.Fatalf("wrapped HTMLGetter tags = %#v, want none", tags)
+	}
+}
+
+func TestObject_InnerBinderHooks(t *testing.T) {
+	_, rq := newCoreRequest(t)
+	var mu sync.Mutex
+	value := "text"
+	clicks, menus, attrs := 0, 0, 0
+	binder := bind.New(&mu, &value).
+		Clicked(func(bind.Binder[string], *jaws.Element, jaws.Click) error {
+			clicks++
+			return nil
+		}).
+		ContextMenu(func(bind.Binder[string], *jaws.Element, jaws.Click) error {
+			menus++
+			return nil
+		}).
+		InitialHTMLAttr(func(bind.Binder[string], *jaws.Element) template.HTMLAttr {
+			attrs++
+			return `data-inner="yes"`
+		})
+
+	direct, directHTML := renderUI(t, rq, NewSpan(binder))
+	if !strings.Contains(directHTML, `data-inner="yes"`) {
+		t.Fatalf("direct Binder HTML = %q, want initial attribute", directHTML)
+	}
+	if err := jaws.CallEventHandlers(direct.UI(), direct, what.Click, "1 2 0 click"); err != nil {
+		t.Fatal(err)
+	}
+	if err := jaws.CallEventHandlers(direct.UI(), direct, what.ContextMenu, "1 2 0 menu"); err != nil {
+		t.Fatal(err)
+	}
+	if clicks != 1 || menus != 1 || attrs != 1 {
+		t.Fatalf("direct Binder calls = (%d, %d, %d), want (1, 1, 1)", clicks, menus, attrs)
+	}
+	adapted, adaptedHTML := renderUI(t, rq, NewSpan(testObjectBinderNoHTML{binder}))
+	if !strings.Contains(adaptedHTML, `data-inner="yes"`) {
+		t.Fatalf("adapted Binder HTML = %q, want initial attribute", adaptedHTML)
+	}
+	if err := jaws.CallEventHandlers(adapted.UI(), adapted, what.Click, "1 2 0 click"); err != nil {
+		t.Fatal(err)
+	}
+	if err := jaws.CallEventHandlers(adapted.UI(), adapted, what.ContextMenu, "1 2 0 menu"); err != nil {
+		t.Fatal(err)
+	}
+	if clicks != 2 || menus != 2 || attrs != 2 {
+		t.Fatalf("adapted Binder calls = (%d, %d, %d), want (2, 2, 2)", clicks, menus, attrs)
+	}
+
+	wrapped, wrappedHTML := renderUI(t, rq, NewSpan(New(binder)))
+	if strings.Contains(wrappedHTML, `data-inner="yes"`) || !strings.Contains(wrappedHTML, ">text</span>") {
+		t.Fatalf("wrapped Binder HTML = %q, want content without inner attribute", wrappedHTML)
+	}
+	if tags := rq.TagsOf(wrapped); len(tags) != 1 || tags[0] != &value {
+		t.Fatalf("wrapped Binder tags = %#v, want backing pointer", tags)
+	}
+	if err := jaws.CallEventHandlers(wrapped.UI(), wrapped, what.Click, "1 2 0 click"); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatalf("wrapped click = %v, want ErrEventUnhandled", err)
+	}
+	if err := jaws.CallEventHandlers(wrapped.UI(), wrapped, what.ContextMenu, "1 2 0 menu"); !errors.Is(err, jaws.ErrEventUnhandled) {
+		t.Fatalf("wrapped context menu = %v, want ErrEventUnhandled", err)
+	}
+	if clicks != 2 || menus != 2 || attrs != 2 {
+		t.Fatalf("inner Binder calls after wrapping = (%d, %d, %d), want (2, 2, 2)", clicks, menus, attrs)
 	}
 }
 

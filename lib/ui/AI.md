@@ -152,6 +152,11 @@ does not run initial-attribute hooks. Call `Element.ApplyInitialHTMLAttr`
 separately and without holding a lock that the callback might acquire. A
 `bind.Binder` acquires its own value lock before invoking its hook.
 
+`ui.New(inner)` uses the adapted inner value for HTML and tag contributions, but
+does not inherit its event or initial-attribute methods. Add those to the
+returned Object. A direct `HTMLGetter` without `JawsGetTag` loses its implicit
+tag when wrapped in `ui.New`.
+
 A Template without a wrapper does not invoke Dot's initial-attribute callback.
 Wrapper attributes persist when `Template.JawsUpdate` replaces only the inner
 HTML; change them with `Element.SetAttr` and `Element.RemoveAttr`.
