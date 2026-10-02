@@ -2,12 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // Number renders an HTML number input.
@@ -38,29 +36,8 @@ func NewNumber[T Numeric](source bind.Getter[T]) *Number {
 }
 
 // JawsRender renders the Number as an HTML number input.
-func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	source := u.binding.sourceValue()
-	if u.binding.writable() {
-		if err = validateEditableNumericSource(source); err != nil {
-			return
-		}
-	}
-	getterAttrs := u.applyGetterAttrs(elem, source)
-	text, err := u.binding.getText(elem)
-	if err != nil {
-		elem.Cancel(err)
-		return nil
-	}
-	attrs := append(elem.ApplyParams(params), getterAttrs...)
-	if u.binding.writable() {
-		attrs = append(attrs, template.HTMLAttr("data-jawsnumber"))
-	} else {
-		attrs = append(attrs, template.HTMLAttr("readonly"))
-	}
-	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "number", text, attrs); err == nil {
-		u.Last.Store(text)
-	}
-	return
+func (u *Number) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return renderNumericInput(&u.Input, u.binding, elem, w, params, "number", "data-jawsnumber", "readonly")
 }
 
 // JawsUpdate reconciles the input with its canonical source value.

@@ -405,6 +405,9 @@ Element before callbacks, tag registration, or output. Contention returns
 `jaws.ErrElementStateClaimed` without render side effects. Do not combine two
 state-owning renderers on one Element.
 
+Updating a Container, Tbody, or Select Element that has not been rendered logs
+`ui.ErrElementStateUnclaimed` without calling its provider or queuing work.
+
 Container state owns the render-time tag, reconciliation mutex, and children.
 Widget definitions remain immutable. Provider callbacks and validation run
 without the state mutex. Reconciliation holds it only while matching definitions
@@ -414,7 +417,7 @@ logging occur after unlocking.
 Cleanup detaches children under the state lock and recursively unregisters them
 after unlocking. Failed render and append paths unregister every child and
 nested owner they created. A successful Select render queues its selected value
-after options; state contention suppresses reconciliation and that value update.
+after options; unusable state suppresses reconciliation and that value update.
 
 Template stores the Elements created by each execution in the rendering
 Element's state. Equal Template values can therefore back multiple Elements and

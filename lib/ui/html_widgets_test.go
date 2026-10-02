@@ -10,10 +10,11 @@ import (
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
 	"github.com/linkdata/jaws/lib/named"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
-	_, rq := newCoreRequest(t)
+	tr := valueTestNewLoopRequest(t, nil)
 
 	tests := []struct {
 		name    string
@@ -32,9 +33,13 @@ func TestHTMLWidgets_ConstructorsAndRender(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			elem, got := renderUI(t, rq, tt.ui, tt.params...)
+			elem, got := renderUI(t, tr.Request, tt.ui, tt.params...)
 			mustMatch(t, tt.pattern, got)
 			tt.ui.JawsUpdate(elem)
+			messages := nestedReorderDrainWire(t, tr, tt.name)
+			if len(messages) != 1 || messages[0].What != what.Inner || messages[0].Jid != elem.Jid() {
+				t.Fatalf("update messages = %+v, want one Inner for %v", messages, elem.Jid())
+			}
 		})
 	}
 }
@@ -69,13 +74,17 @@ func TestHTMLInner_RenderInnerWriteError(t *testing.T) {
 }
 
 func TestImg_RenderAndUpdate(t *testing.T) {
-	_, rq := newCoreRequest(t)
+	tr := valueTestNewLoopRequest(t, nil)
 	src := newTestSetter("image.png")
 	ui := NewImg(src)
-	elem, got := renderUI(t, rq, ui, "hidden")
+	elem, got := renderUI(t, tr.Request, ui, "hidden")
 	mustMatch(t, `^<img id="Jid\.[0-9]+" src="image\.png" hidden>$`, got)
 	src.Set("image2.jpg")
 	ui.JawsUpdate(elem)
+	messages := nestedReorderDrainWire(t, tr, "image update")
+	if len(messages) != 1 || messages[0].What != what.SAttr || messages[0].Jid != elem.Jid() {
+		t.Fatalf("update messages = %+v, want one SAttr for %v", messages, elem.Jid())
+	}
 }
 
 func TestImg_RenderGetterSrcTakesPrecedence(t *testing.T) {

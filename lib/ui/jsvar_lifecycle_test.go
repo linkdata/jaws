@@ -37,8 +37,8 @@ func TestJsVarBindingRejectsDifferentJaws(t *testing.T) {
 	store := newTestJsVarStore(t, jw, "client", &mu, &value)
 	elem := rq.NewElement(store.Bind())
 	var output bytes.Buffer
-	if err := elem.JawsRender(&output, nil); err == nil {
-		t.Fatal("binding rendered in a different Jaws instance")
+	if err := elem.JawsRender(&output, nil); !errors.Is(err, ErrJsVarBindingWrongJaws) {
+		t.Fatalf("render error = %v, want %v", err, ErrJsVarBindingWrongJaws)
 	}
 	if output.Len() != 0 || len(rq.GetElements(store)) != 0 {
 		t.Fatalf("foreign binding output=%q tags=%v", output.String(), rq.GetElements(store))

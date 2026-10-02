@@ -58,9 +58,6 @@ func TestNewTestRequest_BcastChToOutCh(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	t.Cleanup(func() { closeTestRequest(t, tr) })
 	<-tr.ReadyCh
 
@@ -88,9 +85,6 @@ func TestNewTestRequest_SuccessAndClose(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	<-tr.ReadyCh
 
 	if tr.Request == nil {
@@ -135,9 +129,6 @@ func TestNewTestRequest_WithExplicitRequest(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, httptest.NewRequest(http.MethodPost, "/explicit", nil))
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	t.Cleanup(func() { closeTestRequest(t, tr) })
 	<-tr.ReadyCh
 	if got := tr.Initial(); got == nil || got.Method != http.MethodPost || got.URL.Path != "/explicit" {

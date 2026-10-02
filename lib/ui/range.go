@@ -2,12 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"html/template"
 	"io"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // Range renders an HTML range input.
@@ -42,27 +40,8 @@ func NewRange[T Numeric](source bind.Getter[T]) *Range {
 }
 
 // JawsRender renders the Range as an HTML range input.
-func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
-	source := u.binding.sourceValue()
-	if u.binding.writable() {
-		if err = validateEditableNumericSource(source); err != nil {
-			return
-		}
-	}
-	getterAttrs := u.applyGetterAttrs(elem, source)
-	text, err := u.binding.getText(elem)
-	if err != nil {
-		elem.Cancel(err)
-		return nil
-	}
-	attrs := append(elem.ApplyParams(params), getterAttrs...)
-	if !u.binding.writable() {
-		attrs = append(attrs, template.HTMLAttr("disabled"))
-	}
-	if err = htmlio.WriteHTMLInput(w, elem.Jid(), "range", text, attrs); err == nil {
-		u.Last.Store(text)
-	}
-	return
+func (u *Range) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
+	return renderNumericInput(&u.Input, u.binding, elem, w, params, "range", "", "disabled")
 }
 
 // JawsUpdate reconciles the range with its canonical source value.

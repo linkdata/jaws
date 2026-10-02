@@ -53,10 +53,9 @@ func (u Select) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err e
 	return
 }
 
-// JawsUpdate reconciles the child options and then queues the selected value.
+// JawsUpdate reconciles child options and queues the selected value.
 //
-// After a non-contended reconciliation returns, it queues the selected value.
-// State contention suppresses both operations.
+// Missing, foreign, or in-progress state suppresses both operations.
 func (u Select) JawsUpdate(elem *jaws.Element) {
 	if u.container().update(elem) {
 		u.applyValue(elem)

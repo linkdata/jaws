@@ -107,9 +107,8 @@ func (p *valueTestProvider) snapshot() (snapshot valueTestProviderSnapshot) {
 }
 
 type valueTestWidgetCase struct {
-	name                string
-	build               func(*valueTestProvider) jaws.UI
-	wantLazyGetterCalls int
+	name  string
+	build func(*valueTestProvider) jaws.UI
 }
 
 func valueTestWidgetCases() []valueTestWidgetCase {
@@ -123,9 +122,8 @@ func valueTestWidgetCases() []valueTestWidgetCase {
 			build: func(p *valueTestProvider) jaws.UI { return NewTbody(p) },
 		},
 		{
-			name:                "Select",
-			build:               func(p *valueTestProvider) jaws.UI { return NewSelect(p) },
-			wantLazyGetterCalls: 1,
+			name:  "Select",
+			build: func(p *valueTestProvider) jaws.UI { return NewSelect(p) },
 		},
 	}
 }
@@ -544,21 +542,18 @@ func TestContainerUpdateRejectsRenderInProgress(t *testing.T) {
 	}
 }
 
-func TestContainerUpdateRejectsClaimedStateBeforeProviderCallback(t *testing.T) {
+func TestContainerUpdateRejectsUnusableStateBeforeProviderCallback(t *testing.T) {
 	stateCases := []struct {
-		name  string
-		claim func(*jaws.Element) error
+		name     string
+		claim    func(*jaws.Element) error
+		want     error
+		wantText string
 	}{
+		{name: "missing", claim: func(*jaws.Element) error { return nil }, want: ErrElementStateUnclaimed, wantText: "element state unclaimed"},
 		{
 			name:  "foreign",
 			claim: func(elem *jaws.Element) error { return jaws.SetElementState(elem, new(int)) },
-		},
-		{
-			name: "typed nil",
-			claim: func(elem *jaws.Element) error {
-				var state *containerState
-				return jaws.SetElementState(elem, state)
-			},
+			want:  jaws.ErrElementStateClaimed,
 		},
 	}
 
@@ -583,71 +578,13 @@ func TestContainerUpdateRejectsClaimedStateBeforeProviderCallback(t *testing.T) 
 						t.Fatalf("provider callbacks = %d, want 0", got)
 					}
 					logged := logger.sync(t, jw)
-					if len(logged) != 1 || !errors.Is(logged[0], jaws.ErrElementStateClaimed) {
-						t.Fatalf("logged errors = %v, want one %v", logged, jaws.ErrElementStateClaimed)
+					if len(logged) != 1 || !errors.Is(logged[0], stateCase.want) {
+						t.Fatalf("logged errors = %v, want one %v", logged, stateCase.want)
+					}
+					if stateCase.wantText != "" && logged[0].Error() != stateCase.wantText {
+						t.Fatalf("logged error text = %q, want %q", logged[0].Error(), stateCase.wantText)
 					}
 				})
-			}
-		})
-	}
-}
-
-func TestClaimContainerStateLosesOccupiedSlot(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	elem := rq.NewElement(valueTestChild(1))
-	winner := new(containerState)
-	if err := jaws.SetElementState(elem, winner); err != nil {
-		t.Fatal(err)
-	}
-
-	// The preclaim models another updater winning after this updater observed an
-	// unclaimed slot but before its claim attempt acquired the Request lock.
-	state, err := claimContainerState(elem)
-	if !errors.Is(err, jaws.ErrElementStateClaimed) {
-		t.Fatalf("claim = %v, want %v", err, jaws.ErrElementStateClaimed)
-	}
-	if state != nil {
-		t.Fatalf("losing claim returned state %p, want nil", state)
-	}
-	if got := jaws.ElementState(elem); got != winner {
-		t.Fatalf("losing claim replaced winner with %T", got)
-	}
-}
-
-func TestContainerUpdateLazilyClaimsState(t *testing.T) {
-	for _, tt := range valueTestWidgetCases() {
-		t.Run(tt.name, func(t *testing.T) {
-			_, rq := newCoreRequest(t)
-			provider := &valueTestProvider{
-				children: []jaws.UI{valueTestChild(1)},
-				selected: "one",
-			}
-			widget := tt.build(provider)
-			jid := (RequestWriter{Request: rq}).Register(widget)
-			elem := rq.GetElementByJid(jid)
-			if elem == nil {
-				t.Fatalf("Register Element %v is not registered", jid)
-			}
-
-			snapshot := valueTestSnapshotState(t, elem)
-			if snapshot.rendering {
-				t.Fatal("lazily claimed state remains in rendering phase")
-			}
-			if snapshot.dirtyTag != nil {
-				t.Fatalf("lazy state's dirty tag = %v, want nil", snapshot.dirtyTag)
-			}
-			if len(snapshot.children) != 1 {
-				t.Fatalf("lazy state's children = %d, want 1", len(snapshot.children))
-			}
-			calls := provider.snapshot()
-			if calls.containsCalls != 1 {
-				t.Fatalf("JawsContains calls = %d, want 1", calls.containsCalls)
-			}
-			if calls.getCalls != tt.wantLazyGetterCalls {
-				t.Fatalf("JawsGet calls = %d, want %d", calls.getCalls, tt.wantLazyGetterCalls)
-			}
-			if calls.tagCalls != 0 || calls.attrCalls != 0 {
-				t.Fatalf("render-only getter callbacks = tag:%d attr:%d, want 0", calls.tagCalls, calls.attrCalls)
 			}
 		})
 	}
@@ -715,10 +652,6 @@ func TestSelectInputWithoutUsableStateDoesNotClaim(t *testing.T) {
 		{name: "missing", claim: func(*jaws.Element) error { return nil }},
 		{name: "foreign", claim: func(elem *jaws.Element) error {
 			return jaws.SetElementState(elem, new(int))
-		}},
-		{name: "typed nil", claim: func(elem *jaws.Element) error {
-			var state *containerState
-			return jaws.SetElementState(elem, state)
 		}},
 	}
 

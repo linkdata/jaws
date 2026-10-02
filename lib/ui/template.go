@@ -316,13 +316,9 @@ func NewTemplate(outerHTMLTag, name string, dot any, attrs ...string) (tmpl Temp
 	if outerHTMLTag == "" {
 		outerHTMLTag = "div"
 	}
-	tmpl = newTemplate(outerHTMLTag, name, dot)
+	tmpl = Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 	tmpl.initialAttrs = strings.Join(attrs, " ")
 	return
-}
-
-func newTemplate(outerHTMLTag, name string, dot any) Template {
-	return Template{OuterHTMLTag: outerHTMLTag, Name: name, Dot: dot}
 }
 
 // Template renders the named partial template with dot exposed as [With.Dot].

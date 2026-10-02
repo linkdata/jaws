@@ -371,14 +371,15 @@ type JsVarBinding[T any] struct {
 
 // JawsRender writes the hidden browser route and its initial JSON value.
 //
-// A Request owned by a different [jaws.Jaws] returns an error without output.
+// A Request owned by a different [jaws.Jaws] returns [ErrJsVarBindingWrongJaws]
+// without output.
 // Rendering twice returns [ErrJsVarBindingUsed]; a duplicate or overlapping
 // browser name in the Request returns [ErrJsVarNameConflict].
 func (binding *JsVarBinding[T]) JawsRender(elem *jaws.Element, w io.Writer, params []any) (err error) {
 	if elem.Jaws != binding.store.jaws {
 		// The store publishes through exactly one Jaws; a foreign Request could
 		// render a route but would never receive its invalidations.
-		return fmt.Errorf("jsvar: binding rendered on a different Jaws instance")
+		return ErrJsVarBindingWrongJaws
 	}
 	if !binding.rendered.CompareAndSwap(false, true) {
 		return ErrJsVarBindingUsed
@@ -822,6 +823,7 @@ func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
 						return false
 					}
 				case "omitempty", "omitzero":
+					// Omission changes which paths exist in the encoded value.
 					return false
 				default:
 					return false

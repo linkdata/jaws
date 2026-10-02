@@ -19,6 +19,9 @@ var ErrJsVarNameConflict = errors.New("jsvar: browser name already bound")
 // ErrJsVarBindingUsed reports a binding rendered more than once.
 var ErrJsVarBindingUsed = errors.New("jsvar: binding already rendered")
 
+// ErrJsVarBindingWrongJaws reports a binding rendered on another [jaws.Jaws].
+var ErrJsVarBindingWrongJaws = errors.New("jsvar: binding rendered on a different Jaws instance")
+
 // ErrJsVarReadOnly reports a browser proposal to a store without ClientCheck.
 var ErrJsVarReadOnly = errors.New("jsvar: browser writes denied")
 

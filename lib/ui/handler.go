@@ -32,9 +32,7 @@ type pageTemplate struct {
 // The per-request page UI is a *pageTemplate; see [uiHandler.ServeHTTP].
 var _ jaws.UI = (*pageTemplate)(nil)
 
-// JawsUpdate is a no-op because a page-level template is render-only: the
-// [Template.JawsUpdate] would re-render the entire document into itself
-// when OuterHTMLTag is set, so it is deliberately silenced here.
+// JawsUpdate leaves the render-only page Element unchanged.
 func (*pageTemplate) JawsUpdate(*jaws.Element) {}
 
 // JawsRender renders the whole-page template, looking it up and executing it
@@ -102,9 +100,7 @@ func (h uiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Request.NewElement if a bare pageTemplate value were used.
 	// The pointer identity is always comparable and fresh per request. Element tracking
 	// lives in the page Element's state slot claimed by pageTemplate.JawsRender.
-	// The private constructor bypasses NewTemplate's "div" default. pageTemplate
-	// executes the document directly and deliberately emits no generated wrapper.
-	pt := &pageTemplate{tmpl: newTemplate("", h.name, h.dot)}
+	pt := &pageTemplate{tmpl: Template{Name: h.name, Dot: h.dot}}
 	if err := rw.NewUI(pt); err != nil {
 		_ = h.Log(err)
 		// A failure before any output (for example a missing template) can still
