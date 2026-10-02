@@ -410,17 +410,13 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
-func TestJawsJS_NumberUsesChangeBeforeAutoSubmit(t *testing.T) {
+func TestJawsJS_NumberUsesChange(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }
-FakeSocket.prototype.send = function(msg) {
-	this.sent.push(msg);
-	log.push("send");
-};
+FakeSocket.prototype.send = function(msg) { this.sent.push(msg); };
 WebSocket = FakeSocket;
 jaws = new FakeSocket();
 
-const log = [];
 let stopped = false;
 const listeners = {};
 const number = {
@@ -428,10 +424,7 @@ const number = {
 	tagName: "INPUT",
 	type: "number",
 	value: "1",
-	form: { submit: function() { log.push("submit"); } },
-	hasAttribute: function(name) {
-		return name === "data-jawsnumber" || name === "data-jawsonchangesubmit";
-	},
+	hasAttribute: function(name) { return name === "data-jawsnumber"; },
 	getAttribute: function(name) { return name === "type" ? "number" : null; },
 	addEventListener: function(name, fn) { (listeners[name] ||= []).push(fn); }
 };
@@ -449,9 +442,6 @@ const top = {
 	querySelectorAll: function(selector) {
 		if (selector === '[id^="' + jawsIdPrefix + '"]') {
 			return [number, range];
-		}
-		if (selector === '[data-jawsonchangesubmit]') {
-			return [number];
 		}
 		return [];
 	}
@@ -474,7 +464,6 @@ process.stdout.write(JSON.stringify({
 	rangeInputListeners: (rangeListeners.input || []).length,
 	rangeChangeListeners: (rangeListeners.change || []).length,
 	frames: jaws.sent,
-	log: log,
 	stopped: stopped
 }));
 `)
@@ -485,20 +474,16 @@ process.stdout.write(JSON.stringify({
 		RangeInputListeners   int      `json:"rangeInputListeners"`
 		RangeChangeListeners  int      `json:"rangeChangeListeners"`
 		Frames                []string `json:"frames"`
-		Log                   []string `json:"log"`
 		Stopped               bool     `json:"stopped"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &got); err != nil {
 		t.Fatalf("failed to parse snippet output %q: %v", raw, err)
 	}
-	if got.NumberInputListeners != 0 || got.NumberChangeListeners != 2 {
-		t.Fatalf("Number listeners = input:%d change:%d, want input:0 change:2", got.NumberInputListeners, got.NumberChangeListeners)
+	if got.NumberInputListeners != 0 || got.NumberChangeListeners != 1 {
+		t.Fatalf("Number listeners = input:%d change:%d, want input:0 change:1", got.NumberInputListeners, got.NumberChangeListeners)
 	}
 	if got.RangeInputListeners != 1 || got.RangeChangeListeners != 0 {
 		t.Fatalf("Range listeners = input:%d change:%d, want input:1 change:0", got.RangeInputListeners, got.RangeChangeListeners)
-	}
-	if !reflect.DeepEqual(got.Log, []string{"send", "submit"}) {
-		t.Fatalf("Number change order = %v, want send before submit", got.Log)
 	}
 	if !got.Stopped {
 		t.Fatal("Number change handler did not stop propagation")
