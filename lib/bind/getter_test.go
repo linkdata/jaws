@@ -40,7 +40,7 @@ func TestMakeGetter_GetterPassThroughAndTag(t *testing.T) {
 		t.Fatalf("unexpected passthrough getter value %q", got)
 	}
 
-	existing := setterStatic[string]{v: "z"}
+	existing := setterStatic[string]{getterStatic[string]{v: "z"}}
 	g3 := MakeGetter[string](existing)
 	if _, ok := g3.(Setter[string]); !ok {
 		t.Fatal("existing Setter passed as Getter did not retain its dynamic capabilities")

@@ -41,7 +41,6 @@ func BenchmarkSingleCellDirtyFanout(b *testing.B) {
 
 	cell := g.cells[0][0]
 	b.ReportAllocs()
-	b.ResetTimer()
 	for b.Loop() {
 		expanded, err := jawstag.TagExpand(g.toggleFlag(cell))
 		if err != nil {

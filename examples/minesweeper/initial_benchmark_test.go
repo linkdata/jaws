@@ -34,7 +34,6 @@ func BenchmarkInitialPageAndTail(b *testing.B) {
 	var pageBytes, tailBytes int64
 	err := run(func(_ string, handler http.Handler) error {
 		b.ReportAllocs()
-		b.ResetTimer()
 		for b.Loop() {
 			page := httptest.NewRecorder()
 			handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -62,7 +61,6 @@ func BenchmarkInitialPageAndTail(b *testing.B) {
 			}
 			b.StartTimer()
 		}
-		b.StopTimer()
 		return stop
 	})
 	if !errors.Is(err, stop) {

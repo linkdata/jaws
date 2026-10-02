@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/linkdata/jaws"
@@ -69,9 +68,6 @@ func TestMakeHTMLGetterBinderWrapperUsesJawsGet(t *testing.T) {
 func Test_MakeHTMLGetter(t *testing.T) {
 	untypedText := "<span>"
 	typedText := template.HTML(untypedText)
-	var avUntyped, avTyped atomic.Value
-	avUntyped.Store(untypedText)
-	avTyped.Store(typedText)
 	stringer := testStringer{}
 	binderVal := "<b>"
 	var binderMu sync.Mutex
@@ -107,13 +103,6 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			out:     template.HTML(html.EscapeString(binderNoHTML.JawsGet(nil))),
 			wantTag: &binderVal,
 		},
-		/*{
-			name: "Getter[any]",
-			v:    getterAny,
-			want: htmlGetterAny{getterAny},
-			out:  escapedTypedText,
-			wantTag:  getterAny,
-		},*/
 		{
 			name:    "fmt.Stringer",
 			v:       stringer,

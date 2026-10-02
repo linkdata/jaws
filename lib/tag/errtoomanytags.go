@@ -1,7 +1,9 @@
 package tag
 
-// ErrTooManyTags is returned when tag expansion exceeds the recursion depth
-// (maxTagDepth) or result count (maxTagCount) limits.
+// ErrTooManyTags reports that tag expansion exceeded a depth or count limit.
+//
+// Expansion allows at most 10 nested levels and 100 unique tags. A count
+// failure can return 101 partial entries alongside the error.
 var ErrTooManyTags errTooManyTags
 
 // errTooManyTags is intentionally fieldless: every instance equals the

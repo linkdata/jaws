@@ -26,19 +26,11 @@ func (s setterReadOnly[T]) JawsGetTag() any {
 }
 
 type setterStatic[T comparable] struct {
-	v T
+	getterStatic[T]
 }
 
 func (setterStatic[T]) JawsSet(elem *jaws.Element, value T) error {
 	return ErrValueNotSettable
-}
-
-func (s setterStatic[T]) JawsGet(elem *jaws.Element) T {
-	return s.v
-}
-
-func (s setterStatic[T]) JawsGetTag() any {
-	return nil
 }
 
 // MakeSetter returns value as a [Setter].
@@ -64,7 +56,7 @@ func MakeSetter[T comparable](value any) Setter[T] {
 	case Getter[T]:
 		return setterReadOnly[T]{v}
 	case T:
-		return setterStatic[T]{v}
+		return setterStatic[T]{getterStatic[T]{v}}
 	}
 	var blank T
 	panic(fmt.Errorf("expected bind.Setter[%T], bind.Getter[%T] or %T not %T", blank, blank, blank, value))

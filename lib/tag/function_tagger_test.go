@@ -17,7 +17,6 @@ func TestTagExpandDoesNotConflateDistinctFunctionTagGetters(t *testing.T) {
 	next := []any{want, nil}
 	getters := make([]testFunctionTagGetter, len(next))
 	for i := range next {
-		i := i
 		getters[i] = func() any { return next[i] }
 	}
 	leafGetter := getters[0]

@@ -28,10 +28,6 @@ func (s getterStatic[T]) JawsGetTag() any {
 	return nil
 }
 
-func makeStaticGetter[T comparable](value T) Getter[T] {
-	return getterStatic[T]{value}
-}
-
 // MakeGetter returns value as a [Getter].
 //
 // value may be a [Getter] of the same type or a static value of type T. It panics
@@ -42,7 +38,7 @@ func MakeGetter[T comparable](value any) Getter[T] {
 	case Getter[T]:
 		return v
 	case T:
-		return makeStaticGetter(v)
+		return getterStatic[T]{v}
 	}
 	var blank T
 	panic(fmt.Errorf("expected bind.Getter[%T] or %T not %T", blank, blank, value))
