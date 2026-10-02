@@ -12,7 +12,7 @@ request and session engine. Its primary building blocks are:
 - `HTMLInner` for elements with dynamic inner HTML;
 - `Input`, `InputText`, `InputBool`, and `InputDate` for typed control state;
 - `Number` and `Range` for type-preserving numeric input;
-- `Container`, `Tbody`, and `Select` for dynamic child lists;
+- `Container`, `Tbody`, `Select`, and `MultiSelect` for dynamic child lists;
 - `Template`, `Handler`, `With`, and `RequestWriter` for template integration.
 
 Use [bind](../bind/AI.md) for value adaptation, [tag](../tag/AI.md) for
@@ -36,8 +36,8 @@ following standard widgets support multiple live Elements under the conditions
 documented on their concrete types:
 
 - HTML-inner widgets, Img, and Option retain no Element-specific mutable state;
-- Template, Container, Tbody, and Select keep that state in each Element's state
-  slot rather than on the widget definition.
+- Template, Container, Tbody, Select, and MultiSelect keep that state in each
+  Element's state slot rather than on the widget definition.
 
 Input widgets and JsVarStore bindings require distinct widget values. To show
 one binder in two inputs, construct two widgets:
@@ -51,9 +51,9 @@ right := ui.NewText(binder)
 Calling `rw.Text(binder)` twice or rendering `{{$.Text .Binder}}` twice performs
 the same distinct construction.
 
-Container, Tbody, Select, and Template constructors return values that must be
-used as values; pointers to those definitions are unsupported. `NewOption` also
-returns a value, but Option is stateless with value-receiver methods, so a
+Container, Tbody, Select, MultiSelect, and Template constructors return values
+that must be used as values; pointers to those definitions are unsupported.
+`NewOption` also returns a value, but Option is stateless with value-receiver methods, so a
 pointer remains a valid UI. It changes identity to pointer identity and is
 usually unnecessary.
 
@@ -180,9 +180,9 @@ Request or update synchronized shared state, but a scalar Dot field cannot serve
 as a request-local readiness gate. Ordinary tag dirtying updates matching
 Elements on every live Request.
 
-Native form reset is unsupported for managed inputs and Select. A reset button
-or `form.reset()` changes browser state without the per-control events JaWS
-transports. Use a JaWS-handled `type="button"` action that updates authoritative
+Native form reset is unsupported for managed inputs, Select, and MultiSelect.
+A reset button or `form.reset()` changes browser state without the per-control
+events JaWS transports. Use a JaWS-handled `type="button"` action that updates authoritative
 Go state and dirties the affected bindings.
 
 Each independently constructed Radio is one boolean binding. Native grouping
@@ -373,9 +373,9 @@ encoded bytes, not Go heap capacity. An over-limit proposal cancels its Request.
 
 ## Container-family widgets
 
-`NewContainer`, `NewTbody`, and `NewSelect` return immutable definition values.
-The provider or handler participates in equality and must itself be comparable
-and reflexive. Keep application objects containing slices, maps, or functions
+`NewContainer`, `NewTbody`, `NewSelect`, and `NewMultiSelect` return immutable
+definition values. The provider or handler participates in equality and must
+itself be comparable and reflexive. Keep application objects containing slices, maps, or functions
 behind stable pointers and rebuild with the same pointer:
 
 ```go
@@ -394,6 +394,20 @@ update require one. Typed nils are called normally.
 handler, construct it with `named.NewBoolArray(false)` or use the zero value.
 Do not pass the HTML `multiple` attribute or a multi-select `BoolArray`.
 
+`MultiSelect` enables the native `multiple` attribute and accepts a
+`named.MultiSelectHandler`. Use `named.NewBoolArray(true)` as its standard
+handler. `JawsGetValues` supplies all selected option values; `JawsSetValues`
+replaces the complete selection. Empty or nil values clear every option. Keep
+option values distinct and non-empty. Render with `{{$.MultiSelect .Choices}}`
+or `ui.NewMultiSelect(choices)`.
+
+MultiSelect uses JSON string arrays inside the existing input/value messages.
+It reconciles all options after initial rendering and after child updates, and
+restores authoritative selection after rejected, unchanged, or malformed input.
+Malformed input never reaches the handler. Like Select, it uses the handler's
+render-time dependency tag to dirty shared state; it also dirties the originating
+Element so normalization cannot leave browser-only selections behind.
+
 Each child must render one addressable direct DOM node with its Element Jid.
 `NewTemplate` supplies that wrapper. The slice returned by `JawsContains` becomes
 read-only after return. Duplicate child values require a widget type that
@@ -406,13 +420,14 @@ does not preserve its Element.
 
 ## Element state and reconciliation
 
-Container, Tbody, Select, and Template claim one private state slot on each
-Element before callbacks, tag registration, or output. Contention returns
+Container, Tbody, Select, MultiSelect, and Template claim one private state slot
+on each Element before callbacks, tag registration, or output. Contention returns
 `jaws.ErrElementStateClaimed` without render side effects. Do not combine two
 state-owning renderers on one Element.
 
-Updating a Container, Tbody, or Select Element that has not been rendered logs
-`ui.ErrElementStateUnclaimed` without calling its provider or queuing work.
+Updating a Container, Tbody, Select, or MultiSelect Element that has not been
+rendered logs `ui.ErrElementStateUnclaimed` without calling its provider or
+queuing work.
 
 Container state owns the render-time tag, reconciliation mutex, and children.
 Widget definitions remain immutable. Provider callbacks and validation run
@@ -422,8 +437,9 @@ logging occur after unlocking.
 
 Cleanup detaches children under the state lock and recursively unregisters them
 after unlocking. Failed render and append paths unregister every child and
-nested owner they created. A successful Select render queues its selected value
-after options; unusable state suppresses reconciliation and that value update.
+nested owner they created. A successful Select or MultiSelect render queues its
+selection after options; unusable state suppresses reconciliation and that
+value update.
 
 Template stores the Elements created by each execution in the rendering
 Element's state. Equal Template values can therefore back multiple Elements and

@@ -33,7 +33,7 @@ The module contains 16 Go packages, each with one package-local guide:
 * [`github.com/linkdata/jaws/lib/key`](./lib/key/AI.md) -- request-key encoding
   and parsing.
 * [`github.com/linkdata/jaws/lib/named`](./lib/named/AI.md) -- named inputs and
-  single-select collections.
+  selection collections.
 * [`github.com/linkdata/jaws/lib/tag`](./lib/tag/AI.md) -- tag expansion,
   registration, targeting, and rendering.
 * [`github.com/linkdata/jaws/lib/templatereloader`](./lib/templatereloader/AI.md)

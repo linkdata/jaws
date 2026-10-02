@@ -8,4 +8,6 @@
 // A single-select [BoolArray] is the standard shared selection model for
 // [github.com/linkdata/jaws/lib/ui.Select] and
 // [github.com/linkdata/jaws/lib/ui.RequestWriter.RadioGroup].
+// A [BoolArray] created with NewBoolArray(true) implements [MultiSelectHandler]
+// for [github.com/linkdata/jaws/lib/ui.MultiSelect]. Use distinct option names.
 package named

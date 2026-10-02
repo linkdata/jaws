@@ -22,6 +22,7 @@ type BoolArray struct {
 }
 
 var _ SelectHandler = (*BoolArray)(nil)
+var _ MultiSelectHandler = (*BoolArray)(nil)
 
 // NewBoolArray returns an empty [BoolArray].
 //
@@ -29,7 +30,8 @@ var _ SelectHandler = (*BoolArray)(nil)
 // multi is true, multiple values may be checked at the same time. Pass a
 // single-select array to [github.com/linkdata/jaws/lib/ui.NewSelect] and
 // [github.com/linkdata/jaws/lib/ui.RequestWriter.RadioGroup]; neither supports
-// multi-select arrays.
+// multi-select arrays. Pass a multi-select array to
+// [github.com/linkdata/jaws/lib/ui.NewMultiSelect].
 func NewBoolArray(multi bool) *BoolArray {
 	return &BoolArray{multi: multi}
 }
@@ -100,8 +102,7 @@ func (nba *BoolArray) JawsContains(elem *jaws.Element) (contents []jaws.UI) {
 // (e.g. template.HTML(template.HTMLEscapeString(s))) when it is derived from
 // untrusted user input. See [NewBool].
 //
-// Use distinct names for options rendered in a single-selection select or
-// radio group.
+// Use distinct names for options rendered in a select or radio group.
 func (nba *BoolArray) Add(name string, html template.HTML) *BoolArray {
 	nba.mu.Lock()
 	nba.data = append(nba.data, NewBool(nba, name, html, false))
@@ -152,8 +153,8 @@ func (nba *BoolArray) deselectOthersLocked(name string, deselect bool) (changed 
 
 // Get returns the name of the first checked [Bool].
 //
-// It returns an empty string if none are checked. Use [BoolArray.ReadLocked]
-// to inspect all checked values when multiple values may be checked.
+// It returns an empty string if none are checked. Use [BoolArray.JawsGetValues]
+// to read all checked values when multiple values may be checked.
 func (nba *BoolArray) Get() (name string) {
 	nba.mu.RLock()
 	for _, nb := range nba.data {
@@ -218,6 +219,47 @@ func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) error {
 	nba.mu.Lock()
 	changed := nba.setChangedLocked(name, true)
+	nba.mu.Unlock()
+	return dirtyChanged(elem, nba, changed)
+}
+
+// JawsGetValues returns the names of all checked Bools in array order.
+// The returned slice is independent of nba and is nil when nothing is checked.
+func (nba *BoolArray) JawsGetValues(elem *jaws.Element) (names []string) {
+	nba.mu.RLock()
+	for _, nb := range nba.data {
+		if nb.Checked() {
+			names = append(names, nb.Name())
+		}
+	}
+	nba.mu.RUnlock()
+	return
+}
+
+// JawsSetValues replaces the selected names and updates affected UI.
+// Unknown names are ignored; nil or empty names clear the selection. It returns
+// [jaws.ErrValueUnchanged] if no checked state changed.
+//
+// Use NewBoolArray(true) for multiple selections. In single-select mode, only
+// the first matching name in array order is selected, including all its Bools.
+func (nba *BoolArray) JawsSetValues(elem *jaws.Element, names []string) error {
+	selected := make(map[string]bool, len(names))
+	for _, name := range names {
+		selected[name] = true
+	}
+	nba.mu.Lock()
+	var changed []*Bool
+	var first string
+	for _, nb := range nba.data {
+		name := nb.Name()
+		checked := selected[name] && (nba.multi || first == "" || first == name)
+		if checked {
+			first = name
+		}
+		if nb.Set(checked) {
+			changed = append(changed, nb)
+		}
+	}
 	nba.mu.Unlock()
 	return dirtyChanged(elem, nba, changed)
 }

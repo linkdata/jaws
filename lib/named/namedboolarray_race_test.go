@@ -37,7 +37,7 @@ func TestBoolArray_ConcurrentLockOrdering(t *testing.T) {
 				// JawsContains, and reads. The locked callbacks touch
 				// only the provided slice and Bool methods, honoring the
 				// non-reentrancy contract.
-				switch i % 11 {
+				switch i % 12 {
 				case 0:
 					nba.Set(name, true)
 				case 1:
@@ -65,6 +65,9 @@ func TestBoolArray_ConcurrentLockOrdering(t *testing.T) {
 					nba.Add(name, template.HTML(name))
 				case 10:
 					_ = nba.JawsContains(elem)
+				case 11:
+					_ = nba.JawsSetValues(elem, []string{name})
+					_ = nba.JawsGetValues(elem)
 				}
 			}
 		}(g)
