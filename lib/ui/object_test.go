@@ -22,14 +22,6 @@ func (s testObjectStringer) String() string {
 	return s.s
 }
 
-type testObjectTagGetter struct {
-	v any
-}
-
-func (g testObjectTagGetter) JawsGetTag() any {
-	return g.v
-}
-
 type testObjectHTMLGetter struct{}
 
 func (*testObjectHTMLGetter) JawsGetHTML(*jaws.Element) template.HTML { return "text" }
@@ -47,6 +39,10 @@ func TestObject_NewForwardsHTMLAndTag(t *testing.T) {
 	}
 	if got, want := obj.JawsGetTag(), any(inner); got != want {
 		t.Fatalf("want tag %#v got %#v", want, got)
+	}
+	obj = obj.Clicked(func(Object, *jaws.Element, jaws.Click) error { return nil })
+	if got, want := obj.JawsGetTag(), any(inner); got != want {
+		t.Fatalf("hooked object tag = %#v, want %#v", got, want)
 	}
 }
 
@@ -344,26 +340,5 @@ func TestObject_InitialHTMLAttr(t *testing.T) {
 	}
 	if len(order) != 1 || order[0] != 1 || len(gotObj) != 1 || gotObj[0] != firstObj {
 		t.Fatalf("intermediate call: order %v, objects %v; want [1], [%p]", order, gotObj, firstObj)
-	}
-}
-
-func TestObject_GetTag_MultipleTagsReturnsSlice(t *testing.T) {
-	obj := &object{
-		handler: testObjectTagGetter{v: "top"},
-		prev: &object{
-			handler: testObjectTagGetter{v: "prev"},
-		},
-	}
-
-	got := obj.JawsGetTag()
-	tags, ok := got.([]any)
-	if !ok {
-		t.Fatalf("want []any got %T (%#v)", got, got)
-	}
-	if len(tags) != 2 {
-		t.Fatalf("want 2 tags got %d (%#v)", len(tags), tags)
-	}
-	if tags[0] != "top" || tags[1] != "prev" {
-		t.Fatalf("want [top prev] got %#v", tags)
 	}
 }

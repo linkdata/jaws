@@ -18,18 +18,13 @@ func appendOwnedElements(dst []*jaws.Element, elems []*jaws.Element) []*jaws.Ele
 // append elem itself, so a caller that unregisters elem separately (through
 // [jaws.Element.Remove], say) can still collect its descendants.
 func appendOwnedBy(dst []*jaws.Element, elem *jaws.Element) []*jaws.Element {
-	// Match exact state types and check typed nils: any renderer may claim the slot.
 	// Each take detaches direct children before recursion starts.
 	var owned []*jaws.Element
 	switch st := jaws.ElementState(elem).(type) {
 	case *containerState:
-		if st != nil {
-			owned = st.takeOwnedElements()
-		}
+		owned = st.takeOwnedElements()
 	case *templateState:
-		if st != nil {
-			owned = st.takeOwnedElements()
-		}
+		owned = st.takeOwnedElements()
 	}
 	return appendOwnedElements(dst, owned)
 }

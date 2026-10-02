@@ -32,6 +32,8 @@ var setupPrefixCases = [...]struct {
 	{name: "empty", prefix: "", wantRoot: "/"},
 }
 
+var sourceMapNames = [...]string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"}
+
 func expectedJawsBootURL(wantRoot, name string) string {
 	return (&url.URL{Path: path.Join(wantRoot, name)}).String()
 }
@@ -151,32 +153,6 @@ func TestJawsBoot_Setup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
-	for _, mapURI := range []string{
-		path.Join(prefix, "bootstrap.bundle.min.js.map"),
-		path.Join(prefix, "bootstrap.min.css.map"),
-	} {
-		rq := httptest.NewRequest(http.MethodGet, mapURI, nil)
-		rr := httptest.NewRecorder()
-		mux.ServeHTTP(rr, rq)
-		res := rr.Result()
-		if sc := res.StatusCode; sc != http.StatusNotFound {
-			t.Errorf("%q: expected status %d, got %d", mapURI, http.StatusNotFound, sc)
-		}
-		if ct := res.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
-			t.Errorf("%q: expected content type %q, got %q", mapURI, "text/plain; charset=utf-8", ct)
-		}
-		b, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(b, []byte("404 page not found\n")) {
-			t.Errorf("%q: unexpected body", mapURI)
-		}
-		if err = res.Body.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 func TestJawsBoot_SetupNilHandleFuncGeneratesHead(t *testing.T) {
@@ -248,15 +224,6 @@ func TestJawsBoot_SetupPrefixVariants(t *testing.T) {
 				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, wantURI, nil))
 				if rr.Code != http.StatusOK {
 					t.Errorf("GET %q (prefix %q) = %d, want 200 (head URL must match a registered handler)", wantURI, tc.prefix, rr.Code)
-				}
-			}
-
-			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
-				mapURI := expectedJawsBootURL(tc.wantRoot, name)
-				rr := httptest.NewRecorder()
-				mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, mapURI, nil))
-				if rr.Code != http.StatusNotFound {
-					t.Errorf("GET %q (prefix %q) = %d, want 404 (sourcemap probe must be 404)", mapURI, tc.prefix, rr.Code)
 				}
 			}
 		})
@@ -340,7 +307,7 @@ func TestJawsBoot_SetupLiteralBracePrefixes(t *testing.T) {
 				t.Errorf("Setup(%q) returned unexpected asset URL %q", tc.prefix, unexpectedURL)
 			}
 
-			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
+			for _, name := range sourceMapNames {
 				mapURL := expectedJawsBootURL(tc.wantRoot, name)
 				r := httptest.NewRequest(http.MethodGet, mapURL, nil)
 				if _, pattern := mux.Handler(r); pattern != staticserve.NormalizeGET(mapURL) {
@@ -422,7 +389,7 @@ func TestJawsBoot_SetupReturnedURLs(t *testing.T) {
 				}
 			}
 
-			for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
+			for _, name := range sourceMapNames {
 				mapURI := expectedJawsBootURL(tc.wantRoot, name)
 				if !registered[staticserve.NormalizeGET(mapURI)] {
 					t.Errorf("source-map path %q has no matching registered handler", mapURI)

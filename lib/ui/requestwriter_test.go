@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"errors"
+	"html/template"
 	"io"
 	"log/slog"
 	"strings"
@@ -34,6 +35,21 @@ type registerRendererUpdater struct {
 	rendered bool
 	updated  bool
 	sawParam bool
+}
+
+func TestRequestWriter_WithRequestMethodsInTemplate(t *testing.T) {
+	_, rq := newCoreSessionBoundRequest(t)
+	rw := RequestWriter{Request: rq, Writer: io.Discard}
+	rw.Set("k", "v")
+	with := With{Element: rq.NewElement(NewSpan("x")), RequestWriter: rw}
+	tmpl := template.Must(template.New("request").Parse(`{{if $.Initial}}{{if $.Session}}{{$.Get "k"}}{{end}}{{end}}`))
+	var output bytes.Buffer
+	if err := tmpl.Execute(&output, with); err != nil {
+		t.Fatal(err)
+	}
+	if got := output.String(); got != "v" {
+		t.Fatalf("template output = %q, want %q", got, "v")
+	}
 }
 
 func (u *registerRendererUpdater) JawsRender(*jaws.Element, io.Writer, []any) error {

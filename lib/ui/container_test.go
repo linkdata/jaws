@@ -94,9 +94,6 @@ func TestContainer_UpdateEmitsWireOps(t *testing.T) {
 		go jw.Serve()
 
 		tr := jawstest.NewTestRequest(jw, nil)
-		if tr == nil {
-			t.Fatal("expected test request")
-		}
 		defer tr.Close()
 		<-tr.ReadyCh
 
@@ -389,9 +386,6 @@ func TestContainerUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) {
 		go jw.Serve()
 
 		tr := jawstest.NewTestRequest(jw, nil)
-		if tr == nil {
-			t.Fatal("expected test request")
-		}
 		defer tr.Close()
 		<-tr.ReadyCh
 
@@ -782,9 +776,6 @@ func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	defer tr.Close()
 	<-tr.ReadyCh
 

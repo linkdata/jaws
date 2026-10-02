@@ -343,7 +343,7 @@ func TestTemplate_DirectEmptyWrapperRendersUnwrapped(t *testing.T) {
 
 	var sb bytes.Buffer
 	rw := RequestWriter{Request: rq, Writer: &sb}
-	tmpl := newTemplate("", "bare", tag.Tag("cell"))
+	tmpl := Template{Name: "bare", Dot: tag.Tag("cell")}
 	if err := rw.NewUI(tmpl, `class="ignored"`); err != nil {
 		t.Fatal(err)
 	}
@@ -674,9 +674,6 @@ func TestTemplate_UpdateRerendersIntoWrapper(t *testing.T) {
 
 	go jw.Serve()
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	defer tr.Close()
 	<-tr.ReadyCh
 

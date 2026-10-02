@@ -3,12 +3,15 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"html/template"
+	"io"
 	"math"
 	"reflect"
 	"strconv"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/bind"
+	"github.com/linkdata/jaws/lib/htmlio"
 )
 
 // Numeric is an integer or floating-point type supported by [Number] and [Range].
@@ -61,6 +64,33 @@ func (nb *numericTyped[T]) acceptText(input *Input, elem *jaws.Element, text str
 	if value, accepted = parseNumeric[T](text, nb.bits); accepted {
 		input.Last.Store(text)
 		err = nb.setter.JawsSet(elem, value)
+	}
+	return
+}
+
+func renderNumericInput(input *Input, binding numericBinding, elem *jaws.Element, w io.Writer, params []any, inputType string, writableAttr, readOnlyAttr template.HTMLAttr) (err error) {
+	source := binding.sourceValue()
+	if binding.writable() {
+		if err = validateEditableNumericSource(source); err != nil {
+			return
+		}
+	}
+	getterAttrs := input.applyGetterAttrs(elem, source)
+	text, err := binding.getText(elem)
+	if err != nil {
+		elem.Cancel(err)
+		return nil
+	}
+	attrs := append(elem.ApplyParams(params), getterAttrs...)
+	if binding.writable() {
+		if writableAttr != "" {
+			attrs = append(attrs, writableAttr)
+		}
+	} else {
+		attrs = append(attrs, readOnlyAttr)
+	}
+	if err = htmlio.WriteHTMLInput(w, elem.Jid(), inputType, text, attrs); err == nil {
+		input.Last.Store(text)
 	}
 	return
 }

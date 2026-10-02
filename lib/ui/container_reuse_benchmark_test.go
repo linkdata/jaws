@@ -218,40 +218,6 @@ func BenchmarkContainerAppendRemoveUpdate(b *testing.B) {
 	}
 }
 
-// BenchmarkContainerRegisterFirstUpdate measures the lazy state-claim path used by an
-// update-only registered Element.
-func BenchmarkContainerRegisterFirstUpdate(b *testing.B) {
-	b.StopTimer()
-	tr := newReuseRequest(b)
-	bc := &benchStableContainer{contents: benchChildren(0, 4)}
-	container := NewContainer("div", bc)
-	b.ReportAllocs()
-	b.ResetTimer()
-	// Keep b.N to bound batches by the calibrated number of operations.
-	for completed := 0; completed < b.N; {
-		batchSize := min(benchmarkContainerBatchSize, b.N-completed)
-		elems := make([]*jaws.Element, batchSize)
-		for i := range elems {
-			elems[i] = tr.NewElement(registerUI{Updater: container})
-		}
-
-		b.StartTimer()
-		for _, elem := range elems {
-			elem.JawsUpdate()
-		}
-		b.StopTimer()
-		for _, elem := range elems {
-			benchmarkRequireContainerElementCount(b, elem, 4)
-		}
-		benchmarkRequireContainerBatchWire(b,
-			nestedReorderDrainWire(b, tr, "container register benchmark"), elems,
-			what.Append, what.Append, what.Append, what.Append, what.Order)
-		deleteOwnedElements(tr.Request, elems)
-		benchmarkRequireDeletedContainerElements(b, tr.Request, elems)
-		completed += batchSize
-	}
-}
-
 // Batching amortizes timer transitions and untimed validation while bounding
 // simultaneously live Elements and queued wire operations.
 const benchmarkContainerBatchSize = 256
@@ -307,24 +273,6 @@ func benchmarkRequireContainerWire(b *testing.B, got []wire.WsMsg, jid jaws.Jid,
 	for i, message := range got {
 		if message.Jid != jid || message.What != want[i] {
 			b.Fatalf("wire operation %d = %v %v, want %v %v", i, message.Jid, message.What, jid, want[i])
-		}
-	}
-}
-
-func benchmarkRequireContainerBatchWire(b *testing.B, got []wire.WsMsg, elems []*jaws.Element, want ...what.What) {
-	b.Helper()
-	wantCount := len(elems) * len(want)
-	if len(got) != wantCount {
-		b.Fatalf("wire operations = %d, want %d", len(got), wantCount)
-	}
-	messageIndex := 0
-	for _, elem := range elems {
-		for _, wantWhat := range want {
-			message := got[messageIndex]
-			if message.Jid != elem.Jid() || message.What != wantWhat {
-				b.Fatalf("wire operation %d = %v %v, want %v %v", messageIndex, message.Jid, message.What, elem.Jid(), wantWhat)
-			}
-			messageIndex++
 		}
 	}
 }
