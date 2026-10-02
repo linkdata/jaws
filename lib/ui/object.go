@@ -49,11 +49,9 @@ type ObjectInitialHTMLAttrHook = func(obj Object, elem *jaws.Element) (s templat
 // Every event and initial-attribute hook receives the Object on which dispatch
 // was invoked. That Object may include links added after the hook.
 //
-// The effective expanded tag set combines the non-nil tag contributions of every
-// link, and adding a link preserves older links' contributions. The resulting
-// Object remains subject to [tag.TagGetter]'s initialization, stability, and
-// concurrency requirements. Use [tag.TagExpand] to obtain flattened, validated
-// keys.
+// The adapted innerHTML supplies the Object's tag. Adding hooks preserves it.
+// The tag remains subject to [tag.TagGetter]'s initialization, stability, and
+// concurrency requirements. Use [tag.TagExpand] to obtain flattened, validated keys.
 type Object interface {
 	bind.HTMLGetter
 	tag.TagGetter
@@ -157,30 +155,27 @@ func (obj *object) JawsInitialHTMLAttr(elem *jaws.Element) (attr template.HTMLAt
 	return
 }
 
-// JawsGetTag returns the chain's non-nil tag contributions.
+// JawsGetTag returns the adapted innerHTML's tag.
 func (obj *object) JawsGetTag() any {
-	var tags []any
-	for obj != nil {
-		if h, ok := obj.handler.(tag.TagGetter); ok {
-			if t := h.JawsGetTag(); t != nil {
-				tags = append(tags, t)
-			}
-		}
+	for obj != nil && obj.prev != nil {
 		obj = obj.prev
 	}
-	switch len(tags) {
-	case 0:
-		return nil
-	case 1:
-		return tags[0]
+	if obj != nil {
+		if h, ok := obj.handler.(tag.TagGetter); ok {
+			return h.JawsGetTag()
+		}
 	}
-	return tags
+	return nil
 }
 
 // New returns a new [Object] that renders innerHTML.
 //
-// innerHTML is passed to [bind.MakeHTMLGetter], which may or may not provide
-// tags. Plain strings are trusted HTML.
+// innerHTML is passed to [bind.MakeHTMLGetter]. Its HTML and any tags exposed by
+// the adapted value's [tag.TagGetter] are used. An existing [bind.HTMLGetter]
+// without JawsGetTag contributes no tag. innerHTML's event and initial-attribute
+// methods are not inherited; add those behaviors with [Object.Clicked],
+// [Object.ContextMenu], and [Object.InitialHTMLAttr]. Plain strings are trusted
+// HTML.
 func New(innerHTML any) (obj Object) {
 	return &object{
 		handler: bind.MakeHTMLGetter(innerHTML),

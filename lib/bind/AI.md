@@ -18,12 +18,12 @@ formatting and initial-attribute hooks run while the binder lock is held.
 
 ## Hook chain rules
 
-Each builder returns a new head wrapping the previous binder. `GetLocked` and
-`SetLocked` hooks receive the previous binder and normally delegate to it while
-the appropriate lock is already held. `GetHTML`, click, and context-menu hooks
-receive the binder on which rendering or event dispatch was invoked, including
-hooks later in that binder's chain. Do not reacquire the binder lock or call the
-public locking getter/setter from a locked hook.
+Each builder returns a new head wrapping the previous binder. `GetLocked`,
+`SetLocked`, and `InitialHTMLAttr` hooks receive the previous binder and can
+delegate to it while the appropriate lock is held. `GetHTML`, click, and
+context-menu hooks receive the binder on which rendering or event dispatch was
+invoked, including hooks later in that binder's chain. Do not reacquire the
+binder lock or call the public locking getter/setter from a locked hook.
 
 Lookup and event ordering are deliberately head-first:
 
@@ -61,6 +61,9 @@ must expand to usable tag keys or intentionally return nil through
 tag slice slots. Nested containers and referenced values remain caller-owned
 and must keep stable tag identity.
 
+Existing `HTMLGetter` values and the `Binder[string]` adapter retain event and
+initial-attribute methods. Other adapters do not retain them.
+
 ## Setter targets and UI integration
 
 Writable input sources need a stable target so an Element can reconcile a
@@ -79,6 +82,9 @@ contract in `lib/ui/AI.md` and on the exported UI symbols.
 return `ErrValueNotSettable`; that affects whether numeric widgets consider the
 source editable. Pass a Getter directly, or use `MakeGetter`, when the intended
 numeric control is read-only.
+
+The Getter adapter uses the Getter as its tag but does not retain event or
+initial-attribute methods.
 
 ## Verification
 

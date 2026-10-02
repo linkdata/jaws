@@ -6,12 +6,9 @@ import (
 	"testing"
 )
 
-// TestBoolArray_ConcurrentLockOrdering hammers a shared [BoolArray] from many
-// goroutines to exercise its documented lock discipline under -race: the array
-// mutex is taken before any per-[Bool] work, and the array mutex is released
-// before [BoolArray.JawsSet] takes the jaws element lock to dirty values. That
-// ordering is otherwise stated only in prose, so -race passes only incidentally
-// without a test that actually contends the lock.
+// TestBoolArray_ConcurrentLockOrdering exercises several shared [BoolArray]
+// read and write methods under contention. It does not cover [Bool.JawsSet],
+// [BoolArray.Add], or [BoolArray.JawsContains].
 //
 // Real goroutines are used deliberately, not testing/synctest: synctest serializes
 // the goroutines in its bubble, which would hide data races and prevent the
@@ -36,11 +33,10 @@ func TestBoolArray_ConcurrentLockOrdering(t *testing.T) {
 			defer wg.Done()
 			for i := range iterations {
 				name := names[(g+i)%len(names)]
-				// Cover every public method that takes nba.mu: the write path
-				// (Set, WriteLocked, JawsSet) and the read path (Get, Count,
-				// IsChecked, String, ReadLocked, JawsGet). The Read/WriteLocked
-				// callbacks touch only the provided slice and the Bool's own
-				// methods, honoring the non-reentrancy contract.
+				// Exercise Set, WriteLocked, JawsSet, Get, Count, IsChecked,
+				// String, ReadLocked, and JawsGet. The locked callbacks touch
+				// only the provided slice and Bool methods, honoring the
+				// non-reentrancy contract.
 				switch i % 8 {
 				case 0:
 					nba.Set(name, true)

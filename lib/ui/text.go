@@ -20,7 +20,7 @@ func NewText(g bind.Setter[string]) *Text { return &Text{InputText{Setter: g}} }
 
 // JawsRender renders ui as an HTML text input.
 func (u *Text) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return u.renderStringInput(elem, w, "text", params...)
+	return u.RenderInput(elem, w, "text", params...)
 }
 
 // Text renders an HTML text input.

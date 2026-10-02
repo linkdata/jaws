@@ -152,6 +152,11 @@ does not run initial-attribute hooks. Call `Element.ApplyInitialHTMLAttr`
 separately and without holding a lock that the callback might acquire. A
 `bind.Binder` acquires its own value lock before invoking its hook.
 
+`ui.New(inner)` uses the adapted inner value for HTML and tag contributions, but
+does not inherit its event or initial-attribute methods. Add those to the
+returned Object. A direct `HTMLGetter` without `JawsGetTag` loses its implicit
+tag when wrapped in `ui.New`.
+
 A Template without a wrapper does not invoke Dot's initial-attribute callback.
 Wrapper attributes persist when `Template.JawsUpdate` replaces only the inner
 HTML; change them with `Element.SetAttr` and `Element.RemoveAttr`.
@@ -204,8 +209,10 @@ precedence over setter identity.
 
 Tags passed as render params register dependencies but do not replace the
 source-derived target. Editable Number and Range fail rendering without a usable
-target. The reusable nonnumeric input bases render but cannot automatically
-restore rejected or normalized browser values without one.
+target. `InputText`, `InputBool`, and `InputDate` record their setter-derived
+target when `RenderInput` renders an input. Their promoted `JawsInput` methods
+use that target to reconcile rejected or normalized browser values. Without a
+usable setter-derived target, automatic reconciliation does not occur.
 
 A custom setter containing a slice is not comparable, so expose its synchronized
 backing pointer explicitly:
@@ -383,6 +390,10 @@ that multiplicity. Tbody embeds a Container fixed to `tbody`; replacing it is
 unsupported. `Select.JawsInput` ignores a nil-interface handler; render and
 update require one. Typed nils are called normally.
 
+`Select` accepts one selected option. When using `named.BoolArray` as its
+handler, construct it with `named.NewBoolArray(false)` or use the zero value.
+Do not pass the HTML `multiple` attribute or a multi-select `BoolArray`.
+
 Each child must render one addressable direct DOM node with its Element Jid.
 `NewTemplate` supplies that wrapper. The slice returned by `JawsContains` becomes
 read-only after return. Duplicate child values require a widget type that
@@ -400,6 +411,9 @@ Element before callbacks, tag registration, or output. Contention returns
 `jaws.ErrElementStateClaimed` without render side effects. Do not combine two
 state-owning renderers on one Element.
 
+Updating a Container, Tbody, or Select Element that has not been rendered logs
+`ui.ErrElementStateUnclaimed` without calling its provider or queuing work.
+
 Container state owns the render-time tag, reconciliation mutex, and children.
 Widget definitions remain immutable. Provider callbacks and validation run
 without the state mutex. Reconciliation holds it only while matching definitions
@@ -409,7 +423,7 @@ logging occur after unlocking.
 Cleanup detaches children under the state lock and recursively unregisters them
 after unlocking. Failed render and append paths unregister every child and
 nested owner they created. A successful Select render queues its selected value
-after options; state contention suppresses reconciliation and that value update.
+after options; unusable state suppresses reconciliation and that value update.
 
 Template stores the Elements created by each execution in the rendering
 Element's state. Equal Template values can therefore back multiple Elements and
@@ -437,9 +451,22 @@ func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error 
 }
 ```
 
-For string, bool, and date controls, embed or compose the corresponding typed
-input base. Number and Range are complete widgets rather than reusable numeric
-bases because they own parsing, formatting, and event baselines.
+For a custom HTML input, embed the matching string, bool, or date base and call
+its `RenderInput` method from `JawsRender`. The base supplies `JawsInput` and
+`JawsUpdate`:
+
+```go
+type Email struct{ ui.InputText }
+
+func (u *Email) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.RenderInput(e, w, "email", params...)
+}
+```
+
+Construct it with `&Email{InputText: ui.InputText{Setter: bind.New(&mu, &value)}}`.
+`RenderInput` emits an `<input>` element; `Textarea` has its own render path.
+Number and Range are complete widgets rather than reusable numeric bases
+because they own parsing, formatting, and event baselines.
 
 For a container with only a distinct type and tag, embed a Container value. If
 extra behavior is needed, keep it in a named field and delegate render and update

@@ -63,8 +63,35 @@ func TestMakeSetter_SetterPassThrough(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	s2 := MakeSetter[string](Setter[string](setterStatic[string]{v: "z"}))
+	s2 := MakeSetter[string](Setter[string](setterStatic[string]{getterStatic[string]{v: "z"}}))
 	if got := s2.JawsGet(nil); got != "z" {
 		t.Fatalf("unexpected passthrough setter value %q", got)
+	}
+}
+
+func TestMakeSetterOptionalHooks(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{"Setter", struct {
+			Setter[string]
+			testOptionalHooks
+		}{MakeSetter[string]("text"), testOptionalHooks{}}, true},
+		{"Getter", testHookedGetter{}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MakeSetter[string](tt.value)
+			if _, ok := got.(jaws.ClickHandler); ok != tt.want {
+				t.Errorf("ClickHandler = %t, want %t", ok, tt.want)
+			}
+			if _, ok := got.(jaws.ContextMenuHandler); ok != tt.want {
+				t.Errorf("ContextMenuHandler = %t, want %t", ok, tt.want)
+			}
+			if _, ok := got.(jaws.InitialHTMLAttrHandler); ok != tt.want {
+				t.Errorf("InitialHTMLAttrHandler = %t, want %t", ok, tt.want)
+			}
+		})
 	}
 }

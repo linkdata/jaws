@@ -13,8 +13,8 @@ import (
 // and sets of HTML radio buttons. It is safe to use from multiple goroutines
 // concurrently.
 //
-// The zero value is a ready-to-use empty single-select array; use [NewBoolArray]
-// to choose multi-select.
+// The zero value is a ready-to-use empty single-select array. Use
+// [NewBoolArray] to allow multiple checked values.
 type BoolArray struct {
 	multi bool             // allow multiple Bools to be true
 	mu    deadlock.RWMutex // protects following
@@ -26,7 +26,10 @@ var _ SelectHandler = (*BoolArray)(nil)
 // NewBoolArray returns an empty [BoolArray].
 //
 // If multi is false, setting one value clears other names in the array. If
-// multi is true, multiple values may be checked at the same time.
+// multi is true, multiple values may be checked at the same time. Pass a
+// single-select array to [github.com/linkdata/jaws/lib/ui.NewSelect] and
+// [github.com/linkdata/jaws/lib/ui.RequestWriter.RadioGroup]; neither supports
+// multi-select arrays.
 func NewBoolArray(multi bool) *BoolArray {
 	return &BoolArray{multi: multi}
 }

@@ -7,3 +7,4 @@ Package `ui` contains the standard JaWS widgets, template helpers, and the
 - Browse the [public package API](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui).
 - Read [AI.md](./AI.md) for version-specific widget implementation, lifecycle,
   identity, and testing guidance.
+- Choose a source with the [UI source guide](../../README.md#choose-a-ui-source).

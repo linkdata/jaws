@@ -71,11 +71,8 @@ func (nb *Bool) JawsGetHTML(elem *jaws.Element) (h template.HTML) {
 }
 
 // JawsGet returns whether nb is checked.
-func (nb *Bool) JawsGet(elem *jaws.Element) (yes bool) {
-	nb.mu.RLock()
-	yes = nb.checked
-	nb.mu.RUnlock()
-	return
+func (nb *Bool) JawsGet(elem *jaws.Element) bool {
+	return nb.Checked()
 }
 
 // JawsSet sets this Bool's checked state and updates affected UI.

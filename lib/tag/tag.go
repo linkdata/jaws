@@ -23,13 +23,6 @@ const (
 	maxTagCount = 100
 )
 
-func ensureUsableTag(tag any) error {
-	if usableAsTag(tag) {
-		return nil
-	}
-	return newErrNotUsableAsTag(tag)
-}
-
 // usableAsTag reports whether tag is non-nil, comparable, and equal to itself.
 func usableAsTag(tag any) (ok bool) {
 	if tag != nil {
@@ -59,7 +52,7 @@ func appendUniqueTag(result []any, tag any) ([]any, error) {
 }
 
 func addTag(result []any, tag any) ([]any, error) {
-	if err := ensureUsableTag(tag); err != nil {
+	if err := NewErrNotUsableAsTag(tag); err != nil {
 		return nil, err
 	}
 	return appendUniqueTag(result, tag)
@@ -204,8 +197,9 @@ func expand(depth int, tagValue any, result []any, active []any, inGetter *bool)
 // and floating-point types are rejected with [ErrIllegalTagType], as are
 // [template.HTML], [template.HTMLAttr], [jid.Jid] and [key.Key]. An unusable expanded
 // key is rejected with [ErrNotUsableAsTag], which also matches [ErrNotComparable]
-// under errors.Is. Expansion that exceeds the nesting-depth or total-count limits is
-// rejected with [ErrTooManyTags].
+// under errors.Is. Expansion allows at most 10 nested levels and 100 unique
+// tags; exceeding either limit returns [ErrTooManyTags]. A count failure can
+// return 101 partial entries.
 //
 // On error, result contains the tags expanded before the failure. If an expanded
 // value is not usable as a tag key, result is nil and err matches
@@ -231,7 +225,7 @@ func TagExpand(tagValue any) (result []any, err error) {
 	// exponentially many paths while producing one unique tag. Do not complicate the
 	// expansion semantics or TagGetter call behavior to optimize such constructed
 	// inputs unless the public contract first grows an explicit hostile-input model.
-	// ensureUsableTag rejects tags that are not comparable at runtime, so the
+	// NewErrNotUsableAsTag rejects tags that are not comparable at runtime, so the
 	// existing == tag dedup in appendUniqueTag does not panic on them. recover
 	// stays as a defense-in-depth net: should a non-comparable value ever reach
 	// that comparison, recoverComparabilityPanic turns the specific "comparing
@@ -246,7 +240,7 @@ func TagExpand(tagValue any) (result []any, err error) {
 			result, err = recoverComparabilityPanic(r, tagValue)
 		}
 	}()
-	var activeArr [12]any
+	var activeArr [maxTagDepth + 1]any
 	return expand(0, tagValue, nil, activeArr[:0], &inGetter)
 }
 

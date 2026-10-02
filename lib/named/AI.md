@@ -20,9 +20,10 @@ in [bind](../bind/AI.md), [htmlio](../htmlio/AI.md), and [ui](../ui/AI.md).
 - Each independently constructed `ui.Radio` is one boolean binding. Native
   radio grouping does not update peer Go values because the browser reports
   only the control that produced the event.
-- Use a single-select `BoolArray` for a server-side radio group. Give every
-  option a distinct name. Duplicate `Bool` names are unsupported by `ui.Select`
-  and `ui.RadioGroup`.
+- Use a single-select `BoolArray` for `ui.Select` or a server-side radio group.
+  Construct it with `NewBoolArray(false)` or use its zero value. Give every
+  option a distinct name. Multi-select arrays and duplicate `Bool` names are
+  unsupported by `ui.Select` and `ui.RadioGroup`.
 - `Bool.JawsSet` acquires the owning array lock before the value lock, changes
   the selected value, clears peers when needed, releases value locks, and then
   dirties the affected `Bool` values and the array. Preserve that order.

@@ -26,19 +26,11 @@ func (s setterReadOnly[T]) JawsGetTag() any {
 }
 
 type setterStatic[T comparable] struct {
-	v T
+	getterStatic[T]
 }
 
 func (setterStatic[T]) JawsSet(elem *jaws.Element, value T) error {
 	return ErrValueNotSettable
-}
-
-func (s setterStatic[T]) JawsGet(elem *jaws.Element) T {
-	return s.v
-}
-
-func (s setterStatic[T]) JawsGetTag() any {
-	return nil
 }
 
 // MakeSetter returns value as a [Setter].
@@ -47,6 +39,11 @@ func (s setterStatic[T]) JawsGetTag() any {
 // static value of type T. Getter and static adapters are read-only and return
 // [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
 // type.
+//
+// Existing Setter values are returned unchanged. Getter adapters use the Getter
+// as their tag but do not retain its event or initial-attribute methods. Pass
+// event handlers or literal attributes as widget render parameters, or use a
+// Setter that implements those methods.
 //
 // The adapters still satisfy Setter, so [github.com/linkdata/jaws/lib/ui.Number]
 // and [github.com/linkdata/jaws/lib/ui.Range] apply their editable-source rules.
@@ -59,7 +56,7 @@ func MakeSetter[T comparable](value any) Setter[T] {
 	case Getter[T]:
 		return setterReadOnly[T]{v}
 	case T:
-		return setterStatic[T]{v}
+		return setterStatic[T]{getterStatic[T]{v}}
 	}
 	var blank T
 	panic(fmt.Errorf("expected bind.Setter[%T], bind.Getter[%T] or %T not %T", blank, blank, blank, value))

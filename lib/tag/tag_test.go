@@ -459,15 +459,24 @@ func TestTagExpand_TooManyTags(t *testing.T) {
 }
 
 func TestTagExpand_TagGetterNonComparable(t *testing.T) {
-	_, err := TagExpand(testBadTagGetter{1})
-	if !errors.Is(err, ErrNotUsableAsTag) {
-		t.Fatalf("expected ErrNotUsableAsTag, got %v", err)
-	}
-	if !errors.Is(err, ErrNotComparable) {
-		t.Fatalf("expected ErrNotComparable, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "found nested TagGetter at <value>") {
-		t.Fatalf("expected TagGetter search result in error text, got %q", err.Error())
+	_, expansionErr := TagExpand(testBadTagGetter{1})
+	for _, tt := range []struct {
+		name string
+		err  error
+	}{
+		{"TagExpand", expansionErr},
+		{"NewErrNotUsableAsTag", NewErrNotUsableAsTag(testBadTagGetter{1})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if !errors.Is(tt.err, ErrNotUsableAsTag) || !errors.Is(tt.err, ErrNotComparable) {
+				t.Fatalf("error = %v, want ErrNotUsableAsTag and ErrNotComparable", tt.err)
+			}
+			if got := tt.err.Error(); !strings.Contains(got, "this TagGetter cannot be a tag key") ||
+				!strings.Contains(got, "break any JawsGetTag() cycle") ||
+				strings.Contains(got, "found nested TagGetter") || strings.Contains(got, "implement JawsGetTag()") {
+				t.Fatalf("misleading TagGetter hint: %q", got)
+			}
+		})
 	}
 }
 
@@ -497,7 +506,7 @@ func TestTagExpand_RuntimeNonComparable(t *testing.T) {
 }
 
 // TestTagExpand_MultiRuntimeNonComparable covers the multi-element case: two
-// same-typed runtime-non-comparable values in one expansion. ensureUsableTag
+// same-typed runtime-non-comparable values in one expansion. NewErrNotUsableAsTag
 // rejects the first one with ErrNotUsableAsTag before the dedup existing == tag in
 // appendUniqueTag ever compares them; it must not panic and must report
 // ErrNotUsableAsTag with no tags.
@@ -587,7 +596,7 @@ func uncomparablePanic() (r any) {
 }
 
 // Test_recoverComparabilityPanic exercises the defense-in-depth recovery helper
-// directly; ensureUsableTag normally rejects unusable tags before deduplication.
+// directly; NewErrNotUsableAsTag normally rejects unusable tags before deduplication.
 func Test_recoverComparabilityPanic(t *testing.T) {
 	rerr := uncomparablePanic()
 	if _, ok := rerr.(runtime.Error); !ok {

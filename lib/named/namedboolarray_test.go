@@ -286,9 +286,6 @@ func TestNamedBoolOption_UpdateQueuesLiveSelectedValue(t *testing.T) {
 
 	go jw.Serve()
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	defer tr.Close()
 	<-tr.ReadyCh
 

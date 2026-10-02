@@ -379,35 +379,6 @@ func TestTemplate_SecondClaimOnOneElementFails(t *testing.T) {
 	}
 }
 
-// TestTemplate_UpdateToleratesTypedNilContainerState checks the cleanup walk against a
-// slot holding a typed-nil container state. The exact state-type switch must check nil
-// before calling its ownership method.
-func TestTemplate_UpdateToleratesTypedNilContainerState(t *testing.T) {
-	_, rq := newStateRequest(t)
-
-	// The nested child is a Span rather than a nested Template, whose Element would have
-	// claimed its own slot already.
-	dot := &ownedDot{}
-	tmpl := NewTemplate("div", "state-span", dot)
-	elem := renderOwned(t, rq, tmpl)
-	if got := countRegistered(t, rq); got != 2 {
-		t.Fatalf("registered elements after render = %d, want 2", got)
-	}
-
-	child := rq.GetElementByJid(elem.Jid() + 1)
-	if child == nil {
-		t.Fatal("expected the nested span Element")
-	}
-	if err := jaws.SetElementState(child, (*containerState)(nil)); err != nil {
-		t.Fatal(err)
-	}
-
-	tmpl.JawsUpdate(elem) // must not panic walking the typed-nil state
-	if got := countRegistered(t, rq); got != 2 {
-		t.Fatalf("registered elements after update = %d, want 2", got)
-	}
-}
-
 // TestTemplate_ZeroValueUpdateStaysSilent preserves the zero value's update behavior: it
 // has no wrapper target, so it returns before consulting the state slot.
 func TestTemplate_ZeroValueUpdateStaysSilent(t *testing.T) {

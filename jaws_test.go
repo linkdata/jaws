@@ -943,144 +943,159 @@ func TestReleaseRetiredRequestKey(t *testing.T) {
 	})
 }
 
+func TestJaws_PendingEvictionSpareWindow(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	first := jw.newRequest(newPendingLimitRequest("192.0.2.1:1000"))
+	second := jw.newRequest(newPendingLimitRequest("192.0.2.1:1001"))
+	const nowSeconds int32 = 100
+	first.lastWriteSeconds.Store(nowSeconds - 2)
+	second.lastWriteSeconds.Store(nowSeconds - 3)
+
+	jw.mu.Lock()
+	victim := jw.pendingEvictionVictimLocked(clientBucketKey(first.remoteIP), nowSeconds)
+	jw.mu.Unlock()
+	if victim != second {
+		t.Fatalf("victim = %v, want request idle for three seconds", victim)
+	}
+}
+
 // TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest verifies that the pending
 // cap does not evict a Request that is still rendering its initial HTML. The oldest
 // pending Request would normally be evicted first, but evicting one whose render is
 // in flight would invalidate the page before its WebSocket can connect. The cap
 // instead evicts the next-oldest idle Request, leaving the rendering one claimable.
 func TestJaws_MaxPendingRequestsPerIPSparesRenderingRequest(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	jw.MaxPendingRequestsPerIP = 2
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		jw.MaxPendingRequestsPerIP = 2
 
-	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
-	renderingRq := jw.newRequest(renderingReq)
-	renderingKey := renderingRq.JawsKey
-	// Simulate an in-flight initial render on the oldest pending Request: a fresh
-	// write timestamp. maintenanceInterval is zero here, so the spare window uses
-	// the DefaultUpdateInterval floor.
-	renderingRq.MarkWritten()
+		renderingReq := newPendingLimitRequest("192.0.2.1:1000")
+		renderingRq := jw.newRequest(renderingReq)
+		renderingKey := renderingRq.JawsKey
+		// Simulate an in-flight initial render on the oldest pending Request: a fresh
+		// write timestamp. The spare window protects this Request.
+		renderingRq.MarkWritten()
 
-	idleReq := newPendingLimitRequest("192.0.2.1:1001")
-	idleRq := jw.newRequest(idleReq)
-	idleKey := idleRq.JawsKey
-	// Age the idle Request well past the spare window so it is the eviction victim.
-	setPendingLimitLastWrite(t, idleRq, 3600)
+		idleReq := newPendingLimitRequest("192.0.2.1:1001")
+		idleRq := jw.newRequest(idleReq)
+		idleKey := idleRq.JawsKey
+		// Age the idle Request well past the spare window so it is the eviction victim.
+		setPendingLimitLastWrite(t, idleRq, 3600)
 
-	// Creating a third same-IP Request trips the cap (pending == 2).
-	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.newRequest(newReq)
-	newKey := newRq.JawsKey
+		// Creating a third same-IP Request trips the cap (pending == 2).
+		newReq := newPendingLimitRequest("192.0.2.1:1002")
+		newRq := jw.newRequest(newReq)
+		newKey := newRq.JawsKey
 
-	// The rendering Request must survive; the idle one is the one evicted.
-	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
-		t.Fatalf("rendering request claim = %v, want it to survive eviction", claimed)
-	}
-	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
-		t.Fatalf("idle request should have been evicted, got %v", claimed)
-	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
-		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
-	}
+		// The rendering Request must survive; the idle one is the one evicted.
+		if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+			t.Fatalf("rendering request claim = %v, want it to survive eviction", claimed)
+		}
+		if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+			t.Fatalf("idle request should have been evicted, got %v", claimed)
+		}
+		if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+			t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+		}
+	})
 }
 
-// TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest verifies that with a
-// configured maintenanceInterval the pending cap spares a Request written within the
-// 2*maintenanceInterval recency window and falls through to evict a genuinely idle one
-// instead.
+// TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest verifies that the
+// pending cap spares a recently written Request and evicts an idle one instead.
 func TestJaws_MaxPendingRequestsPerIPSparesRecentlyRenderedRequest(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	jw.MaxPendingRequestsPerIP = 2
-	// Pretend the Serve loop is running with a one-minute maintenance interval so the
-	// recency window is 2*maintenanceInterval (it falls back to DefaultUpdateInterval
-	// until ServeWithTimeout sets it).
-	jw.mu.Lock()
-	jw.maintenanceInterval = time.Minute
-	jw.mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		jw.MaxPendingRequestsPerIP = 2
 
-	// The oldest pending Request wrote recently (its render is still in flight).
-	renderingReq := newPendingLimitRequest("192.0.2.1:1000")
-	renderingRq := jw.newRequest(renderingReq)
-	renderingKey := renderingRq.JawsKey
-	renderingRq.MarkWritten()
+		// The oldest pending Request wrote recently (its render is still in flight).
+		renderingReq := newPendingLimitRequest("192.0.2.1:1000")
+		renderingRq := jw.newRequest(renderingReq)
+		renderingKey := renderingRq.JawsKey
+		renderingRq.MarkWritten()
 
-	// A genuinely idle Request that rendered long ago is the correct eviction victim.
-	idleReq := newPendingLimitRequest("192.0.2.1:1001")
-	idleRq := jw.newRequest(idleReq)
-	idleKey := idleRq.JawsKey
-	setPendingLimitLastWrite(t, idleRq, 3600)
+		// A genuinely idle Request that rendered long ago is the correct eviction victim.
+		idleReq := newPendingLimitRequest("192.0.2.1:1001")
+		idleRq := jw.newRequest(idleReq)
+		idleKey := idleRq.JawsKey
+		setPendingLimitLastWrite(t, idleRq, 3600)
 
-	// A third same-IP Request trips the cap (pending == 2).
-	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.newRequest(newReq)
-	newKey := newRq.JawsKey
+		// A third same-IP Request trips the cap (pending == 2).
+		newReq := newPendingLimitRequest("192.0.2.1:1002")
+		newRq := jw.newRequest(newReq)
+		newKey := newRq.JawsKey
 
-	// The recently-rendered Request must survive despite its cleared flag; the idle one
-	// is evicted instead.
-	if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
-		t.Fatalf("recently-rendered request claim = %v, want it to survive eviction", claimed)
-	}
-	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
-		t.Fatalf("idle request should have been evicted, got %v", claimed)
-	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
-		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
-	}
+		// The recently-rendered Request must survive despite its cleared flag; the idle one
+		// is evicted instead.
+		if claimed := jw.UseRequest(renderingKey, renderingReq); claimed != renderingRq {
+			t.Fatalf("recently-rendered request claim = %v, want it to survive eviction", claimed)
+		}
+		if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+			t.Fatalf("idle request should have been evicted, got %v", claimed)
+		}
+		if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+			t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+		}
+	})
 }
 
 // TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender proves the eviction decision
 // tracks the actual last write, not a value sampled by the maintenance pass: a render
 // that wrote once and then stalled (no further writes) is still spared while that write
-// is within 2*maintenanceInterval, even across a maintenance pass.
+// is within the spare window, even across a maintenance pass.
 func TestJaws_MaxPendingRequestsPerIPSparesStalledLiveRender(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	jw.MaxPendingRequestsPerIP = 2
-	jw.mu.Lock()
-	jw.maintenanceInterval = time.Minute
-	jw.mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		jw.MaxPendingRequestsPerIP = 2
 
-	// Oldest pending: a single write, then silence. Its timestamp stays fresh.
-	stalledReq := newPendingLimitRequest("192.0.2.1:1000")
-	stalledRq := jw.newRequest(stalledReq)
-	stalledKey := stalledRq.JawsKey
-	stalledRq.MarkWritten()
+		// Oldest pending: a single write, then silence. Its timestamp stays fresh.
+		stalledReq := newPendingLimitRequest("192.0.2.1:1000")
+		stalledRq := jw.newRequest(stalledReq)
+		stalledKey := stalledRq.JawsKey
+		stalledRq.MarkWritten()
 
-	// A maintenance pass must not disturb the write timestamp (generous timeout so the
-	// stalled render is not idle-expired). Under a flag-cleared-by-tick scheme this is
-	// where protection could be lost.
-	jw.maintenance(time.Hour)
+		// A maintenance pass must not disturb the write timestamp (generous timeout so the
+		// stalled render is not idle-expired). Under a flag-cleared-by-tick scheme this is
+		// where protection could be lost.
+		jw.maintenance(time.Hour)
 
-	// A genuinely idle sibling is the correct victim.
-	idleReq := newPendingLimitRequest("192.0.2.1:1001")
-	idleRq := jw.newRequest(idleReq)
-	idleKey := idleRq.JawsKey
-	setPendingLimitLastWrite(t, idleRq, 3600)
+		// A genuinely idle sibling is the correct victim.
+		idleReq := newPendingLimitRequest("192.0.2.1:1001")
+		idleRq := jw.newRequest(idleReq)
+		idleKey := idleRq.JawsKey
+		setPendingLimitLastWrite(t, idleRq, 3600)
 
-	// A third same-IP Request trips the cap (pending == 2).
-	newReq := newPendingLimitRequest("192.0.2.1:1002")
-	newRq := jw.newRequest(newReq)
-	newKey := newRq.JawsKey
+		// A third same-IP Request trips the cap (pending == 2).
+		newReq := newPendingLimitRequest("192.0.2.1:1002")
+		newRq := jw.newRequest(newReq)
+		newKey := newRq.JawsKey
 
-	if claimed := jw.UseRequest(stalledKey, stalledReq); claimed != stalledRq {
-		t.Fatalf("stalled-but-recently-written render claim = %v, want it to survive eviction", claimed)
-	}
-	if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
-		t.Fatalf("idle request should have been evicted, got %v", claimed)
-	}
-	if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
-		t.Fatalf("new request claim = %v, want %v", claimed, newRq)
-	}
+		if claimed := jw.UseRequest(stalledKey, stalledReq); claimed != stalledRq {
+			t.Fatalf("stalled-but-recently-written render claim = %v, want it to survive eviction", claimed)
+		}
+		if claimed := jw.UseRequest(idleKey, idleReq); claimed != nil {
+			t.Fatalf("idle request should have been evicted, got %v", claimed)
+		}
+		if claimed := jw.UseRequest(newKey, newReq); claimed != newRq {
+			t.Fatalf("new request claim = %v, want %v", claimed, newRq)
+		}
+	})
 }
 
 func TestJaws_MaxPendingRequestsPerIPEnforcesCapWithFutureWriteTimestamp(t *testing.T) {
@@ -2408,6 +2423,22 @@ func TestJaws_SecureHeadersMiddleware_UsesJawsCSP(t *testing.T) {
 	defaultHeaders := secureheaders.DefaultHeaders()
 	if got := hdr.Get("Strict-Transport-Security"); got != defaultHeaders.Get("Strict-Transport-Security") {
 		t.Fatalf("expected HSTS %q, got %q", defaultHeaders.Get("Strict-Transport-Security"), got)
+	}
+}
+
+func TestJaws_SecureHeadersMiddleware_DoesNotExposeJawsMethods(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	handler := jw.SecureHeadersMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	if _, ok := handler.(interface{ Close() }); ok {
+		t.Fatal("middleware exposes Jaws.Close")
+	}
+	if _, ok := handler.(interface{ ContentSecurityPolicy() string }); ok {
+		t.Fatal("middleware exposes Jaws.ContentSecurityPolicy")
 	}
 }
 

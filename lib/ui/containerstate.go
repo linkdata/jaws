@@ -54,36 +54,19 @@ func (st *containerState) deleteContents(elems []*jaws.Element) {
 	st.mu.Unlock()
 }
 
-// claimContainerState claims elem's state slot with a fresh containerState.
-// It returns a nil state when another claimant already occupies the slot.
-func claimContainerState(elem *jaws.Element) (st *containerState, err error) {
-	st = &containerState{}
-	if err = jaws.SetElementState(elem, st); err != nil {
-		st = nil
-	}
-	return
-}
-
-// stateForContainerUpdate returns usable container state for elem, claiming an empty
-// state when the slot is unclaimed.
+// stateForContainerUpdate returns completed container state for elem.
 func stateForContainerUpdate(elem *jaws.Element) (st *containerState, err error) {
-	// A missing state uses the lazy-claim path. Treat an occupied foreign slot,
-	// typed nil, in-progress render, or lost concurrent claim as contention.
 	switch state := jaws.ElementState(elem).(type) {
 	case nil:
-		st, err = claimContainerState(elem)
+		err = ErrElementStateUnclaimed
 	case *containerState:
-		if state == nil {
+		state.mu.Lock()
+		rendering := state.rendering
+		state.mu.Unlock()
+		if rendering {
 			err = jaws.ErrElementStateClaimed
 		} else {
-			state.mu.Lock()
-			rendering := state.rendering
-			state.mu.Unlock()
-			if rendering {
-				err = jaws.ErrElementStateClaimed
-			} else {
-				st = state
-			}
+			st = state
 		}
 	default:
 		err = jaws.ErrElementStateClaimed
@@ -91,11 +74,10 @@ func stateForContainerUpdate(elem *jaws.Element) (st *containerState, err error)
 	return
 }
 
-// containerDirtyTag returns elem's completed render-time dirty tag. It never
-// claims state or reports contention; absent, foreign, typed-nil and rendering
-// states all have no usable dirty tag.
+// containerDirtyTag returns elem's completed render-time dirty tag.
+// Missing, foreign, and rendering states have no usable dirty tag.
 func containerDirtyTag(elem *jaws.Element) (dirtyTag any) {
-	if st, ok := jaws.ElementState(elem).(*containerState); ok && st != nil {
+	if st, ok := jaws.ElementState(elem).(*containerState); ok {
 		st.mu.Lock()
 		if !st.rendering {
 			dirtyTag = st.dirtyTag
@@ -168,10 +150,10 @@ func (u Container) render(elem *jaws.Element, w io.Writer, params []any, complet
 	return
 }
 
-// update reconciles elem's children and reports whether its state was acquired.
+// update reconciles elem's children and reports whether its state was usable.
 // Ordinary reconciliation, including cancellation for an unusable child or a logged
-// append-render error, reports true. State contention reports false and performs no
-// application callback or browser work.
+// append-render error, reports true. Missing or contended state reports false
+// and performs no application callback or browser work.
 func (u Container) update(elem *jaws.Element) (updated bool) {
 	st, err := stateForContainerUpdate(elem)
 	if err != nil {

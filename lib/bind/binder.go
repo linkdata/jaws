@@ -59,6 +59,8 @@ type ContextMenuHook[T comparable] func(bind Binder[T], elem *jaws.Element, clic
 //
 // The lock will be held at this point, preferring RLock over Lock, if available.
 // Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
+// The bind argument is the previous Binder in the chain. Its
+// [Binder.JawsGetLocked] does not apply GetLocked hooks added after this hook.
 type InitialHTMLAttrHook[T comparable] func(bind Binder[T], elem *jaws.Element) (s template.HTMLAttr)
 
 // SuccessHook is called by [Setter.JawsSet] after [Binder.JawsSetLocked] succeeds.
@@ -207,7 +209,9 @@ type Binder[T comparable] interface {
 	//
 	// The lock will be held at this point, preferring RLock over Lock, if available.
 	// Do not lock or unlock the [Binder] within fn. Do not call [Getter.JawsGet].
-	// To call the previous handler in the chain, call [Binder.JawsInitialHTMLAttrLocked].
+	// fn receives the previous Binder in the chain. Call its
+	// [Binder.JawsInitialHTMLAttrLocked] to include earlier hooks. Its
+	// [Binder.JawsGetLocked] does not apply GetLocked hooks added after this hook.
 	InitialHTMLAttr(fn InitialHTMLAttrHook[T]) (newbind Binder[T])
 }
 

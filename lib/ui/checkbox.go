@@ -20,7 +20,7 @@ func NewCheckbox(g bind.Setter[bool]) *Checkbox { return &Checkbox{InputBool{Set
 
 // JawsRender renders ui as an HTML checkbox input.
 func (u *Checkbox) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return u.renderBoolInput(elem, w, "checkbox", params...)
+	return u.RenderInput(elem, w, "checkbox", params...)
 }
 
 // Checkbox renders an HTML checkbox input.

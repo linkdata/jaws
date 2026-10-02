@@ -79,7 +79,6 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 	t := jw.newMaintenanceTicker(maintenanceInterval)
 	jw.mu.Lock()
 	jw.webSocketTimeout = requestTimeout
-	jw.maintenanceInterval = maintenanceInterval
 	jw.mu.Unlock()
 	// Seed the seconds counter so it is accurate from the first request, then keep
 	// it fresh on every maintenance tick (see the case below).
@@ -118,19 +117,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			select {
 			case msgCh <- msg:
 			default:
-				// Only the internal periodic dirty-render tick, a nil-destination
-				// Update (see the updateTicker case below), is safe to drop.
-				// distributeDirt has already moved the dirty selectors into Requests'
-				// pending-dirt lists and cleared the global set, so the
-				// tick carries no payload;
-				// it only nudges the Request. The pending dirt is still rendered
-				// without it: a Request already in its process loop is woken by the
-				// message that filled the channel and drains pending dirt on the next pass,
-				// and one still starting up (subscribed before onConnect) drains
-				// pending dirt on its first pass without needing a wake. Every addressed
-				// message is one-shot and must not be silently dropped — including a
-				// tag-targeted Update and the key-targeted Update wake-up from
-				// Session.Close — so an overloaded Request is failed-fast instead.
+				// Only an unaddressed Update tick can be dropped.
 				if msg.What != what.Update || msg.Dest != nil {
 					killSub(msgCh)
 					rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
@@ -156,10 +143,8 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			}
 		case msgCh := <-jw.unsubCh:
 			killSub(msgCh)
-		case msg, ok := <-jw.bcastCh:
-			if ok {
-				mustBroadcast(msg)
-			}
+		case msg := <-jw.bcastCh:
+			mustBroadcast(msg)
 		}
 	}
 }
@@ -202,7 +187,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			_ = jw.retireNonRunningRequestLocked(rq, nil)
 		}
 	}
-	// Unattached Sessions cannot expire until their one-minute deadline.
+	// Every tenth maintenance pass checks unattached Sessions against sessionGrace deadlines.
 	jw.sessionSweep++
 	if jw.sessionSweep == 10 {
 		jw.sessionSweep = 0
@@ -356,9 +341,7 @@ func (jw *Jaws) Setup(handleFn HandleFunc, prefix string, extras ...any) (err er
 			}
 			u := &url.URL{Path: path.Join("/", assetPath)}
 			urls = append(urls, u)
-			if handleFn != nil {
-				setupHandleFn(staticserve.NormalizeGET(u.String()), ss)
-			}
+			setupHandleFn(staticserve.NormalizeGET(u.String()), ss)
 		}
 	}
 

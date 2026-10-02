@@ -53,9 +53,9 @@ func (u Container) JawsRender(elem *jaws.Element, w io.Writer, params []any) err
 
 // JawsUpdate reconciles u's direct children.
 //
-// If elem's widget state cannot be used, JawsUpdate reports
-// [jaws.ErrElementStateClaimed] through [jaws.Request.MustLog] without calling the
-// provider or queuing browser work.
+// Missing render state reports [ErrElementStateUnclaimed]. A foreign or
+// in-progress state reports [jaws.ErrElementStateClaimed]. Errors are logged
+// through [jaws.Request.MustLog] without calling the provider or queuing work.
 func (u Container) JawsUpdate(elem *jaws.Element) {
 	u.update(elem)
 }

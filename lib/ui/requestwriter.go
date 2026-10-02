@@ -64,6 +64,8 @@ func (rw RequestWriter) Write(p []byte) (n int, err error) {
 
 // Initial returns the initial [http.Request].
 func (rw RequestWriter) Initial() *http.Request {
+	// With embeds both Element and RequestWriter, which otherwise promote
+	// Request methods at the same depth. These forwarders resolve that ambiguity.
 	return rw.Request.Initial()
 }
 

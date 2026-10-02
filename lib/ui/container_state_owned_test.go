@@ -9,15 +9,8 @@ import (
 )
 
 const containerStateOwnedTemplates = `
-{{define "state-register-container"}}<div id="{{$.RequestWriter.Register $.Dot.Updater}}"></div>{{end}}
 {{define "state-owned-container-child"}}{{$.RequestWriter.Template "div" "owned-leaf" $.Dot}}{{$.RequestWriter.Container "div" $.Dot.Container}}{{end}}
 `
-
-type registerContainerDot struct {
-	updater Container
-}
-
-func (d *registerContainerDot) Updater() Container { return d.updater }
 
 func addContainerStateOwnedTemplates(t *testing.T, jw *jaws.Jaws) {
 	t.Helper()
@@ -37,61 +30,6 @@ func containerStateOwnedChildren(t *testing.T, elem *jaws.Element) (children []*
 	children = slices.Clone(st.contents)
 	st.mu.Unlock()
 	return
-}
-
-func containerStateOwnedTemplateChildren(t *testing.T, elem *jaws.Element) (children []*jaws.Element) {
-	t.Helper()
-	st, ok := jaws.ElementState(elem).(*templateState)
-	if !ok || st == nil {
-		t.Fatalf("element %v state = %T, want *templateState", elem.Jid(), jaws.ElementState(elem))
-	}
-	st.mu.Lock()
-	children = slices.Clone(st.owned)
-	st.mu.Unlock()
-	return
-}
-
-// TestTemplateRegisterContainerReclaimsChildren covers the ownership path whose
-// Element stores a private registration wrapper rather than the Container updater.
-// Recursive cleanup must find the Container's children through the Element state slot.
-func TestTemplateRegisterContainerReclaimsChildren(t *testing.T) {
-	jw, rq := newOwnedRequest(t)
-	addContainerStateOwnedTemplates(t, jw)
-
-	provider := &testContainer{contents: []jaws.UI{NewSpan(testHTMLGetter("child"))}}
-	dot := &registerContainerDot{updater: NewContainer("div", provider)}
-	tmpl := NewTemplate("div", "state-register-container", dot)
-	wrapper := renderOwned(t, rq, tmpl)
-
-	const wantRegistered = 3 // Template wrapper, registered Element, Container child.
-	if got := countRegistered(t, rq); got != wantRegistered {
-		t.Fatalf("registered elements after render = %d, want %d", got, wantRegistered)
-	}
-
-	for round := 1; round <= 3; round++ {
-		generation := containerStateOwnedTemplateChildren(t, wrapper)
-		if len(generation) != 1 {
-			t.Fatalf("round %d: Template owns %d Elements, want the registered Element", round, len(generation))
-		}
-		registerElem := generation[0]
-		children := containerStateOwnedChildren(t, registerElem)
-		if len(children) != 1 {
-			t.Fatalf("round %d: registered Container owns %d children, want 1", round, len(children))
-		}
-		childElem := children[0]
-
-		tmpl.JawsUpdate(wrapper)
-
-		if !registerElem.Deleted() || rq.GetElementByJid(registerElem.Jid()) != nil {
-			t.Fatalf("round %d: previous registered Element %v is still registered", round, registerElem.Jid())
-		}
-		if !childElem.Deleted() || rq.GetElementByJid(childElem.Jid()) != nil {
-			t.Fatalf("round %d: previous Container child %v is still registered", round, childElem.Jid())
-		}
-		if got := countRegistered(t, rq); got != wantRegistered {
-			t.Fatalf("registered elements after %d update(s) = %d, want %d", round, got, wantRegistered)
-		}
-	}
 }
 
 // TestContainerDeletedChildReleasesOwnedDescendants covers both reconciliation
@@ -159,29 +97,6 @@ func TestContainerDeletedChildReleasesOwnedDescendants(t *testing.T) {
 				}
 			} else if got := containerStateOwnedChildren(t, outerElem); len(got) != 0 {
 				t.Fatalf("unused outer Container children = %v, want none", got)
-			}
-		})
-	}
-}
-
-// TestAppendOwnedByToleratesTypedNilState ensures the ownership walk checks exact
-// state types for nil before invoking their cleanup methods.
-func TestAppendOwnedByToleratesTypedNilState(t *testing.T) {
-	_, rq := newCoreRequest(t)
-	for _, tt := range []struct {
-		name  string
-		state any
-	}{
-		{name: "container", state: (*containerState)(nil)},
-		{name: "template", state: (*templateState)(nil)},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			elem := rq.NewElement(NewSpan(testHTMLGetter("child")))
-			if err := jaws.SetElementState(elem, tt.state); err != nil {
-				t.Fatal(err)
-			}
-			if owned := appendOwnedBy(nil, elem); len(owned) != 0 {
-				t.Fatalf("owned Elements = %v, want none", owned)
 			}
 		})
 	}

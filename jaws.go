@@ -166,7 +166,6 @@ type Jaws struct {
 	// default is [DefaultMaxPendingRequestsPerIP].
 	MaxPendingRequestsPerIP int
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith
-	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	created                 time.Time     // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
 	runtimeSeconds          atomic.Int32  // whole seconds since created; refreshed during request allocation and by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
 	bcastCh                 chan wire.Message
@@ -464,19 +463,19 @@ func (jw *Jaws) ContentSecurityPolicy() (s string) {
 func (jw *Jaws) SecureHeadersMiddleware(next http.Handler) http.Handler {
 	hdrs := secureheaders.DefaultHeaders()
 	delete(hdrs, "Content-Security-Policy")
-	return secureHeadersMiddleware{Jaws: jw, Handler: next, Header: hdrs}
+	return secureHeadersMiddleware{jw: jw, next: next, header: hdrs}
 }
 
 type secureHeadersMiddleware struct {
-	*Jaws
-	http.Handler
-	Header http.Header
+	jw     *Jaws
+	next   http.Handler
+	header http.Header
 }
 
 func (m secureHeadersMiddleware) ServeHTTP(hw http.ResponseWriter, hr *http.Request) {
-	secureheaders.SetHeaders(m.Header, hw, secureheaders.RequestIsSecure(hr, false))
-	hw.Header().Set("Content-Security-Policy", m.ContentSecurityPolicy())
-	m.Handler.ServeHTTP(hw, hr)
+	secureheaders.SetHeaders(m.header, hw, secureheaders.RequestIsSecure(hr, false))
+	hw.Header().Set("Content-Security-Policy", m.jw.ContentSecurityPolicy())
+	m.next.ServeHTTP(hw, hr)
 }
 
 // GenerateHeadHTML regenerates the HTML code that goes in the HEAD section.

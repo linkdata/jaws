@@ -20,7 +20,7 @@ func NewPassword(g bind.Setter[string]) *Password { return &Password{InputText{S
 
 // JawsRender renders ui as an HTML password input.
 func (u *Password) JawsRender(elem *jaws.Element, w io.Writer, params []any) error {
-	return u.renderStringInput(elem, w, "password", params...)
+	return u.RenderInput(elem, w, "password", params...)
 }
 
 // Password renders an HTML password input.

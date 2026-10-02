@@ -9,10 +9,9 @@ import (
 // TestServe runs rq's WebSocket message-processing loop for test harnesses,
 // including the out-of-package harness in github.com/linkdata/jaws/jawstest.
 //
-// It subscribes rq to broadcasts, waits for the running Serve loop to process
-// the subscription, transitions rq to running with the same checked transition
-// [Request.ServeHTTP] uses, then runs rq.process in a new goroutine using freshly
-// created inbound/outbound channels, recycling rq when the loop stops.
+// It subscribes rq to broadcasts, transitions rq to running using the same
+// checked transition as [Request.ServeHTTP], then runs rq.process in a new
+// goroutine with fresh channels and recycles rq when the loop stops.
 //
 // rq must already be claimed via [Jaws.UseRequest]. TestServe panics — like its other
 // setup-failure panics — if the Jaws processing loop ([Jaws.Serve] or
@@ -32,10 +31,8 @@ import (
 // runtime.Goexit.
 func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan wire.WsMsg, outCh chan wire.WsMsg, bcastCh chan wire.Message, readyCh, doneCh chan struct{}) {
 	bcastCh = make(chan wire.Message, 64)
-	// Subscribe and then rendezvous with the Serve loop so the subscription is
-	// installed before the test request starts processing. This requires
-	// Serve/ServeWithTimeout to be running; if it is not, fail loudly with a clear
-	// message instead.
+	// Serve installs the subscription before handling further messages. Without
+	// a running Serve loop, the send times out with a setup error.
 	select {
 	case jw.subCh <- subscription{msgCh: bcastCh, rq: rq}:
 	case <-jw.Done():
@@ -45,14 +42,6 @@ func (jw *Jaws) TestServe(rq *Request, onPanic func(recovered any)) (inCh chan w
 		close(bcastCh)
 		panic("jaws: TestServe timed out subscribing; the Jaws processing loop (Serve or ServeWithTimeout) must be running")
 	}
-	select {
-	case jw.subCh <- subscription{}:
-	case <-jw.Done():
-		panic("jaws: TestServe: the Jaws instance is closed")
-	case <-time.After(5 * time.Second):
-		panic("jaws: TestServe timed out subscribing; the Jaws processing loop (Serve or ServeWithTimeout) must be running")
-	}
-
 	// Transition to running with the same checked transition Request.ServeHTTP uses,
 	// synchronously and before creating the per-run channels. casState(reqClaimed,
 	// reqRunning) requires the Request to be claimed (via UseRequest) and not already

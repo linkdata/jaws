@@ -95,9 +95,6 @@ func TestInputBool_JawsUpdateEmitsCheckedState(t *testing.T) {
 		go jw.Serve()
 
 		tr := jawstest.NewTestRequest(jw, nil)
-		if tr == nil {
-			t.Fatal("expected test request")
-		}
 		defer tr.Close()
 		<-tr.ReadyCh
 
@@ -296,9 +293,6 @@ func TestInputDate_NoSpuriousUpdateOnEqualDate(t *testing.T) {
 
 	go jw.Serve()
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	defer tr.Close()
 	<-tr.ReadyCh
 
@@ -400,9 +394,6 @@ func TestInputDirtyOnSetError(t *testing.T) {
 	go jw.Serve()
 
 	tr := jawstest.NewTestRequest(jw, nil)
-	if tr == nil {
-		t.Fatal("expected test request")
-	}
 	defer tr.Close()
 	<-tr.ReadyCh
 
