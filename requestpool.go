@@ -167,28 +167,8 @@ func (jw *Jaws) limitPendingRequestsLocked(bucketKey netip.Addr) {
 // so all candidates are judged against the same instant. Caller must hold jw.mu,
 // and jw.pending[bucketKey] must be non-empty.
 func (jw *Jaws) pendingEvictionVictimLocked(bucketKey netip.Addr, nowSeconds int32) (victim *Request) {
-	// A recently written Request is skipped while an idle eviction victim exists.
-	// RequestWriter.Write records the current second on every write via
-	// Request.MarkWritten, so a Request is treated as possibly rendering while its
-	// last write is within 2*maintenanceInterval (rounded to whole seconds, with a
-	// one-second floor). The recorded second advances only while the Request keeps
-	// writing, so an actively writing render stays fresh while one idle for the
-	// window is preferred. If all pending Requests are fresh, the least recently
-	// written one is retired to enforce the configured maximum.
-	//
-	// maintenanceInterval is zero until ServeWithTimeout starts; fall back to
-	// DefaultUpdateInterval so an in-flight render is still protected before the
-	// maintenance pass begins running. The exact fallback value need not match the
-	// steady-state maintenanceInterval: the one-second floor below dominates for any
-	// sub-second interval, and a NewRequest before Serve is in any case unusual.
-	interval := jw.maintenanceInterval
-	if interval <= 0 {
-		interval = DefaultUpdateInterval
-	}
-	spareWindow := 2 * interval
-	if spareWindow < time.Second {
-		spareWindow = time.Second // floor: the seconds counter advances at most once per second
-	}
+	// Cover whole-second write samples plus one maintenance tick of lag.
+	const spareWindow = 2 * time.Second
 	var victimElapsed int32
 	for _, rq := range jw.pending[bucketKey] {
 		// Compare as durations (elapsed whole seconds vs the window) to avoid a
@@ -222,19 +202,15 @@ func (jw *Jaws) removePendingRequestLocked(rq *Request) {
 	}
 }
 
-func (jw *Jaws) nonZeroRandomUint64Locked() (value uint64) {
+func (jw *Jaws) nonZeroRandomLocked() (value key.Key) {
 	random := make([]byte, 8)
 	for value == 0 {
 		if _, err := io.ReadFull(jw.kg, random); err != nil {
 			panic(err)
 		}
-		value = binary.LittleEndian.Uint64(random)
+		value = key.Key(binary.LittleEndian.Uint64(random))
 	}
 	return
-}
-
-func (jw *Jaws) nonZeroRandomLocked() key.Key {
-	return key.Key(jw.nonZeroRandomUint64Locked())
 }
 
 // UseRequest extracts the JaWS [Request] with the given key from the request
@@ -329,7 +305,6 @@ func releaseRetiredRequestKey(retired retiredRequestKey) {
 			delete(jw.requests, retired.jawsKey)
 		}
 		jw.mu.Unlock()
-		runtime.KeepAlive(jw)
 	}
 }
 
@@ -356,11 +331,10 @@ func (jw *Jaws) retireNonRunningRequestLocked(rq *Request, err error) (cause err
 	func() {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq && rq.loadState() != reqRunning {
+		if jw.requests[rq.JawsKey] == rq && rq.loadState() != reqRunning {
 			cause = jw.unregisterLocked(rq, err)
 		}
 	}()
-	runtime.KeepAlive(rq)
 	return
 }
 
@@ -373,7 +347,7 @@ func (jw *Jaws) recycle(rq *Request) {
 	func() {
 		rq.mu.Lock()
 		defer rq.mu.Unlock()
-		if rq.JawsKey != 0 && jw.requests[rq.JawsKey] == rq {
+		if jw.requests[rq.JawsKey] == rq {
 			_ = jw.unregisterLocked(rq, nil)
 			buffers = rq.releaseBuffersLocked()
 		}

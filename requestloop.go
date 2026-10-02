@@ -29,10 +29,8 @@ import (
 // recovered value is returned unchanged for the caller to handle.
 func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-chan wire.WsMsg, outboundMsgCh chan<- wire.WsMsg) (panicValue any) {
 	jawsDoneCh := rq.Jaws.Done()
-	// Snapshot cancelFn under rq.mu, the same way ServeHTTP does: its only writers
-	// (claim, getRequestLocked, releaseBuffersLocked) run strictly before or after
-	// process, so the captured value is stable for the loop's lifetime and the
-	// cleanup defer avoids a lock-free field read.
+	// Snapshot cancelFn under rq.mu. getRequestLocked initializes it, and claim
+	// layers it before process starts.
 	rq.mu.RLock()
 	httpDoneCh := rq.httpDoneCh
 	cancelFn := rq.cancelFn
@@ -44,9 +42,8 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 	defer func() {
 		panicValue = recover()
 		rq.Jaws.unsubscribe(broadcastMsgCh)
-		// process runs only for a running (hence claimed) Request, so its WebSocket
-		// earns the session grace window.
-		rq.killSession(rq.loadState().claimed())
+		// process runs only for a running Request, so its WebSocket earns grace.
+		rq.killSession(true)
 		cancelFn(nil)
 		close(eventCallCh)
 		for {
@@ -238,8 +235,9 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 }
 
 // queue appends a single outbound message to the request's pending wsQueue under
-// muQueue, the leaf lock that orders writes independently of rq.mu. The Serve
-// loop later drains it via getSendMsgs.
+// muQueue, the leaf lock that orders writes independently of rq.mu. The Request's
+// process loop drains it through sendQueue and getSendMsgs; drainTailScript drains
+// tail fixups.
 func (rq *Request) queue(msg wire.WsMsg) {
 	rq.muQueue.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
@@ -272,7 +270,7 @@ func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call
 				var jidStr string
 				jidStr, after, found = strings.Cut(after, "\t")
 				if id = jid.ParseString(jidStr); id > 0 {
-					if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
+					if e := rq.getElementByJidLocked(id); e != nil && e.frozen.Load() {
 						duplicate := e == call.elem
 						if !duplicate {
 							if seenMap == nil {
@@ -315,7 +313,7 @@ func (rq *Request) resolveEventFnCall(id Jid, wht what.What, value string) (call
 			}
 		}
 	} else {
-		if e := rq.getElementByJidLocked(id); e != nil && !e.deleted.Load() && e.frozen.Load() {
+		if e := rq.getElementByJidLocked(id); e != nil && e.frozen.Load() {
 			call.elem = e
 		}
 	}

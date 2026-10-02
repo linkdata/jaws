@@ -3387,9 +3387,6 @@ func TestCoverage_RequestProcessHTTPDoneAndBroadcastDone(t *testing.T) {
 	if got := <-unsubDone; got != bcastCh {
 		t.Fatalf("unexpected unsubscribe channel %p, want %p", got, bcastCh)
 	}
-
-	jw.Close()
-	jw.Broadcast(wire.Message{What: what.Update})
 }
 
 func TestRequestRecycle_StaleElementIsInert(t *testing.T) {

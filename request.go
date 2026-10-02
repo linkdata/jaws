@@ -175,9 +175,6 @@ func (rq *Request) casState(old, want reqState) bool {
 // must be in a live state (debug builds panic otherwise, catching a double-finish or a
 // terminal-state resurrection).
 func (rq *Request) finishLocked() {
-	// Capture the claimed status before the transition so delRequest can grant the
-	// grace window. Holding both rq.mu and jw.mu (see the doc comment) keeps the state
-	// stable between this load and the store below.
 	prev := rq.loadState()
 	if deadlock.Debug && !prev.registered() {
 		panic("jaws: finishLocked called on a terminal (non-live) Request state")
@@ -234,21 +231,9 @@ func (rq *Request) advanceLastWriteSeconds(now int32) {
 	}
 }
 
-// destKey returns the Request's identity key while it is still registered, read
-// under rq.mu, for use as a broadcast destination. A zero return means the Request
-// has finished (unregistered), so destKey never hands out a finished Request's key.
-// A key value captured elsewhere (a copied key.Key, a queued wire.Message.Dest, or a
-// browser /jaws/<key> URL) that outlives the Request matches nothing only while the
-// finished Request stays reachable, since its key is held reserved by a tombstone.
-// After the Request is collected the tombstone is removed and the CSPRNG may
-// eventually reissue that key value to a new Request, which such a stale value could
-// then match. Two narrower guarantees always hold: the *Request pointer is never
-// reused, so it never aliases another connection, and destKey returns zero once the
-// Request has finished, so it cannot hand back the finished Request's destination.
-// (This is not a blanket "pointer-derived operations are safe" claim: [Request.Dirty]
-// can target Elements on other live Requests by ordinary tag or exact pointer, and
-// an Alert or Redirect message queued before completion carries a key.Key destination
-// that can itself outlive the Request.)
+// destKey returns the Request's key while it is registered, or zero otherwise.
+// It reads the state and key under rq.mu so a finished Request cannot produce a
+// new identity-targeted message.
 func (rq *Request) destKey() (k key.Key) {
 	rq.mu.RLock()
 	if rq.loadState().registered() {
@@ -288,12 +273,10 @@ func (rq *Request) claim(r *http.Request) error {
 			// (typically Jaws.BaseContext) until that parent is cancelled.
 			prevCancel := rq.cancelFn
 			rq.ctx, rq.cancelFn = context.WithCancelCause(rq.ctx)
-			if prevCancel != nil {
-				newCancel := rq.cancelFn
-				rq.cancelFn = func(cause error) {
-					newCancel(cause)
-					prevCancel(cause)
-				}
+			newCancel := rq.cancelFn
+			rq.cancelFn = func(cause error) {
+				newCancel(cause)
+				prevCancel(cause)
 			}
 			rq.httpDoneCh = httpDoneCh
 			// Refresh the write second so a request claimed long after its initial
@@ -409,19 +392,6 @@ func (rq *Request) newAutoSession(r *http.Request) (sess *Session) {
 // under rq.mu so Jids stay monotonic and unique, and wsQueue is transferred under
 // muQueue — so there is no data race, no reused identity, and no duplicated Jid.
 func (rq *Request) releaseBuffersLocked() (buffers *requestBuffers) {
-	// Pure buffer mechanics: the caller (recycle) has already cancelled
-	// the context, called finishLocked (which detached the session and transitioned to
-	// reqFinished), and removed the map entry. This only detaches the reusable
-	// collections for the pool.
-	//
-	// Deliberately do NOT reset lastJid or clear Element.ui/handlers/deleted here.
-	// The Request is never reused, so a stale *Element is unreachable through the
-	// unregistered Request and needs no inerting; and mutating those fields would
-	// race an initial renderer that may still be inside JawsRender (which reads
-	// Element.ui and handlers lock-free) or duplicate an already-streamed Jid if the
-	// renderer keeps allocating. The render-input fields (initial, connectFn,
-	// remoteIP) are likewise preserved; they are collected with the Request.
-
 	// Detach the reusable collections and hand them to the pool. Clear only the live
 	// length: every production path that shrinks a buffer already zeroes the vacated
 	// entries (getSendMsgs and drainTailScript for wsQueue, makeUpdateList for
@@ -629,14 +599,12 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 	return
 }
 
-// cancelLocked cancels the Request's context with a wrapped cause, but only when
-// the Request has a non-zero identity key and its context has not already been
-// cancelled.
+// cancelLocked cancels an uncanceled Request context with a wrapped cause.
 //
 // It does NOT log. It returns the cancellation cause (already set on the context),
 // or nil when there is nothing to log. Caller must hold rq.mu.
 func (rq *Request) cancelLocked(err error) (cause error) {
-	if rq.JawsKey != 0 && rq.ctx.Err() == nil {
+	if rq.ctx.Err() == nil {
 		cause = newErrRequestCancelledLocked(rq, err)
 		rq.cancelFn(cause)
 	}
@@ -895,9 +863,9 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 }
 
 // appendDirtyTags queues already-expanded selectors onto this request's pending-dirt
-// list. Exact Element targets are kept only by their owning Request. The Serve loop's
-// update tick later drains the list (see makeUpdateList) and re-renders the affected
-// elements. Takes rq.mu.
+// list. Exact Element targets are kept only by their owning Request. The Request's
+// process loop drains the list in makeUpdateList and updates the selected Elements.
+// Takes rq.mu.
 //
 // Do not filter ordinary tags against tagMap: initial rendering may register a
 // matching tag after this tick. Non-running Requests can retain duplicate or

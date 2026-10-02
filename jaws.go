@@ -166,7 +166,6 @@ type Jaws struct {
 	// default is [DefaultMaxPendingRequestsPerIP].
 	MaxPendingRequestsPerIP int
 	webSocketTimeout        time.Duration // timeout duration passed to ServeWith
-	maintenanceInterval     time.Duration // Serve maintenance tick interval; set by ServeWithTimeout and read under mu, zero until Serve starts
 	created                 time.Time     // monotonic base captured in New(); read-only after construction, basis for runtimeSeconds
 	runtimeSeconds          atomic.Int32  // whole seconds since created; refreshed during request allocation and by the Serve loop, read lock-free by MarkWritten and the eviction/idle checks
 	bcastCh                 chan wire.Message
