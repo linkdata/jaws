@@ -697,6 +697,9 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got := sb.String(); !strings.Contains(got, "tags=[n/a]") {
+		t.Fatalf("locked debug output = %q, want tags=[n/a]", got)
+	}
 
 	elem.Tag(tag.Tag("a"), tag.Tag("b"))
 	sb.Reset()
@@ -713,6 +716,9 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	rq.Jaws.Debug = false
+	if got := sb.String(); !strings.Contains(got, "<!-- id=") || !strings.Contains(got, " tags=[") || !strings.HasSuffix(got, " -->") {
+		t.Fatalf("render output = %q, want debug comment", got)
+	}
 
 	if elem.Deleted() {
 		t.Fatal("element must not report Deleted before DeleteElement")
@@ -721,10 +727,18 @@ func TestElement_RenderDebugAndDeletedBranches(t *testing.T) {
 	if !elem.Deleted() {
 		t.Fatal("element must report Deleted after DeleteElement")
 	}
+	renderCalled := atomic.LoadInt32(&tu.renderCalled)
+	updateCalled := atomic.LoadInt32(&tu.updateCalled)
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatal(err)
 	}
 	elem.JawsUpdate()
+	if got := atomic.LoadInt32(&tu.renderCalled); got != renderCalled {
+		t.Fatalf("deleted element rendered: calls = %d, want %d", got, renderCalled)
+	}
+	if got := atomic.LoadInt32(&tu.updateCalled); got != updateCalled {
+		t.Fatalf("deleted element updated: calls = %d, want %d", got, updateCalled)
+	}
 }
 
 func TestElement_JawsRenderDebugTagCanReenterRequest(t *testing.T) {
@@ -823,6 +837,9 @@ func TestElement_ApplyGetterDebugBranches(t *testing.T) {
 	gotTags := elem.ApplyGetter(ag)
 	if !elem.HasTag(tag.Tag("tg")) {
 		t.Fatalf("missing Tag('tg') in %#v", gotTags)
+	}
+	if got := len(elem.handlers); got != 1 {
+		t.Fatalf("multi-interface getter registered %d handlers, want 1", got)
 	}
 }
 

@@ -202,7 +202,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			_ = jw.retireNonRunningRequestLocked(rq, nil)
 		}
 	}
-	// Unattached Sessions cannot expire until their one-minute deadline.
+	// Every tenth maintenance pass checks unattached Sessions against sessionGrace deadlines.
 	jw.sessionSweep++
 	if jw.sessionSweep == 10 {
 		jw.sessionSweep = 0

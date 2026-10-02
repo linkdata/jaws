@@ -30,6 +30,11 @@ func eligibleAsTag(t any, validate func(any) error) (ok bool) {
 //
 // A nil [InputFn] is ignored.
 //
+// Parameters of type string, []string, [template.HTMLAttr], and
+// []template.HTMLAttr are trusted raw HTML attribute syntax in attrs.
+// Build attributes from untrusted values with
+// [github.com/linkdata/jaws/lib/htmlio.Attr] and a trusted name.
+//
 // A recognized event handler that is also usable as a tag is returned in both tags
 // and handlers.
 func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
@@ -50,11 +55,8 @@ func ParseParams(params []any) (tags []any, handlers []any, attrs []string) {
 				handlers = append(handlers, data)
 			}
 		default:
-			if _, ok := data.(InputHandler); ok {
-				handlers = append(handlers, data)
-			} else if _, ok := data.(ClickHandler); ok {
-				handlers = append(handlers, data)
-			} else if _, ok := data.(ContextMenuHandler); ok {
+			switch data.(type) {
+			case InputHandler, ClickHandler, ContextMenuHandler:
 				handlers = append(handlers, data)
 			}
 			if eligibleAsTag(data, tag.NewErrNotUsableAsTag) {

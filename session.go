@@ -17,6 +17,8 @@ import (
 	"github.com/linkdata/secureheaders"
 )
 
+const sessionGrace = time.Minute
+
 // Session stores server-side per-user state shared by one or more requests.
 //
 // A Session is bound to the remote IP that created it. Its exported methods are
@@ -38,7 +40,7 @@ func newSession(jw *Jaws, sessionID key.Key, remoteIP netip.Addr, secure bool) *
 		jw:        jw,
 		sessionID: sessionID,
 		remoteIP:  remoteIP,
-		deadline:  time.Now().Add(time.Minute),
+		deadline:  time.Now().Add(sessionGrace),
 		cookie: http.Cookie{ // #nosec G124 -- Secure is set from the request scheme, and HttpOnly/SameSite are set below.
 			Name:     jw.CookieName,
 			Path:     "/",
@@ -92,7 +94,7 @@ func (sess *Session) delRequest(rq *Request, wasClaimed bool) {
 		// must fire even when other requests remain attached, otherwise an aged
 		// session whose last departing request is an unclaimed bootstrap render
 		// would be reaped with its stale deadline despite recent live activity.
-		sess.deadline = time.Now().Add(time.Minute)
+		sess.deadline = time.Now().Add(sessionGrace)
 	}
 	// For an unclaimed request (its bootstrap render finished before the
 	// WebSocket connected) leave the existing deadline intact: the creation-time
