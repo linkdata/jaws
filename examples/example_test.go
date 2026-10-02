@@ -46,7 +46,7 @@ func Example() {
 	percent := Percent(50)
 
 	http.DefaultServeMux.Handle("GET /{$}", ui.Handler(jw, "index", bind.New(&mu, &percent)))
-	slog.Error(http.ListenAndServe("localhost:8080", nil).Error())
+	panic(http.ListenAndServe("localhost:8080", nil))
 }
 
 // Example_secureSession is a compile-checked illustration of adding sessions and
@@ -74,5 +74,5 @@ func Example_secureSession() {
 
 	page := ui.Handler(jw, "index", bind.New(&mu, &f))
 	mux.Handle("GET /{$}", jw.SecureHeadersMiddleware(jw.SessionMiddleware(page)))
-	slog.Error(http.ListenAndServe("localhost:8080", mux).Error())
+	panic(http.ListenAndServe("localhost:8080", mux))
 }
