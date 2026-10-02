@@ -27,7 +27,8 @@ import (
 // A typed-nil handler is called normally and must tolerate its nil receiver.
 //
 // Select supports one selected option. The HTML multiple attribute and
-// multi-select BoolArray values are unsupported.
+// multi-select BoolArray values are unsupported. Use [MultiSelect] for multiple
+// selected options.
 //
 // A completed native form reset changes browser state without an input/change
 // event, so it does not update the Go binding. Reset the authoritative selection
@@ -94,7 +95,8 @@ func (u Select) JawsInput(elem *jaws.Element, value string) (err error) {
 //
 // HTML attribute params are applied to the select element, but the multiple
 // attribute is unsupported. A [named.BoolArray] handler must be single-select:
-// use named.NewBoolArray(false) or its zero value.
+// use named.NewBoolArray(false) or its zero value. Use [RequestWriter.MultiSelect]
+// for multiple selected options.
 //
 // See [Select] for handler requirements and native reset semantics.
 func (rw RequestWriter) Select(handler named.SelectHandler, params ...any) error {

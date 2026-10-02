@@ -2,8 +2,8 @@
 //
 // Its main building blocks are [HTMLInner] for dynamic inner HTML; [Input],
 // [InputText], [InputBool], and [InputDate] for typed controls; [Number] and
-// [Range] for numeric controls; [Container], [Tbody], and [Select] for dynamic
-// children; and [Template], [Handler], and [RequestWriter] for template integration.
+// [Range] for numeric controls; [Container], [Tbody], [Select], and [MultiSelect]
+// for dynamic children; and [Template], [Handler], and [RequestWriter] for templates.
 //
 // Every non-nil value used as a [github.com/linkdata/jaws.UI] must be comparable
 // at runtime and equal to itself, and is scoped to one Request. Construct fresh
@@ -12,12 +12,12 @@
 //
 // Within one Request, a widget normally backs one live
 // [github.com/linkdata/jaws.Element]. Widgets based on [HTMLInner], plus [Img],
-// [Option], [Template], [Container], [Tbody], and [Select], support multiple live
-// Elements under their concrete contracts. Input widgets and [JsVarBinding] require
+// [Option], [Template], [Container], [Tbody], [Select], and [MultiSelect], support
+// multiple live Elements under their concrete contracts. Input widgets and [JsVarBinding] require
 // distinct widget values.
 //
-// [NewContainer], [NewTbody], [NewSelect], and [NewTemplate] return definition
-// values. Use them as values; taking their addresses replaces definition equality
+// [NewContainer], [NewTbody], [NewSelect], [NewMultiSelect], and [NewTemplate] return
+// definition values. Use them as values; taking their addresses replaces definition equality
 // with pointer identity and is unsupported.
 //
 // HTML-inner widgets route content through

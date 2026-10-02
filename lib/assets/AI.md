@@ -66,6 +66,12 @@ Value updates avoid writes when possible and preserve text selection when a
 textual value changes by insertion or removal. Managed native form reset is not
 implemented: it does not generate the per-control events JaWS transports.
 
+Native multiple-selection selects send all `selectedOptions` values as a JSON
+string array inside the ordinary Input payload. Their Value payload uses the
+same encoding and reconciles every option's live `selected` property, including
+clearing all options for an empty array. Single-selection selects retain their
+plain string payload. Use `ui.MultiSelect` for the matching server-side API.
+
 `JavascriptText` and `JawsCSS` are immutable embedded strings. `ISO8601` is the
 browser date-input format. `DefaultCookieName` is computed once at package
 initialization; `MakeCookieName` keeps ASCII letters and digits from the

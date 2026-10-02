@@ -497,6 +497,81 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_MultipleSelect(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+const assert = require("node:assert/strict");
+jaws = { readyState: 1, sent: [], send(msg) { this.sent.push(msg); } };
+const options = [
+	{ value: "first", selected: true },
+	{ value: "second", selected: false },
+	{ value: "third\t\n\"\\", selected: true }
+];
+const listeners = {};
+const multiple = {
+	id: "Jid.1",
+	tagName: "SELECT",
+	type: "select-multiple",
+	multiple: true,
+	options,
+	get selectedOptions() { return this.options.filter(option => option.selected); },
+	get value() { return this.selectedOptions[0]?.value || ""; },
+	set value(value) { throw new Error("multiple select must update option.selected"); },
+	hasAttribute() { return false; },
+	getAttribute() { return null; },
+	addEventListener(name, handler) { listeners[name] = handler; }
+};
+jawsAttach(multiple);
+assert.deepEqual(Object.keys(listeners), ["input"]);
+let stopped = 0;
+const event = { currentTarget: multiple, stopPropagation() { stopped++; } };
+listeners.input(event);
+for (const option of options) option.selected = false;
+listeners.input(event);
+assert.equal(stopped, 2);
+
+for (const readyState of [0, 2, 3]) {
+	jaws.readyState = readyState;
+	listeners.input(event);
+}
+assert.equal(jaws.sent.length, 2);
+assert.equal(stopped, 2);
+jaws.readyState = 1;
+
+const single = {
+	id: "Jid.2", tagName: "SELECT", type: "select-one", multiple: false,
+	value: "second", getAttribute() { return null; }
+};
+jawsInputHandler({ currentTarget: single, stopPropagation() {} });
+document.getElementById = id => id === multiple.id ? multiple : single;
+jawsPerform("Value", multiple.id, JSON.stringify(JSON.stringify(["second", options[2].value])));
+assert.deepEqual(options.map(option => option.selected), [false, true, true]);
+jawsPerform("Value", multiple.id, JSON.stringify(JSON.stringify(["first"])));
+assert.deepEqual(options.map(option => option.selected), [true, false, false]);
+jawsPerform("Value", multiple.id, JSON.stringify("[]"));
+assert.deepEqual(options.map(option => option.selected), [false, false, false]);
+jawsPerform("Value", single.id, JSON.stringify("first"));
+assert.equal(single.value, "first");
+process.stdout.write(JSON.stringify(jaws.sent));
+`)
+	var frames []string
+	if err := json.Unmarshal([]byte(raw), &frames); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`["first","third\t\n\"\\"]`, `[]`, "second"}
+	if len(frames) != len(want) {
+		t.Fatalf("frames = %q, want %d frames", frames, len(want))
+	}
+	for i, frame := range frames {
+		msg, ok := wire.Parse([]byte(frame))
+		if !ok || msg.What != what.Input || msg.Data != want[i] {
+			t.Errorf("frame %d = %+v, parseable %t, want Input %q", i, msg, ok, want[i])
+		}
+		if (i < 2 && msg.Jid != 1) || (i == 2 && msg.Jid != 2) {
+			t.Errorf("frame %d targets unexpected Jid %s", i, msg.Jid)
+		}
+	}
+}
+
 func TestJawsJS_ClickAndInputRoutesRejectNoncanonicalJids(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }

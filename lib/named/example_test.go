@@ -31,7 +31,7 @@ func ExampleBoolArray_multiSelect() {
 
 	choices.Set("red", true)
 	choices.Set("green", true)
-	fmt.Println(choices.IsChecked("red"), choices.IsChecked("green"))
+	fmt.Println(choices.JawsGetValues(nil))
 
-	// Output: true true
+	// Output: [red green]
 }
