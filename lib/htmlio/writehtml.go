@@ -45,25 +45,6 @@ func isNewlineSensitive(tag string) bool {
 	return false
 }
 
-// appendEscapeCR appends s to b, replacing every carriage return with the
-// numeric character reference &#13;.
-//
-// Browser input-stream preprocessing rewrites a raw CR (and a CRLF pair) to a
-// single LF before tokenization, so a raw carriage return never reaches the DOM.
-// The reference is decoded back to CR after preprocessing, so encoding it lets
-// logical values that contain carriage returns round-trip through HTML parsing.
-func appendEscapeCR(b []byte, s string) []byte {
-	for {
-		i := strings.IndexByte(s, '\r')
-		if i < 0 {
-			return append(b, s...)
-		}
-		b = append(b, s[:i]...)
-		b = append(b, "&#13;"...)
-		s = s[i+1:]
-	}
-}
-
 // AppendAttrs appends each non-empty attribute fragment in attrs to b, each
 // prefixed with a single space so the result can be concatenated directly after a
 // tag name.
@@ -90,7 +71,9 @@ func AppendAttrValue(b []byte, value string) []byte {
 	b = append(b, '"')
 	// The template escaper replaces NUL with U+FFFD. A zero-valued character
 	// reference parses to the same value, so neither source form preserves NUL.
-	b = appendEscapeCR(b, template.HTMLEscapeString(value))
+	// HTML input preprocessing normalizes raw CR and CRLF to LF. The character
+	// reference is decoded afterward, preserving CR in the DOM.
+	b = append(b, strings.ReplaceAll(template.HTMLEscapeString(value), "\r", "&#13;")...)
 	b = append(b, '"')
 	return b
 }
