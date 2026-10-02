@@ -16,6 +16,9 @@ func Test_makeCookieName(t *testing.T) {
 		{"suffix.ed", "suffix.ed", "suffix"},
 		{"path", path.Join("c:", "path", "file.ext"), "file"},
 		{"invalid chars", " !??_", "jaws"},
+		{"non-ASCII", "åäö-app1", "app1"},
+		{"all non-ASCII", "日本", "jaws"},
+		{"invalid UTF-8", "a\xffb", "ab"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
