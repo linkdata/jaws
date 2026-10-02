@@ -19,7 +19,10 @@ type Key uint64
 
 // String returns key in the text form used by JaWS.
 func (key Key) String() string {
-	return string(Append(nil, key))
+	if key == 0 {
+		return ""
+	}
+	return strconv.FormatUint(uint64(key), 32)
 }
 
 // Parse parses a JaWS key prefix from its text form.

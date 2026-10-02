@@ -7,6 +7,7 @@ import (
 )
 
 var appendBenchSink []byte
+var stringBenchSink string
 
 // BenchmarkAppend guards the base-32 encode hot path; it must stay
 // allocation-light when appending into an existing buffer.
@@ -18,5 +19,14 @@ func BenchmarkAppend(b *testing.B) {
 	appendBenchSink = key.Append(appendBenchSink[:0], benchmarkKey)
 	for b.Loop() {
 		appendBenchSink = key.Append(appendBenchSink[:0], benchmarkKey)
+	}
+}
+
+// BenchmarkString guards the allocation cost of Key.String.
+func BenchmarkString(b *testing.B) {
+	const benchmarkKey key.Key = 0x1234abcd
+	b.ReportAllocs()
+	for b.Loop() {
+		stringBenchSink = benchmarkKey.String()
 	}
 }
