@@ -497,7 +497,7 @@ func TestTagExpand_RuntimeNonComparable(t *testing.T) {
 }
 
 // TestTagExpand_MultiRuntimeNonComparable covers the multi-element case: two
-// same-typed runtime-non-comparable values in one expansion. ensureUsableTag
+// same-typed runtime-non-comparable values in one expansion. NewErrNotUsableAsTag
 // rejects the first one with ErrNotUsableAsTag before the dedup existing == tag in
 // appendUniqueTag ever compares them; it must not panic and must report
 // ErrNotUsableAsTag with no tags.
@@ -587,7 +587,7 @@ func uncomparablePanic() (r any) {
 }
 
 // Test_recoverComparabilityPanic exercises the defense-in-depth recovery helper
-// directly; ensureUsableTag normally rejects unusable tags before deduplication.
+// directly; NewErrNotUsableAsTag normally rejects unusable tags before deduplication.
 func Test_recoverComparabilityPanic(t *testing.T) {
 	rerr := uncomparablePanic()
 	if _, ok := rerr.(runtime.Error); !ok {

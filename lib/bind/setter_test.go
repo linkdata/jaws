@@ -63,7 +63,7 @@ func TestMakeSetter_SetterPassThrough(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	s2 := MakeSetter[string](Setter[string](setterStatic[string]{v: "z"}))
+	s2 := MakeSetter[string](Setter[string](setterStatic[string]{getterStatic[string]{v: "z"}}))
 	if got := s2.JawsGet(nil); got != "z" {
 		t.Fatalf("unexpected passthrough setter value %q", got)
 	}

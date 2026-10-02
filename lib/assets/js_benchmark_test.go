@@ -25,8 +25,7 @@ const src = fs.readFileSync(process.argv[1], "utf8");
 const elem = { id: "Jid.1", removeAttribute: function() {} };
 global.window = {
     location: { protocol: "http:", host: "example.test" },
-    addEventListener: function() {},
-    jawsNames: new Map()
+    addEventListener: function() {}
 };
 global.document = {
     readyState: "loading",
@@ -41,9 +40,6 @@ global.Event = function() {};
 global.Node = function() {};
 global.WebSocket = function() {};
 eval(src);
-if (typeof jawsSetDocumentReady === "function") {
-    jawsSetDocumentReady();
-}
 const event = { data: "RAttr\tJid.1\t\"title\"\n" };
 const count = Number(process.argv[2]);
 for (let i = 0; i < count; i++) {

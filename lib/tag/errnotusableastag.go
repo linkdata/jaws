@@ -71,9 +71,6 @@ const maxHintScan = 4
 // only to enrich the [ErrNotUsableAsTag] diagnostic, so these bounds trade
 // completeness for a cheap, terminating search.
 func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
-	if x == nil {
-		return
-	}
 	type seenPtr struct {
 		t   reflect.Type
 		ptr uintptr
@@ -144,6 +141,6 @@ func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 		}
 		return false
 	}
-	walk(reflect.ValueOf(x), path, 0)
+	walk(reflect.ValueOf(x), "", 0)
 	return
 }

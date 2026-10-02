@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -877,15 +878,6 @@ func TestCalculateAdjacencyLocked(t *testing.T) {
 	}
 }
 
-func containsTag(tags []any, want any) bool {
-	for _, tg := range tags {
-		if tg == want {
-			return true
-		}
-	}
-	return false
-}
-
 // TestSingleCellDirtyStaysScopedToOneCell guards narrow and board-wide dirtying.
 func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
 	g := newGame(3, 3, 1)
@@ -903,7 +895,7 @@ func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsTag(resetTags, &g2.cells) {
+	if !slices.Contains(resetTags, any(&g2.cells)) {
 		t.Fatalf("board reset did not target the shared board tag &g.cells: %#v", resetTags)
 	}
 }

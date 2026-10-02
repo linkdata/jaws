@@ -107,6 +107,7 @@ func ParseString(s string) Jid {
 	if strings.HasPrefix(s, Prefix) {
 		digits := s[len(Prefix):]
 		if len(digits) > 0 && digits[0] >= '1' && digits[0] <= '9' {
+			// Reject nondigits before ParseInt to avoid allocating its error.
 			for i := 1; i < len(digits); i++ {
 				if digits[i] < '0' || digits[i] > '9' {
 					return Invalid

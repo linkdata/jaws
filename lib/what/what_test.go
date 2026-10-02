@@ -36,6 +36,17 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseRoundTripValid(t *testing.T) {
+	for i := range len(_What_index) - 1 {
+		w := What(i)
+		if w.IsValid() {
+			if got := Parse(w.String()); got != w {
+				t.Errorf("Parse(%q) = %v, want %v", w.String(), got, w)
+			}
+		}
+	}
+}
+
 // TestInvalidIsZero pins Invalid to the zero value, so a plain var What defaults
 // to it and callers can compare Parse's result against Invalid.
 func TestInvalidIsZero(t *testing.T) {
