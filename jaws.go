@@ -269,9 +269,9 @@ func New() (jw *Jaws, err error) {
 // drain. Subsequent calls to Close have no effect.
 func (jw *Jaws) Close() {
 	jw.mu.Lock()
+	defer jw.mu.Unlock()
 	select {
 	case <-jw.closeCh:
-		jw.mu.Unlock()
 		return
 	default:
 		jw.loggerQueue.close()
@@ -283,18 +283,19 @@ func (jw *Jaws) Close() {
 			continue
 		}
 		if rq.loadState() == reqRunning {
-			rq.mu.Lock()
-			rq.killSessionLocked(true)
-			// Shutdown has no error cause. CancelCauseFunc is idempotent, so it
-			// also safely handles a Request whose context is already done.
-			rq.cancelFn(nil)
-			rq.mu.Unlock()
+			func() {
+				rq.mu.Lock()
+				defer rq.mu.Unlock()
+				rq.killSessionLocked(true)
+				// Shutdown has no error cause. CancelCauseFunc is idempotent, so it
+				// also safely handles a Request whose context is already done.
+				rq.cancelFn(nil)
+			}()
 		} else {
 			_ = jw.retireNonRunningRequestLocked(rq, nil)
 		}
 	}
 	jw.closeSessionsLocked()
-	jw.mu.Unlock()
 }
 
 // Done returns a channel closed when [Jaws.Close] begins shutdown.
@@ -314,10 +315,10 @@ func (jw *Jaws) AddTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
+			defer jw.mu.Unlock()
 			if !slices.Contains(jw.tmplookers, tl) {
 				jw.tmplookers = append(jw.tmplookers, tl)
 			}
-			jw.mu.Unlock()
 		}
 	}
 	return
@@ -332,8 +333,8 @@ func (jw *Jaws) RemoveTemplateLookuper(tl TemplateLookuper) (err error) {
 	if tl != nil {
 		if err = tag.NewErrNotComparable(tl); err == nil {
 			jw.mu.Lock()
+			defer jw.mu.Unlock()
 			jw.tmplookers = slices.DeleteFunc(jw.tmplookers, func(x TemplateLookuper) bool { return x == tl })
-			jw.mu.Unlock()
 		}
 	}
 	return

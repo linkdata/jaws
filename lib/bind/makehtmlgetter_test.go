@@ -50,6 +50,22 @@ func (testHookedNamedString) JawsContextMenu(*jaws.Element, jaws.Click) error { 
 
 func (testHookedNamedString) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr { return "disabled" }
 
+type testBinderStringMask struct {
+	Binder[string]
+}
+
+func (testBinderStringMask) JawsGet(*jaws.Element) string { return "***" }
+
+func TestMakeHTMLGetterBinderWrapperUsesJawsGet(t *testing.T) {
+	value := "secret"
+	var mu sync.Mutex
+	masked := testBinderStringMask{New(&mu, &value).
+		GetHTML(func(Binder[string], *jaws.Element) template.HTML { return "<em>secret</em>" })}
+	if got := MakeHTMLGetter(masked).JawsGetHTML(nil); got != "***" {
+		t.Fatalf("JawsGetHTML() = %q, want wrapper JawsGet output", got)
+	}
+}
+
 func Test_MakeHTMLGetter(t *testing.T) {
 	untypedText := "<span>"
 	typedText := template.HTML(untypedText)
@@ -59,7 +75,7 @@ func Test_MakeHTMLGetter(t *testing.T) {
 	stringer := testStringer{}
 	binderVal := "<b>"
 	var binderMu sync.Mutex
-	binderNoHTML := testBinderStringNoHTML{New(&binderMu, &binderVal)}
+	binderNoHTML := testBinderStringNoHTML{New(&binderMu, &binderVal).Format("[%s]")}
 
 	getterString := testGetterString{}
 

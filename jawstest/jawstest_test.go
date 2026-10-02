@@ -20,6 +20,29 @@ type jawstestPanickingUpdater struct{ value any }
 func (jawstestPanickingUpdater) JawsRender(*jaws.Element, io.Writer, []any) error { return nil }
 func (u jawstestPanickingUpdater) JawsUpdate(*jaws.Element)                       { panic(u.value) }
 
+func closeTestRequest(t *testing.T, tr *jawstest.TestRequest) {
+	t.Helper()
+	tr.Close()
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case msg, ok := <-tr.OutCh:
+			if !ok {
+				select {
+				case <-tr.DoneCh:
+				case <-timeout:
+					t.Error("timeout waiting for the request loop to stop")
+				}
+				return
+			}
+			t.Errorf("unexpected OutCh frame during teardown: %+v", msg)
+		case <-timeout:
+			t.Error("timeout waiting for OutCh to close")
+			return
+		}
+	}
+}
+
 // TestNewTestRequest_BcastChToOutCh drives a broadcast through the harness's
 // exposed channels end to end: a page-global Alert injected on BcastCh must
 // surface as the corresponding outbound frame on OutCh. This pins the channel
@@ -38,7 +61,7 @@ func TestNewTestRequest_BcastChToOutCh(t *testing.T) {
 	if tr == nil {
 		t.Fatal("expected test request")
 	}
-	defer tr.Close()
+	t.Cleanup(func() { closeTestRequest(t, tr) })
 	<-tr.ReadyCh
 
 	// Alert is a page-global command: the loop emits exactly one Jid:0 frame
@@ -111,12 +134,15 @@ func TestNewTestRequest_WithExplicitRequest(t *testing.T) {
 	t.Cleanup(jw.Close)
 	go jw.Serve()
 
-	tr := jawstest.NewTestRequest(jw, httptest.NewRequest(http.MethodGet, "/explicit", nil))
+	tr := jawstest.NewTestRequest(jw, httptest.NewRequest(http.MethodPost, "/explicit", nil))
 	if tr == nil {
 		t.Fatal("expected test request")
 	}
-	defer tr.Close()
+	t.Cleanup(func() { closeTestRequest(t, tr) })
 	<-tr.ReadyCh
+	if got := tr.Initial(); got == nil || got.Method != http.MethodPost || got.URL.Path != "/explicit" {
+		t.Fatalf("Initial() = %v, want POST /explicit", got)
+	}
 }
 
 func TestNewTestRequestWithPanic_ReportsUpdaterPanic(t *testing.T) {

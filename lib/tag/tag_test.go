@@ -88,6 +88,30 @@ func (tt testDeepTagGetter) JawsGetTag() any {
 	return tt.next
 }
 
+type testZeroLengthNonComparableGetter struct {
+	_ [0]struct{ values []int }
+	n int
+}
+
+func (g testZeroLengthNonComparableGetter) JawsGetTag() any {
+	if g.n < 2 {
+		return testZeroLengthNonComparableGetter{n: g.n + 1}
+	}
+	return Tag("ok")
+}
+
+type testNestedZeroLengthNonComparableGetter struct {
+	value any
+	n     int
+}
+
+func (g testNestedZeroLengthNonComparableGetter) JawsGetTag() any {
+	if g.n < 2 {
+		return testNestedZeroLengthNonComparableGetter{value: g.value, n: g.n + 1}
+	}
+	return Tag("ok")
+}
+
 func TestTagStringDebug_StringerAndPointer(t *testing.T) {
 	if got := TagStringDebug(testStringTag{}); !strings.Contains(got, "testStringTag(str)") {
 		t.Fatalf("TagStringDebug(testStringTag{}) = %q, want value stringer representation", got)
@@ -447,6 +471,20 @@ func TestTagExpand_TagGetterNonComparable(t *testing.T) {
 	}
 }
 
+func TestTagExpand_ZeroLengthNonComparableGetterChain(t *testing.T) {
+	for _, getter := range []any{
+		testZeroLengthNonComparableGetter{},
+		testNestedZeroLengthNonComparableGetter{value: [0]struct{ values []int }{}},
+	} {
+		got, err := TagExpand(getter)
+		if err != nil {
+			t.Errorf("TagExpand(%T) error = %v", getter, err)
+			continue
+		}
+		assertTagSetEqual(t, got, []any{Tag("ok")})
+	}
+}
+
 // TestTagExpand_RuntimeNonComparable covers the gap between static and runtime
 // comparability: a struct whose static type is comparable but that holds a
 // non-comparable value in an interface field (here a func) panics on == or as a
@@ -747,6 +785,10 @@ func TestSameActiveNode_NilAndDefaultCases(t *testing.T) {
 	b := testNonComparableActiveNode{Values: []int{1}}
 	if sameActiveNode(a, b) {
 		t.Fatal("expected non-comparable structs to compare by identity, not contents")
+	}
+	m := map[string]int{"x": 1}
+	if !sameActiveNode(m, m) || sameActiveNode(m, map[string]int{"x": 1}) {
+		t.Fatal("expected maps to compare by identity")
 	}
 }
 

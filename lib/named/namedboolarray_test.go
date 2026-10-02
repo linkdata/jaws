@@ -148,6 +148,21 @@ func Test_NamedBoolArray(t *testing.T) {
 	}
 }
 
+func TestBoolArray_WriteLockedOwnedInsertPreservesCheckedState(t *testing.T) {
+	nba := NewBoolArray(false).Add("a", "A")
+	prechecked := NewBool(nba, "b", "B", true)
+	nba.WriteLocked(func(values []*Bool) []*Bool {
+		values[0].Set(true)
+		return append(values, prechecked)
+	})
+	if got := nba.Count("b"); got != 1 {
+		t.Fatalf("Count(b) = %d, want 1", got)
+	}
+	if !nba.IsChecked("a") || !nba.IsChecked("b") {
+		t.Fatal("WriteLocked changed a checked state")
+	}
+}
+
 func TestBoolArray_SingleSelectDuplicateNames(t *testing.T) {
 	// Single-select matches by name: same-named values toggle together and the
 	// at-most-one-checked invariant is per distinct name, not per Bool.

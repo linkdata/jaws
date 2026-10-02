@@ -191,6 +191,7 @@ func (jw *Jaws) unsubscribe(msgCh chan wire.Message) {
 
 func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 	jw.mu.Lock()
+	defer jw.mu.Unlock()
 	nowSeconds := jw.runtimeSeconds.Load()
 	for _, rq := range jw.requests {
 		if rq == nil {
@@ -212,7 +213,6 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 		}
 	}
 	jw.updateStatusLocked()
-	jw.mu.Unlock()
 }
 
 // The client-IP subsystem resolves addresses for tail-fetch and WebSocket

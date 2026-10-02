@@ -55,6 +55,11 @@ func (g htmlGetterString) JawsGetTag() any {
 //   - string is used unchanged.
 //   - Other values use escaped [fmt.Sprint] output.
 //
+// A wrapper embedding Binder[string] without JawsGetHTML uses its own JawsGet;
+// [Binder.Format] and [Binder.GetHTML] hooks on the embedded Binder do not run.
+// To use those hooks, define JawsGetHTML on the wrapper and forward to the
+// embedded Binder's [HTMLGetter] (via a type assertion for Binders from [New]).
+//
 // Getter[string] and [fmt.Stringer] adapters expose the wrapped value as an
 // implicit tag. The value must be accepted by [tag.TagExpand], directly or
 // through [tag.TagGetter]; JawsGetTag may return nil to leave it untagged.

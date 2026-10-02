@@ -21,11 +21,15 @@ func (errNotComparable) Is(target error) bool {
 }
 
 // NewErrNotComparable returns [ErrNotComparable] if x is not comparable.
-func NewErrNotComparable(x any) error {
-	if x != nil {
-		if v := reflect.ValueOf(x); !v.Comparable() {
-			return errNotComparable{t: reflect.TypeOf(x)}
+func NewErrNotComparable(x any) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errNotComparable{t: reflect.TypeOf(x)}
 		}
-	}
+	}()
+	// A map lookup checks every part of x, including zero-length arrays and
+	// fields after a NaN, without storing x or changing its equality semantics.
+	var keys map[any]struct{}
+	_ = keys[x]
 	return nil
 }

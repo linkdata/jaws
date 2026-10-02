@@ -101,6 +101,46 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 	}
 }
 
+func TestJsVarBrowserNumericConversion(t *testing.T) {
+	type stateType struct {
+		N uint8 `json:"n"`
+		M int   `json:"m"`
+	}
+	tests := []struct {
+		name, input, path string
+		want              stateType
+	}{
+		{name: "uint8 root", input: `={"n":300,"m":0}`, want: stateType{N: 44}},
+		{name: "uint8 nested", input: "n=300", path: "n", want: stateType{N: 44}},
+		{name: "int root", input: `={"n":0,"m":2.9}`, want: stateType{M: 2}},
+		{name: "int nested", input: "m=2.9", path: "m", want: stateType{M: 2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jw, rq := newCoreRequest(t)
+			var mu sync.RWMutex
+			state := stateType{}
+			store := newTestJsVarStore(t, jw, "client", &mu, &state)
+			var checked stateType
+			var checkedPath string
+			checks := 0
+			store.ClientCheck = func(_ *jaws.Element, next *stateType, path string) error {
+				checks++
+				checked = *next
+				checkedPath = path
+				return nil
+			}
+			binding, elem, _ := renderTestJsVar(t, rq, store)
+			if err := binding.JawsInput(elem, tt.input); err != nil {
+				t.Fatal(err)
+			}
+			if checks != 1 || checkedPath != tt.path || checked != tt.want || state != tt.want {
+				t.Fatalf("checks=%d path=%q checked=%+v state=%+v; want path=%q state=%+v", checks, checkedPath, checked, state, tt.path, tt.want)
+			}
+		})
+	}
+}
+
 func TestErrJsVarClientWriteError(t *testing.T) {
 	cause := errors.New("private check detail")
 	err := errJsVarClientWrite{cause}
@@ -158,6 +198,25 @@ func TestJsVarProposalEncodingRollback(t *testing.T) {
 	}
 	if patches, err := binding.pendingPatches(); err != nil || !reflect.DeepEqual(patches, []string{`={"Value":1}`}) {
 		t.Fatalf("rejected proposal correction = (%q, %v)", patches, err)
+	}
+}
+
+func TestJsVarInvalidServerValueRejectsInputAndCancelsUpdate(t *testing.T) {
+	jw, rq := newCoreRequest(t)
+	var mu sync.RWMutex
+	state := marshalRejectJsVarState{Value: 1}
+	store := newTestJsVarStore(t, jw, "client", &mu, &state)
+	store.ClientCheck = func(*jaws.Element, *marshalRejectJsVarState, string) error { return nil }
+	binding, elem, _ := renderTestJsVar(t, rq, store)
+	if changed, err := store.SetPath("Value", -1); err != nil || !changed {
+		t.Fatalf("SetPath = (%t, %v)", changed, err)
+	}
+	if err := binding.JawsInput(elem, "Value=2"); !errors.Is(err, errRejectJsVarTestValue) || state.Value != -1 {
+		t.Fatalf("invalid current value: state=%d err=%v", state.Value, err)
+	}
+	binding.JawsUpdate(elem)
+	if rq.Context().Err() == nil {
+		t.Fatal("invalid server value did not cancel request")
 	}
 }
 

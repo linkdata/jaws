@@ -24,10 +24,12 @@
 // [github.com/linkdata/jaws/lib/bind.MakeHTMLGetter]. Existing
 // [github.com/linkdata/jaws/lib/bind.HTMLGetter] values are used unchanged, and
 // plain strings and [html/template.HTML] are trusted HTML. Adapters for string-valued
-// [github.com/linkdata/jaws/lib/bind.Getter] and
-// [github.com/linkdata/jaws/lib/bind.Binder] values and [fmt.Stringer] output are
-// escaped. String and [html/template.HTMLAttr] render parameters, including slices,
-// and [NewTemplate] attribute strings are trusted raw attributes. Route untrusted
+// [github.com/linkdata/jaws/lib/bind.Getter] and [fmt.Stringer] values escape their
+// output. Binders from [github.com/linkdata/jaws/lib/bind.New] escape default
+// and Format output; GetHTML hook output is trusted HTML. A Binder[string]
+// wrapper without JawsGetHTML uses escaped JawsGet output. String and
+// [html/template.HTMLAttr] render parameters, including slices, and
+// [NewTemplate] attribute strings are trusted raw attributes. Route untrusted
 // content through an escaping adapter. Build attributes from untrusted values with
 // [github.com/linkdata/jaws/lib/htmlio.Attr] and a trusted name; convert the result
 // to string for [NewTemplate].

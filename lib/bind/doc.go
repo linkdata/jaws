@@ -8,7 +8,9 @@
 //
 // [MakeHTMLGetter] defines the package's HTML conversion boundary. Existing
 // [HTMLGetter] values are used unchanged; plain strings and [html/template.HTML]
-// are trusted. Its adapters for string-valued [Getter] and [Binder] values and
-// [fmt.Stringer] output escape their strings. Escape untrusted text before it
-// reaches a trusted form.
+// are trusted. Adapters for string-valued [Getter] and [fmt.Stringer] values
+// escape their strings. Binders from [New] render through JawsGetHTML: default
+// and [Binder.Format] output is escaped, while [Binder.GetHTML] output is trusted.
+// A Binder[string] wrapper without JawsGetHTML renders escaped JawsGet output.
+// Escape untrusted text before it reaches a trusted form.
 package bind

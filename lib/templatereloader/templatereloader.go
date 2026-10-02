@@ -49,6 +49,10 @@ type TemplateReloader struct {
 // [path/filepath.Glob] (used against the on-disk tree in debug builds), and
 // relpath must point at the on-disk root that mirrors the embedded fsys layout
 // so that path.Join(relpath, fpath) matches the same templates on disk.
+//
+// A directory embed such as `//go:embed assets` omits files and directories
+// starting with '.' or '_', although debug builds still find them on disk.
+// Use `//go:embed all:assets` to include them in normal builds too.
 func New(fsys fs.FS, fpath, relpath string) (jaws.TemplateLookuper, error) {
 	return create(deadlock.Debug, fsys, fpath, relpath, defaultReloadInterval)
 }

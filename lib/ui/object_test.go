@@ -176,7 +176,7 @@ func TestObject_Clicked_FallthroughOrder(t *testing.T) {
 		gotElem = append(gotElem, elem)
 		gotClick = append(gotClick, click)
 		return jaws.ErrEventUnhandled
-	})
+	}).InitialHTMLAttr(func(Object, *jaws.Element) template.HTMLAttr { return "" })
 
 	elem := &jaws.Element{}
 	click := jaws.Click{Name: "save", X: 1, Y: 2}
@@ -186,14 +186,21 @@ func TestObject_Clicked_FallthroughOrder(t *testing.T) {
 	if len(order) != 2 || order[0] != 2 || order[1] != 1 {
 		t.Fatalf("unexpected order %v", order)
 	}
-	if gotObj[0] != obj || gotObj[1] != first {
-		t.Fatalf("want hook objects [%p %p] got [%p %p]", obj, first, gotObj[0], gotObj[1])
+	if gotObj[0] != obj || gotObj[1] != obj {
+		t.Fatalf("want invoking object %p for both hooks, got [%p %p]", obj, gotObj[0], gotObj[1])
 	}
 	if gotElem[0] != elem || gotElem[1] != elem {
 		t.Fatalf("unexpected elem forwarding %#v", gotElem)
 	}
 	if gotClick[0] != click || gotClick[1] != click {
 		t.Fatalf("unexpected click forwarding %#v", gotClick)
+	}
+	order, gotObj = nil, nil
+	if err := first.JawsClick(elem, click); err != nil {
+		t.Fatalf("intermediate JawsClick() = %v", err)
+	}
+	if len(order) != 1 || order[0] != 1 || len(gotObj) != 1 || gotObj[0] != first {
+		t.Fatalf("intermediate call: order %v, objects %v; want [1], [%p]", order, gotObj, first)
 	}
 }
 
@@ -234,7 +241,7 @@ func TestObject_ContextMenu_FallthroughOrder(t *testing.T) {
 		order = append(order, 2)
 		gotObj = append(gotObj, got)
 		return jaws.ErrEventUnhandled
-	})
+	}).Clicked(func(Object, *jaws.Element, jaws.Click) error { return nil })
 
 	if err := obj.JawsContextMenu(nil, jaws.Click{Name: "menu"}); err != nil {
 		t.Fatalf("want nil got %v", err)
@@ -242,8 +249,15 @@ func TestObject_ContextMenu_FallthroughOrder(t *testing.T) {
 	if len(order) != 2 || order[0] != 2 || order[1] != 1 {
 		t.Fatalf("unexpected order %v", order)
 	}
-	if gotObj[0] != obj || gotObj[1] != first {
-		t.Fatalf("want hook objects [%p %p] got [%p %p]", obj, first, gotObj[0], gotObj[1])
+	if gotObj[0] != obj || gotObj[1] != obj {
+		t.Fatalf("want invoking object %p for both hooks, got [%p %p]", obj, gotObj[0], gotObj[1])
+	}
+	order, gotObj = nil, nil
+	if err := first.JawsContextMenu(nil, jaws.Click{Name: "menu"}); err != nil {
+		t.Fatalf("intermediate JawsContextMenu() = %v", err)
+	}
+	if len(order) != 1 || order[0] != 1 || len(gotObj) != 1 || gotObj[0] != first {
+		t.Fatalf("intermediate call: order %v, objects %v; want [1], [%p]", order, gotObj, first)
 	}
 }
 
@@ -313,7 +327,7 @@ func TestObject_InitialHTMLAttr(t *testing.T) {
 		gotObj = append(gotObj, got)
 		s = `data-second="2"`
 		return
-	})
+	}).Clicked(func(Object, *jaws.Element, jaws.Click) error { return nil })
 
 	if got := obj.JawsInitialHTMLAttr(elem); got != `data-second="2" data-first="1"` {
 		t.Fatalf("want %q got %q", `data-second="2" data-first="1"`, got)
@@ -321,8 +335,15 @@ func TestObject_InitialHTMLAttr(t *testing.T) {
 	if len(order) != 2 || order[0] != 2 || order[1] != 1 {
 		t.Fatalf("unexpected order %v", order)
 	}
-	if gotObj[0] != obj || gotObj[1] != firstObj {
-		t.Fatalf("want hook objects [%p %p] got [%p %p]", obj, firstObj, gotObj[0], gotObj[1])
+	if gotObj[0] != obj || gotObj[1] != obj {
+		t.Fatalf("want invoking object %p for both hooks, got [%p %p]", obj, gotObj[0], gotObj[1])
+	}
+	order, gotObj = nil, nil
+	if got := firstObj.JawsInitialHTMLAttr(elem); got != `data-first="1"` {
+		t.Fatalf("intermediate JawsInitialHTMLAttr() = %q", got)
+	}
+	if len(order) != 1 || order[0] != 1 || len(gotObj) != 1 || gotObj[0] != firstObj {
+		t.Fatalf("intermediate call: order %v, objects %v; want [1], [%p]", order, gotObj, firstObj)
 	}
 }
 
