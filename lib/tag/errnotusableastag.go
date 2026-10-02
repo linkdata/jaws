@@ -24,6 +24,9 @@ func (e errNotUsableAsTag) Error() (s string) {
 		s = e.t.String() + " is "
 	}
 	s += "not usable as tag"
+	if e.t != nil && e.t.Implements(tagGetterType) {
+		return s + "; this TagGetter cannot be a tag key; hint: break any JawsGetTag() cycle, or use a comparable and reflexive TagGetter value"
+	}
 	if e.tagGetterType != nil {
 		return s + fmt.Sprintf("; found nested TagGetter at %s (%s); hint: implement JawsGetTag() on this type to delegate to that value, or pass that nested TagGetter directly", e.tagGetterPath, e.tagGetterType)
 	}
@@ -49,9 +52,11 @@ func NewErrNotUsableAsTag(x any) error {
 
 func newErrNotUsableAsTag(x any) (err error) {
 	retErr := errNotUsableAsTag{t: reflect.TypeOf(x)}
-	if path, tgType, ok := findTagGetter(x); ok {
-		retErr.tagGetterPath = path
-		retErr.tagGetterType = tgType
+	if _, ok := x.(TagGetter); !ok {
+		if path, tgType, ok := findTagGetter(x); ok {
+			retErr.tagGetterPath = path
+			retErr.tagGetterType = tgType
+		}
 	}
 	return retErr
 }
@@ -82,11 +87,8 @@ func findTagGetter(x any) (path string, tgType reflect.Type, found bool) {
 			return false
 		}
 		t := v.Type()
-		if t.Implements(tagGetterType) {
+		if currentPath != "" && t.Implements(tagGetterType) {
 			path = currentPath
-			if path == "" {
-				path = "<value>"
-			}
 			tgType = t
 			found = true
 			return true
