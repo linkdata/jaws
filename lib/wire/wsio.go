@@ -3,8 +3,6 @@ package wire
 import (
 	"bytes"
 	"context"
-	"errors"
-	"io"
 	"sync"
 	"time"
 
@@ -156,10 +154,7 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 				return
 			}
 			writectx, writecancel := context.WithTimeout(ctx, writeTimeout)
-			var wc io.WriteCloser
-			if wc, err = ws.Writer(writectx, websocket.MessageText); err == nil {
-				err = writeData(wc, msg, outboundMsgCh)
-			}
+			err = ws.Write(writectx, websocket.MessageText, batchData(msg, outboundMsgCh))
 			writecancel()
 		}
 	}
@@ -190,7 +185,7 @@ func reportError(ctx context.Context, doneCh <-chan struct{}, ccf context.Cancel
 	}
 }
 
-func writeData(wc io.WriteCloser, firstMsg WsMsg, outboundMsgCh <-chan WsMsg) (err error) {
+func batchData(firstMsg WsMsg, outboundMsgCh <-chan WsMsg) []byte {
 	b := firstMsg.Append(nil)
 	// accumulate data to send as long as more messages are available until it
 	// exceeds writeBatchLimit
@@ -206,7 +201,5 @@ batchloop:
 			break batchloop
 		}
 	}
-	_, err = wc.Write(b)
-	err = errors.Join(err, wc.Close())
-	return
+	return b
 }
