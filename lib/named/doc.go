@@ -5,7 +5,7 @@
 // U+0000 (NUL). Labels are [html/template.HTML] and are rendered as trusted HTML;
 // escape user-controlled text before passing it to [NewBool] or [BoolArray.Add].
 //
-// [BoolArray] is the standard shared selection model for
+// A single-select [BoolArray] is the standard shared selection model for
 // [github.com/linkdata/jaws/lib/ui.Select] and
 // [github.com/linkdata/jaws/lib/ui.RequestWriter.RadioGroup].
 package named

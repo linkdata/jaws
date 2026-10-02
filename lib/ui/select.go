@@ -11,7 +11,8 @@ import (
 //
 // Its handler supplies the options and represents the selection as a string.
 // Option values must be non-empty and distinct. A string that matches no option
-// value represents no selection. [named.BoolArray] is the standard handler.
+// value represents no selection. The standard handler is [named.BoolArray]
+// constructed with named.NewBoolArray(false) or its zero value.
 //
 // The handler's dynamic value defines Select's identity and must be comparable
 // and equal to itself. Rebuilding with an equal handler lets a parent retain its
@@ -25,7 +26,9 @@ import (
 //
 // A typed-nil handler is called normally and must tolerate its nil receiver.
 //
-// Select supports one selected option; a multiple select is unsupported.
+// Select supports one selected option. The HTML multiple attribute and
+// multi-select BoolArray values are unsupported.
+//
 // A completed native form reset changes browser state without an input/change
 // event, so it does not update the Go binding. Reset the authoritative selection
 // from a JaWS-handled button with type="button", then dirty its tag.
@@ -39,6 +42,9 @@ var (
 )
 
 // NewSelect returns a single-selection Select backed by handler.
+//
+// A [named.BoolArray] handler must be single-select: use
+// named.NewBoolArray(false) or its zero value.
 //
 // See [Select] for handler requirements and native reset semantics.
 func NewSelect(handler named.SelectHandler) Select {
@@ -87,7 +93,9 @@ func (u Select) JawsInput(elem *jaws.Element, value string) (err error) {
 // Select renders a single-selection HTML select element.
 //
 // HTML attribute params are applied to the select element, but the multiple
-// attribute is unsupported because Select stores one selected option value.
+// attribute is unsupported. A [named.BoolArray] handler must be single-select:
+// use named.NewBoolArray(false) or its zero value.
+//
 // See [Select] for handler requirements and native reset semantics.
 func (rw RequestWriter) Select(handler named.SelectHandler, params ...any) error {
 	return rw.NewUI(NewSelect(handler), params...)
