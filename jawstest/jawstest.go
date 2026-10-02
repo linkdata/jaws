@@ -40,8 +40,8 @@ import (
 type TestRequest struct {
 	*jaws.Request
 	Recorder *httptest.ResponseRecorder // response recorder
-	ReadyCh  chan struct{}              // closed once the processing loop is running
-	DoneCh   chan struct{}              // closed once the processing loop has stopped
+	ReadyCh  <-chan struct{}            // closed once the processing loop is running
+	DoneCh   <-chan struct{}            // closed once the processing loop has stopped
 	InCh     chan wire.WsMsg            // send inbound WebSocket messages here
 	OutCh    <-chan wire.WsMsg          // outbound messages; buffered but must be drained or the loop stalls
 	BcastCh  chan wire.Message          // inject broadcasts here
