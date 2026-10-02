@@ -11,6 +11,14 @@ func (testFindTagGetter) JawsGetTag() any {
 	return Tag("tg")
 }
 
+func TestFindTagGetter_RootIsNotNested(t *testing.T) {
+	for _, value := range []any{testFindTagGetter{}, &testFindTagGetter{}} {
+		if path, tgType, found := findTagGetter(value); found || path != "" || tgType != nil {
+			t.Fatalf("%T root getter reported as nested: found=%v path=%q type=%v", value, found, path, tgType)
+		}
+	}
+}
+
 type testFindTagGetterCycle struct {
 	Next *testFindTagGetterCycle
 }
