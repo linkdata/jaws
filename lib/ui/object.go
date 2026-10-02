@@ -51,7 +51,7 @@ type ObjectInitialHTMLAttrHook = func(obj Object, elem *jaws.Element) (s templat
 //
 // The adapted innerHTML supplies the Object's tag. Adding hooks preserves it.
 // The tag remains subject to [tag.TagGetter]'s initialization, stability, and
-// concurrency requirements. Use [tag.TagExpand] to obtain flattened, validated keys.
+// concurrency requirements. Use [tag.TagExpand] to obtain flattened, validated tags.
 type Object interface {
 	bind.HTMLGetter
 	tag.TagGetter

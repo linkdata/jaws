@@ -19,11 +19,17 @@ import (
 
 const sessionGrace = time.Minute
 
-// Session stores server-side per-user state shared by one or more requests.
+// Session stores server-side state shared by one or more Requests.
 //
-// A Session is bound to the remote IP that created it. Its exported methods are
-// safe to call on a nil *Session; methods with results return the result type's
-// zero value, and the others do nothing.
+// Sessions live in memory and are bound to the remote IP that created them.
+// Their cookies have no explicit expiry or MaxAge. A Session starts with a
+// one-minute grace deadline; detaching a claimed Request refreshes that deadline,
+// while detaching an unclaimed Request leaves it unchanged. It expires once the
+// deadline passes with no attached Requests, and maintenance removes it.
+// [Jaws.Close] invalidates all Sessions and clears their data.
+//
+// Its exported methods are safe to call on a nil *Session; methods with results
+// return the result type's zero value, and the others do nothing.
 type Session struct {
 	jw        *Jaws
 	sessionID key.Key
@@ -473,8 +479,6 @@ func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Sessio
 	// collision can therefore make a stale cookie name a later Session. Preventing
 	// every reuse would require unbounded tombstones; if this probability/space
 	// tradeoff changes, widen or add a generation to the cookie token instead.
-	// Replacing crypto/rand.Reader to force a repeat is dependency fault injection,
-	// not a supported-use reproduction of the default random source's behavior.
 	for sess == nil {
 		sessionID := jw.nonZeroRandomLocked()
 		if _, ok := jw.sessions[sessionID]; !ok {

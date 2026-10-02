@@ -199,7 +199,7 @@ func Test_wsParse_IncompleteFails(t *testing.T) {
 	}{
 		{"nil", nil},
 		{"invalid What", []byte("invalid\t\t\n")},
-		{"old Set command", []byte("Set\tJid.1\tx=1\n")},
+		{"unknown Set command", []byte("Set\tJid.1\tx=1\n")},
 		{"missing ending linefeed", []byte("Click\t\t")},
 		{"just one tab", []byte("Click\t\n")},
 		{"newline instead of What", []byte("\n\t\t\n")},

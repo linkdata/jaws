@@ -196,9 +196,6 @@ type Auth interface {
 // Set [Jaws.MakeAuth] to your implementation to enforce real authorization. If
 // [Jaws.MakeAuth] is left nil, templates receive [DefaultAuth], which is
 // fail-open: see its documentation.
-//
-// It is a type alias so a bare func value can be assigned without conversion,
-// matching the sibling callback types [ConnectFn], [InputFn] and [HandleFunc].
 type MakeAuthFn = func(rq *Request) Auth
 
 // DefaultAuth is the permissive default [Auth] implementation used for templates

@@ -49,10 +49,6 @@ func runSetupWithoutPanic(t *testing.T, prefix string, setup func()) {
 	setup()
 }
 
-// Asset files are already tracked by git. Keep these tests focused on serving,
-// headers and integration behavior; do not add stored-hash provenance tests for
-// files whose contents and history are in the repository.
-
 func TestJawsBoot_Setup(t *testing.T) {
 	const prefix = "/static"
 	expected := expectedStaticAssets(t, testAssetsFS, "assets/static", prefix)

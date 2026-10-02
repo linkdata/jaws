@@ -5,174 +5,33 @@
 
 # JaWS
 
-JavaScript and WebSockets for creating responsive webpages.
+JavaScript and WebSockets for responsive web pages built in Go.
 
-JaWS embraces a "server holds the truth" philosophy and keeps the complexity
-of modern browser applications on the backend. The client-side script becomes
-a thin transport layer that faithfully relays events and DOM updates.
+JaWS renders HTML from server-side application state, binds controls to Go
+values, and sends targeted DOM updates over WebSockets. It integrates with
+`net/http`, Go templates, and routers that accept `http.Handler`.
 
-## Features
-
-* Moves web application state fully to the server.
-* Keeps the browser intentionally dumb -- no implicit trust in JavaScript logic
-  running on the client.
-* Binds application data to UI elements using user-defined tags and type-aware
-  binders.
-* Integrates with the standard library as well as third-party routers such as
-  Echo.
-* Ships with a small standard library of extensible UI widgets and helpers.
-
-The [demo application](https://github.com/linkdata/jawsdemo) is a commented,
-complete example.
-
-## Installation
-
-JaWS is distributed as a standard Go module:
-
-```bash
+```sh
 go get github.com/linkdata/jaws
 ```
 
-For the standard widget APIs, see the
-[`lib/ui` package documentation](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui).
+## Documentation
 
-### AI skill
+The [documentation wiki](doc/README.md) is the introduction and how-to guide for
+both people and coding assistants.
 
-This repository includes an AI skill under `.agents/skills/jaws/`.
-To install it in your local AI skills tree, copy both `SKILL.md` and
-`agents/openai.yaml` into `~/.agents/skills/jaws/`.
+- [Getting started](doc/getting-started.md): run a complete application.
+- [Pages and widgets](doc/ui/README.md), [bindings](doc/bindings.md), and [tags](doc/tags.md): build interactive pages.
+- [Sessions](doc/sessions.md) and [deployment](doc/deployment.md): configure an application for users.
+- [Examples](doc/examples.md): small examples and collaborative Minesweeper.
+- [Go API reference](https://pkg.go.dev/github.com/linkdata/jaws): exported types and methods.
 
-Copying from a JaWS checkout keeps the skill baseline matched to that source.
-The commands below install the current development skill from `main`; when
-versioned source is available, its adjacent `AI.md` guides are canonical for
-version-specific behavior.
+The [demo application](https://github.com/linkdata/jawsdemo) shows a complete
+project. Repository checks are described in [development](doc/development.md).
 
-Using `curl`:
+## Coding-assistant entry point
 
-```bash
-mkdir -p "$HOME/.agents/skills/jaws/agents"
-curl -fsSL https://raw.githubusercontent.com/linkdata/jaws/main/.agents/skills/jaws/SKILL.md \
-	-o "$HOME/.agents/skills/jaws/SKILL.md"
-curl -fsSL https://raw.githubusercontent.com/linkdata/jaws/main/.agents/skills/jaws/agents/openai.yaml \
-	-o "$HOME/.agents/skills/jaws/agents/openai.yaml"
-```
-
-## Quick start
-
-The following minimal program renders a single range input whose value stays
-on the server. Copy the snippet into a new module, run `go mod tidy`, and start
-it with `go run .`. Visiting <http://localhost:8080/> demonstrates the full
-request lifecycle.
-
-```go
-package main
-
-import (
-	"html/template"
-	"log/slog"
-	"net/http"
-	"sync"
-
-	"github.com/linkdata/jaws"
-	"github.com/linkdata/jaws/lib/bind"
-	"github.com/linkdata/jaws/lib/ui"
-)
-
-const indexhtml = `
-<html>
-  <head>{{$.HeadHTML}}</head>
-  <body>{{with .Dot}}
-    {{$.Range .}}
-  {{end}}{{$.TailHTML}}</body>
-</html>
-`
-
-type Percent uint8
-
-func main() {
-	jw, err := jaws.New() // create a default JaWS instance
-	if err != nil {
-		panic(err)
-	}
-	defer jw.Close()           // ensure we clean up
-	jw.Logger = slog.Default() // optionally set the logger to use
-
-	// parse our template and inform JaWS about it
-	templates := template.Must(template.New("index").Parse(indexhtml))
-	if err := jw.AddTemplateLookuper(templates); err != nil {
-		panic(err)
-	}
-
-	go jw.Serve()                                 // start the JaWS processing loop
-	http.DefaultServeMux.Handle("GET /jaws/", jw) // ensure the JaWS routes are handled
-
-	var mu sync.Mutex
-	percent := Percent(50)
-
-	http.DefaultServeMux.Handle("GET /{$}", ui.Handler(jw, "index", bind.New(&mu, &percent)))
-	panic(http.ListenAndServe("localhost:8080", nil))
-}
-```
-
-Next steps usually include composing standard widgets and binders, creating
-semantic controls with `ui.Object`, and registering precise dependency tags.
-The [Minesweeper example](./examples/minesweeper/) shows those patterns in a
-complete collaborative application. Introduce sessions when state should belong
-to an individual user.
-
-## Choose a UI source
-
-Widget helpers such as `$.Span` and `$.Text` choose the HTML element. Their first
-argument supplies its content or value. Choose that source by what it needs to do:
-
-| Source need | Use |
-| --- | --- |
-| Read and write a field protected by a lock | `bind.New(&mu, &value)`; its pointer is the dependency tag. Chain `Clicked`, `ContextMenu`, or `InitialHTMLAttr` on the Binder when needed. |
-| Compute read-only text or HTML | `bind.StringGetterFunc(fn, tags...)` for escaped text, or `bind.HTMLGetterFunc(fn, tags...)` for trusted HTML. Supply tags for values you need to dirty. |
-| Add actions or attributes to HTML content without a Binder | Use `ui.New(content)` and its `Clicked`, `ContextMenu`, or `InitialHTMLAttr` methods. Pass the resulting Object to an HTML widget. |
-| Use a reusable source with custom value, event, or attribute behavior | Implement `bind.HTMLGetter` for HTML widgets or `bind.Setter[T]` for inputs, together with the needed handler interfaces. Use `bind.Getter[T]` for value-only reads. |
-
-For an element that standard widgets cannot render or update, implement
-`jaws.UI`. See [`MakeHTMLGetter`](https://pkg.go.dev/github.com/linkdata/jaws/lib/bind#MakeHTMLGetter),
-[`MakeSetter`](https://pkg.go.dev/github.com/linkdata/jaws/lib/bind#MakeSetter),
-and [`ui.New`](https://pkg.go.dev/github.com/linkdata/jaws/lib/ui#New) for the
-conversion rules.
-
-## Production guidance
-
-Before deploying a JaWS application, review the [production hardening
-guidance](./AI.md#production-hardening).
-
-## AI and maintainer guidance
-
-The version-matched [AI guidance](./AI.md) documents implementation invariants,
-lifecycle details, and links to the guide for every package. Exported API
-contracts remain in the [Go package documentation](https://pkg.go.dev/github.com/linkdata/jaws).
-
-## Dependencies
-
-JaWS keeps dependencies outside the standard library to a minimum:
-
-* [coder/websocket](https://github.com/coder/websocket) provides WebSocket
-  functionality.
-* [linkdata/staticserve](https://github.com/linkdata/staticserve) serves hashed
-  static assets.
-* [linkdata/jq](https://github.com/linkdata/jq) provides JSON path access for
-  `JsVarStore` values.
-* [linkdata/secureheaders](https://github.com/linkdata/secureheaders) provides
-  the security-header baseline.
-* [linkdata/deadlock](https://github.com/linkdata/deadlock) provides debug-aware
-  locks.
-
-## Learn more
-
-* Browse the [Go package documentation](https://pkg.go.dev/github.com/linkdata/jaws)
-  for an API-by-API overview.
-* Read the [AI and maintainer guidance](./AI.md) for implementation details and
-  the complete package-guide index.
-* Inspect the compile-checked [examples](./examples/example_test.go) to copy and
-  adapt the setup sequence.
-* Run the [Minesweeper example](./examples/minesweeper/) to explore targeted
-  updates in a complete server-driven UI.
-* Explore the [demo application](https://github.com/linkdata/jawsdemo) for a more
-  complete project structure.
+The optional [JaWS skill](.agents/skills/jaws/SKILL.md) links to the same wiki.
+To install it, copy `.agents/skills/jaws/` from the checkout into
+`~/.agents/skills/jaws/`. Use documentation from the module version selected by
+the application.

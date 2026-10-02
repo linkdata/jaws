@@ -116,8 +116,10 @@ type Binder[T comparable] interface {
 	// JawsSetLocked stores value while the Binder write lock is held.
 	//
 	// Callers must already hold the write lock; the method does not lock or
-	// unlock and must not be called (nor [Setter.JawsSet] called) from within a
-	// hook. It applies this chain's [SetHook]s.
+	// unlock. A [SetHook] can delegate to the previous Binder's JawsSetLocked;
+	// calling the current chain's method would recurse. Do not call
+	// [Setter.JawsSet] from a locked hook. JawsSetLocked applies this chain's
+	// [SetHook]s.
 	//
 	// The [Binder] returned by [New] stores value when it differs from the stored
 	// value and returns [jaws.ErrValueUnchanged] otherwise. This comparison may

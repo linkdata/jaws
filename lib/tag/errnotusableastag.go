@@ -8,7 +8,7 @@ import (
 
 // ErrNotUsableAsTag is returned when a value cannot be used as a tag.
 //
-// A tag key must be comparable at runtime and equal to itself so later dirtying,
+// A tag must be comparable at runtime and equal to itself so later dirtying,
 // broadcasts and event routing can match it reliably. This error also matches
 // [ErrNotComparable] via [errors.Is].
 var ErrNotUsableAsTag errNotUsableAsTag
@@ -37,10 +37,10 @@ func (errNotUsableAsTag) Is(target error) bool {
 	return target == ErrNotUsableAsTag || target == ErrNotComparable
 }
 
-// NewErrNotUsableAsTag returns [ErrNotUsableAsTag] for an unusable tag key.
+// NewErrNotUsableAsTag returns [ErrNotUsableAsTag] for an unusable tag.
 //
 // It returns nil for nil and for values that are comparable at runtime and equal
-// to themselves. It only validates key usability; it does not apply [TagExpand]'s
+// to themselves. It only validates tag usability; it does not apply [TagExpand]'s
 // tag-type policy, so a value may pass this check and still be rejected with
 // [ErrIllegalTagType].
 func NewErrNotUsableAsTag(x any) error {

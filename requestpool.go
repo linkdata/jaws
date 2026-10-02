@@ -3,7 +3,7 @@ package jaws
 // This file manages server-side Request lifecycles: NewRequest creates a pending
 // Request with a fresh, never-reused identity and reusable buffers, UseRequest
 // claims it when the WebSocket connects, the pending cap retires the
-// oldest unclaimed Request, the random helpers mint identity keys, and
+// oldest idle pending Request, the random helpers mint identity keys, and
 // recycle/cancelIfCurrent finish completed Requests, returning only their buffers
 // to the pool.
 
@@ -137,9 +137,17 @@ func (jw *Jaws) refreshRuntimeSeconds() {
 // limitPendingRequestsLocked evicts pending Requests from bucketKey until
 // the cap is satisfied. Caller must hold jw.mu.
 func (jw *Jaws) limitPendingRequestsLocked(bucketKey netip.Addr) {
-	// Evicting rather than refusing a newcomer keeps a stalled client from
-	// blocking the bucket until timeout. See "Pending-cap availability tradeoff"
-	// in AI.md.
+	// Eviction admits new page loads even when stalled clients fill the bucket.
+	// Healthy occupancy depends on page-arrival rate and render-to-claim latency:
+	// claiming removes a Request from the pending set. Refusing newcomers would
+	// let clients that never connect monopolize a shared bucket by replenishing
+	// expired entries. Eviction can instead retire another client's pending key
+	// within that bucket; claimed and running Requests are outside this pool.
+	// Random selection would lose the preference for idle Requests without
+	// preventing a sustained flood from filling the bucket. Source ports, user
+	// agents, transport connections, and anonymous cookies do not establish a
+	// stable client identity. Stronger admission control belongs at a trusted
+	// proxy or an authenticated application boundary.
 	limit := jw.MaxPendingRequestsPerIP
 	if limit > 0 {
 		nowSeconds := jw.runtimeSeconds.Load()
