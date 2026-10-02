@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -560,7 +561,7 @@ func TestWriteLoop_ConcatenatesMessagesClosedChannel(t *testing.T) {
 }
 
 func TestWriteLoop_SplitsAtBatchLimit(t *testing.T) {
-	// Drive the outbound backlog well past writeBatchLimit so writeData must split
+	// Drive the outbound backlog well past writeBatchLimit so batchData must split
 	// it across more than one frame. The channel is buffered, pre-filled and closed,
 	// so the coalescing loop is deterministic: it stops only on reaching the batch
 	// limit or draining the (closed) channel, never on a transient empty read.
@@ -626,6 +627,58 @@ func TestWriteLoop_SplitsAtBatchLimit(t *testing.T) {
 			t.Fatalf("frame %d is %d bytes, want < %d", i, len(f), writeBatchLimit+len(frame))
 		}
 	}
+}
+
+func TestWriteLoop_WritesOneFinalFrame(t *testing.T) {
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = peer.Close() }()
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	server, err := websocket.Accept(testHijacker{
+		ResponseRecorder: httptest.NewRecorder(),
+		serverConn:       peer,
+	}, req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = server.CloseNow() }()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	doneCh := make(chan struct{})
+	msg := WsMsg{What: what.Alert, Data: "hello"}
+	want := msg.Format()
+	outCh := make(chan WsMsg, 1)
+	outCh <- msg
+	writeDone := make(chan struct{})
+	go func() {
+		WriteLoop(ctx, nil, doneCh, outCh, time.Hour, server)
+		close(writeDone)
+	}()
+	if err := client.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	header := make([]byte, 2)
+	if _, err := io.ReadFull(client, header); err != nil {
+		t.Fatal(err)
+	}
+	if header[0] != 0x81 || header[1] != byte(len(want)) {
+		t.Fatalf("frame header = %x, want final text frame of %d bytes", header, len(want))
+	}
+	payload := make([]byte, header[1])
+	if _, err := io.ReadFull(client, payload); err != nil {
+		t.Fatal(err)
+	}
+	if string(payload) != want {
+		t.Fatalf("frame payload = %q, want %q", payload, want)
+	}
+	cancel()
+	_ = client.Close()
+	waitDone(t, writeDone, "WriteLoop after context cancel")
 }
 
 func TestWriteLoop_RespectsContext(t *testing.T) {
@@ -897,12 +950,12 @@ func closeWireBubble(cancel context.CancelCauseFunc, conns ...*websocket.Conn) f
 }
 
 // adapted from nhooyr.io/websocket/internal/test/wstest.Pipe
-func pipe(t *testing.T) (clientConn, serverConn *websocket.Conn) {
+func pipe(t testing.TB) (clientConn, serverConn *websocket.Conn) {
 	t.Helper()
 	return pipeWithDialOptions(t, websocket.DialOptions{})
 }
 
-func pipeWithDialOptions(t *testing.T, dialOpts websocket.DialOptions) (clientConn, serverConn *websocket.Conn) {
+func pipeWithDialOptions(t testing.TB, dialOpts websocket.DialOptions) (clientConn, serverConn *websocket.Conn) {
 	t.Helper()
 	dialOpts.HTTPClient = &http.Client{
 		Transport: fakeTransport{

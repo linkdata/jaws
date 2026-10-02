@@ -72,7 +72,7 @@ positive values use the canonical [jid](../jid/AI.md) form.
   threshold by one record. Every WebSocket write gets a separate positive
   deadline; the loop closes the socket on exit and reports only failures not
   caused by cancellation or shutdown.
-- Always close the writer and join its close error with the write error.
+- Write each buffered batch as one WebSocket message with one final frame.
 
 The browser implementation is described in [assets](../assets/AI.md). Widget
 payload limits and JsVar representation constraints live in [ui](../ui/AI.md).

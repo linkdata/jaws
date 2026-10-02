@@ -141,7 +141,11 @@ func Test_wsParse_CompletePasses(t *testing.T) {
 		// Update. Pins that empty-command frames are accepted, not rejected.
 		{"empty What is Update", "\t\t\n", WsMsg{What: what.Update}},
 		{"unquoted", "Input\tJid.1\ttrue\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "true"}},
+		{"unquoted tab preserved", "Input\tJid.1\ta\tb\n", WsMsg{Jid: jid.Jid(1), What: what.Input, Data: "a\tb"}},
 		{"normal", "Input\tJid.2\t\"c\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "c"}},
+		{"quoted raw tab", "Input\tJid.2\t\"a\tb\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "a\tb"}},
+		{"JSON escaped slash", "Input\tJid.2\t\"\\/\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "/"}},
+		{"JSON surrogate pair", "Input\tJid.2\t\"\\ud83d\\ude00\"\n", WsMsg{Jid: jid.Jid(2), What: what.Input, Data: "😀"}},
 		{"context menu", "ContextMenu\tJid.2\t\"1 2 5 name\"\n", WsMsg{Jid: jid.Jid(2), What: what.ContextMenu, Data: "1 2 5 name"}},
 		{"newline", "Input\tJid.3\t\"c\\nd\"\n", WsMsg{Jid: jid.Jid(3), What: what.Input, Data: "c\nd"}},
 		// JsVar and Call data is taken verbatim even when it begins with a double
