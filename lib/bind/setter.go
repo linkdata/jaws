@@ -48,6 +48,11 @@ func (s setterStatic[T]) JawsGetTag() any {
 // [ErrValueNotSettable] from [Setter.JawsSet]. MakeSetter panics for any other
 // type.
 //
+// Existing Setter values are returned unchanged. Getter adapters use the Getter
+// as their tag but do not retain its event or initial-attribute methods. Pass
+// event handlers or literal attributes as widget render parameters, or use a
+// Setter that implements those methods.
+//
 // The adapters still satisfy Setter, so [github.com/linkdata/jaws/lib/ui.Number]
 // and [github.com/linkdata/jaws/lib/ui.Range] apply their editable-source rules.
 // Pass an existing Getter directly, or use [MakeGetter] for a static value, to

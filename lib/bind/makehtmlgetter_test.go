@@ -22,6 +22,34 @@ type testBinderStringNoHTML struct {
 	Binder[string]
 }
 
+type testOptionalHooks struct{}
+
+func (testOptionalHooks) JawsClick(*jaws.Element, jaws.Click) error { return nil }
+
+func (testOptionalHooks) JawsContextMenu(*jaws.Element, jaws.Click) error { return nil }
+
+func (testOptionalHooks) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr { return "disabled" }
+
+type testHookedGetter struct{ testOptionalHooks }
+
+func (testHookedGetter) JawsGet(*jaws.Element) string { return "text" }
+
+type testHookedStringer struct{ testOptionalHooks }
+
+func (testHookedStringer) String() string { return "text" }
+
+type testHookedHTMLGetter struct{ testOptionalHooks }
+
+func (testHookedHTMLGetter) JawsGetHTML(*jaws.Element) template.HTML { return "text" }
+
+type testHookedNamedString string
+
+func (testHookedNamedString) JawsClick(*jaws.Element, jaws.Click) error { return nil }
+
+func (testHookedNamedString) JawsContextMenu(*jaws.Element, jaws.Click) error { return nil }
+
+func (testHookedNamedString) JawsInitialHTMLAttr(*jaws.Element) template.HTMLAttr { return "disabled" }
+
 type testBinderStringMask struct {
 	Binder[string]
 }
@@ -126,6 +154,37 @@ func Test_MakeHTMLGetter(t *testing.T) {
 			}
 			if gotTag := got.(tag.TagGetter).JawsGetTag(); gotTag != tt.wantTag {
 				t.Errorf("MakeHTMLGetter(%s).JawsGetTag() = %v, want %v", tt.name, gotTag, tt.wantTag)
+			}
+		})
+	}
+}
+
+func TestMakeHTMLGetterOptionalHooks(t *testing.T) {
+	var mu sync.Mutex
+	value := "text"
+	binder := New(&mu, &value)
+	for _, tt := range []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{"HTMLGetter", testHookedHTMLGetter{}, true},
+		{"bind.New binder", binder, true},
+		{"Binder interface wrapper", testBinderStringNoHTML{binder}, true},
+		{"Getter", testHookedGetter{}, false},
+		{"Stringer", testHookedStringer{}, false},
+		{"formatted value", testHookedNamedString("text"), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MakeHTMLGetter(tt.value)
+			if _, ok := got.(jaws.ClickHandler); ok != tt.want {
+				t.Errorf("ClickHandler = %t, want %t", ok, tt.want)
+			}
+			if _, ok := got.(jaws.ContextMenuHandler); ok != tt.want {
+				t.Errorf("ContextMenuHandler = %t, want %t", ok, tt.want)
+			}
+			if _, ok := got.(jaws.InitialHTMLAttrHandler); ok != tt.want {
+				t.Errorf("InitialHTMLAttrHandler = %t, want %t", ok, tt.want)
 			}
 		})
 	}

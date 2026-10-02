@@ -64,6 +64,10 @@ func (g htmlGetterString) JawsGetTag() any {
 // implicit tag. The value must be accepted by [tag.TagExpand], directly or
 // through [tag.TagGetter]; JawsGetTag may return nil to leave it untagged.
 //
+// The Binder[string] adapter retains the Binder's event and initial-attribute
+// methods. Other adapters do not retain optional event or initial-attribute
+// methods.
+//
 // Plain strings are not escaped; do not pass untrusted text as a plain string.
 func MakeHTMLGetter(value any) HTMLGetter {
 	switch v := value.(type) {

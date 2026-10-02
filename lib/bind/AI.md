@@ -61,6 +61,9 @@ must expand to usable tag keys or intentionally return nil through
 tag slice slots. Nested containers and referenced values remain caller-owned
 and must keep stable tag identity.
 
+Existing `HTMLGetter` values and the `Binder[string]` adapter retain event and
+initial-attribute methods. Other adapters do not retain them.
+
 ## Setter targets and UI integration
 
 Writable input sources need a stable target so an Element can reconcile a
@@ -79,6 +82,9 @@ contract in `lib/ui/AI.md` and on the exported UI symbols.
 return `ErrValueNotSettable`; that affects whether numeric widgets consider the
 source editable. Pass a Getter directly, or use `MakeGetter`, when the intended
 numeric control is read-only.
+
+The Getter adapter uses the Getter as its tag but does not retain event or
+initial-attribute methods.
 
 ## Verification
 
