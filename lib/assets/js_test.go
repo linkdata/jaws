@@ -3040,7 +3040,7 @@ document.getElementById = function(id) {
 	return null;
 };
 
-const positions = ["Jid.2", "0", "Jid.3", "null", "-1", "Jid.02", "application-id"];
+const positions = ["Jid.2", "0", "00", "Jid.3", "null", "-1", "Jid.02", "application-id"];
 const resolved = positions.map(function(pos) {
 	const elem = jawsInsertWhere(parent, pos);
 	return elem ? elem.id : "";
@@ -3058,7 +3058,7 @@ process.stdout.write(JSON.stringify({ lookups: lookups, resolved: resolved }));
 	if !reflect.DeepEqual(got.Lookups, []string{"Jid.2", "Jid.3"}) {
 		t.Fatalf("Insert child lookups = %v", got.Lookups)
 	}
-	want := []string{"Jid.2", "Jid.2", "", "", "", "", ""}
+	want := []string{"Jid.2", "Jid.2", "", "", "", "", "", ""}
 	if !reflect.DeepEqual(got.Resolved, want) {
 		t.Fatalf("Insert position results = %v, want %v", got.Resolved, want)
 	}

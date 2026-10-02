@@ -27,8 +27,8 @@ Important server-to-browser payload meanings:
   delete a JSON object property. Request-scoped `Call` has an empty Jid; Element-scoped
   `Call` and every `JsVar` identify an Element.
 - `Inner`, `Replace`, and `Append` carry trusted HTML. `Delete` needs no Data.
-  `Remove` identifies a direct child Jid. `Insert` is a child Jid or nonnegative
-  child index, LF, and trusted HTML.
+  `Remove` identifies a direct child Jid. `Insert` is a child Jid or canonical
+  nonnegative decimal child index, LF, and trusted HTML.
 - `SAttr` is an attribute name, LF, and unescaped logical value. `RAttr` carries
   the name. `SClass` and `RClass` carry one class. `Value` carries textual live
   control state rather than an HTML attribute value.
