@@ -6,9 +6,8 @@ import (
 	"testing"
 )
 
-// TestBoolArray_ConcurrentLockOrdering exercises several shared [BoolArray]
-// read and write methods under contention. It does not cover [Bool.JawsSet],
-// [BoolArray.Add], or [BoolArray.JawsContains].
+// TestBoolArray_ConcurrentLockOrdering exercises array reads and writes alongside
+// [Bool.JawsSet], which acquires the array lock before the Bool lock.
 //
 // Real goroutines are used deliberately, not testing/synctest: synctest serializes
 // the goroutines in its bubble, which would hide data races and prevent the
@@ -23,6 +22,7 @@ func TestBoolArray_ConcurrentLockOrdering(t *testing.T) {
 	for _, n := range names {
 		nba.Add(n, template.HTML(n))
 	}
+	selected := nba.data[0] // save the pointer before WriteLocked clears old slices
 
 	const goroutines = 16
 	const iterations = 200
@@ -33,11 +33,11 @@ func TestBoolArray_ConcurrentLockOrdering(t *testing.T) {
 			defer wg.Done()
 			for i := range iterations {
 				name := names[(g+i)%len(names)]
-				// Exercise Set, WriteLocked, JawsSet, Get, Count, IsChecked,
-				// String, ReadLocked, and JawsGet. The locked callbacks touch
+				// Exercise Set, WriteLocked, both JawsSet paths, Add,
+				// JawsContains, and reads. The locked callbacks touch
 				// only the provided slice and Bool methods, honoring the
 				// non-reentrancy contract.
-				switch i % 8 {
+				switch i % 11 {
 				case 0:
 					nba.Set(name, true)
 				case 1:
@@ -59,6 +59,12 @@ func TestBoolArray_ConcurrentLockOrdering(t *testing.T) {
 				case 7:
 					_ = nba.JawsSet(elem, name)
 					_ = nba.JawsGet(elem)
+				case 8:
+					_ = selected.JawsSet(elem, (g+i)%2 == 0)
+				case 9:
+					nba.Add(name, template.HTML(name))
+				case 10:
+					_ = nba.JawsContains(elem)
 				}
 			}
 		}(g)

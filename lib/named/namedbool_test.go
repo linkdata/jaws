@@ -69,6 +69,28 @@ func TestNamedBool_JawsSetCheckedValueDeselectsCheckedSibling(t *testing.T) {
 	}
 }
 
+func TestNamedBool_StandaloneJawsSetDirtiesBool(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, rq := newTestRequest(t)
+		defer closeBubbleRequest(jw, rq)
+
+		nb := NewBool(nil, "only", "only", false)
+		var hits atomic.Int32
+		registerDirtyProbe(rq, nb, &hits)
+		trigger := rq.NewElement(noopUI{})
+		if err := nb.JawsSet(trigger, true); err != nil {
+			t.Fatal(err)
+		}
+		if !nb.Checked() {
+			t.Fatal("standalone Bool should be checked")
+		}
+		waitForDirtyProbes(t, func() bool { return hits.Load() > 0 })
+		if err := nb.JawsSet(trigger, true); !errors.Is(err, jaws.ErrValueUnchanged) {
+			t.Fatalf("repeat JawsSet error = %v, want ErrValueUnchanged", err)
+		}
+	})
+}
+
 type dirtyProbe struct {
 	hits *atomic.Int32
 }

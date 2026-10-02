@@ -3,6 +3,7 @@ package named
 import (
 	"io"
 	"slices"
+	"strconv"
 
 	"github.com/linkdata/jaws"
 	"github.com/linkdata/jaws/lib/htmlio"
@@ -29,11 +30,7 @@ func RenderBoolOption(elem *jaws.Element, w io.Writer, nb *Bool, params []any) e
 // UpdateBoolOption updates a rendered <option>'s live selected state to match nb.
 func UpdateBoolOption(elem *jaws.Element, nb *Bool) {
 	// Single source of the option's update behavior, shared with ui.Option.
-	if nb.Checked() {
-		elem.SetValue("true")
-	} else {
-		elem.SetValue("false")
-	}
+	elem.SetValue(strconv.FormatBool(nb.Checked()))
 }
 
 // namedBoolOption is an internal UI wrapper used by BoolArray.JawsContains.
