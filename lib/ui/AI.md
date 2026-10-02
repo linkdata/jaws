@@ -209,8 +209,10 @@ precedence over setter identity.
 
 Tags passed as render params register dependencies but do not replace the
 source-derived target. Editable Number and Range fail rendering without a usable
-target. The reusable nonnumeric input bases render but cannot automatically
-restore rejected or normalized browser values without one.
+target. `InputText`, `InputBool`, and `InputDate` record their setter-derived
+target when `RenderInput` renders an input. Their promoted `JawsInput` methods
+use that target to reconcile rejected or normalized browser values. Without a
+usable setter-derived target, automatic reconciliation does not occur.
 
 A custom setter containing a slice is not comparable, so expose its synchronized
 backing pointer explicitly:
@@ -445,9 +447,22 @@ func (w *Article) JawsRender(e *jaws.Element, wr io.Writer, params []any) error 
 }
 ```
 
-For string, bool, and date controls, embed or compose the corresponding typed
-input base. Number and Range are complete widgets rather than reusable numeric
-bases because they own parsing, formatting, and event baselines.
+For a custom HTML input, embed the matching string, bool, or date base and call
+its `RenderInput` method from `JawsRender`. The base supplies `JawsInput` and
+`JawsUpdate`:
+
+```go
+type Email struct{ ui.InputText }
+
+func (u *Email) JawsRender(e *jaws.Element, w io.Writer, params []any) error {
+	return u.RenderInput(e, w, "email", params...)
+}
+```
+
+Construct it with `&Email{InputText: ui.InputText{Setter: bind.New(&mu, &value)}}`.
+`RenderInput` emits an `<input>` element; `Textarea` has its own render path.
+Number and Range are complete widgets rather than reusable numeric bases
+because they own parsing, formatting, and event baselines.
 
 For a container with only a distinct type and tag, embed a Container value. If
 extra behavior is needed, keep it in a named field and delegate render and update

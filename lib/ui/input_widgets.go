@@ -60,13 +60,20 @@ func (u *Input) maybeDirty(elem *jaws.Element, inErr error) (err error) {
 
 // InputText is the reusable base for string input widgets.
 //
-// A widget embedding InputText must back at most one live [jaws.Element].
+// A widget embedding InputText must back at most one live [jaws.Element]. Call
+// [InputText.RenderInput] from the embedding widget's JawsRender method.
 type InputText struct {
 	Input
 	bind.Setter[string]
 }
 
-func (u *InputText) renderStringInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+// RenderInput renders a string-backed HTML <input> element.
+//
+// It registers the setter through [jaws.Element.ApplyGetter], applies render
+// parameters and initial setter attributes, and remembers the rendered value
+// for JawsUpdate. With a usable setter tag, JawsInput can reconcile rejected or
+// normalized browser values. htmlType becomes the escaped type attribute.
+func (u *InputText) RenderInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	v := u.JawsGet(elem)
@@ -94,13 +101,21 @@ func (u *InputText) JawsInput(elem *jaws.Element, value string) (err error) {
 
 // InputBool is the reusable base for boolean input widgets.
 //
-// A widget embedding InputBool must back at most one live [jaws.Element].
+// A widget embedding InputBool must back at most one live [jaws.Element]. Call
+// [InputBool.RenderInput] from the embedding widget's JawsRender method.
 type InputBool struct {
 	Input
 	bind.Setter[bool]
 }
 
-func (u *InputBool) renderBoolInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+// RenderInput renders a boolean-backed HTML <input> element.
+//
+// It registers the setter through [jaws.Element.ApplyGetter], applies render
+// parameters and initial setter attributes, and remembers the rendered value
+// for JawsUpdate. With a usable setter tag, JawsInput can reconcile rejected or
+// normalized browser values. Use "checkbox" or "radio" for htmlType so the
+// browser sends the checked-state values JawsInput expects.
+func (u *InputBool) RenderInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	v := u.JawsGet(elem)
@@ -149,6 +164,8 @@ func (u *InputBool) JawsInput(elem *jaws.Element, value string) (err error) {
 // value's own location, but a browser edit normalizes the bound [time.Time] to
 // midnight UTC of the picked date, and only years 1 through 9999 round-trip; see
 // [InputDate.JawsInput].
+//
+// Call [InputDate.RenderInput] from an embedding widget's JawsRender method.
 type InputDate struct {
 	Input
 	bind.Setter[time.Time]
@@ -158,7 +175,14 @@ func (u *InputDate) str(v time.Time) string {
 	return v.Format(assets.ISO8601)
 }
 
-func (u *InputDate) renderDateInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
+// RenderInput renders a date-backed HTML <input> element.
+//
+// It registers the setter through [jaws.Element.ApplyGetter], applies render
+// parameters and initial setter attributes, and remembers the rendered value
+// for JawsUpdate. With a usable setter tag, JawsInput can reconcile rejected or
+// normalized browser values. Use "date" for htmlType: [InputDate.JawsInput]
+// parses non-empty values as YYYY-MM-DD.
+func (u *InputDate) RenderInput(elem *jaws.Element, w io.Writer, htmlType string, params ...any) (err error) {
 	getterAttrs := u.applyGetterAttrs(elem, u.Setter)
 	attrs := append(elem.ApplyParams(params), getterAttrs...)
 	v := u.JawsGet(elem)
