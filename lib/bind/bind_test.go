@@ -847,80 +847,55 @@ func testBind_Hooks[T comparable](t *testing.T, testval T) {
 	testBind_Hook_Get(t, testval)
 }
 
-func testBind_StringSetter(t *testing.T, v Setter[string]) {
-	val := v.JawsGet(nil) + "!"
+func testBind_Setter[T comparable](t *testing.T, v Setter[T], next func(T) T) {
+	t.Helper()
+	val := next(v.JawsGet(nil))
 	if err := v.JawsSet(nil, val); err != nil {
 		t.Error(err)
 	}
-	if x := v.JawsGet(nil); x != val {
-		t.Error(x)
+	if got := v.JawsGet(nil); got != val {
+		t.Errorf("JawsGet() = %v, want %v", got, val)
 	}
 }
 
 func TestBindFunc_String(t *testing.T) {
 	var mu deadlock.RWMutex
 	var val string
+	next := func(v string) string { return v + "!" }
 
 	testBind_Hooks(t, "foo")
-	testBind_StringSetter(t, New(&mu, &val))
-	testBind_StringSetter(t, New(&mu, &val).Success(func() {}))
-}
-
-func testBind_FloatSetter(t *testing.T, v Setter[float64]) {
-	val := v.JawsGet(nil) + 1
-	if err := v.JawsSet(nil, val); err != nil {
-		t.Error(err)
-	}
-	if x := v.JawsGet(nil); x != val {
-		t.Error(x)
-	}
+	testBind_Setter(t, New(&mu, &val), next)
+	testBind_Setter(t, New(&mu, &val).Success(func() {}), next)
 }
 
 func TestBindFunc_Float(t *testing.T) {
 	var mu deadlock.Mutex
 	var val float64
+	next := func(v float64) float64 { return v + 1 }
 
 	testBind_Hooks(t, float64(1.23))
-	testBind_FloatSetter(t, New(&mu, &val))
-	testBind_FloatSetter(t, New(&mu, &val).Success(func() {}))
-}
-
-func testBind_BoolSetter(t *testing.T, v Setter[bool]) {
-	val := !v.JawsGet(nil)
-	if err := v.JawsSet(nil, val); err != nil {
-		t.Error(err)
-	}
-	if x := v.JawsGet(nil); x != val {
-		t.Error(x)
-	}
+	testBind_Setter(t, New(&mu, &val), next)
+	testBind_Setter(t, New(&mu, &val).Success(func() {}), next)
 }
 
 func TestBindFunc_Bool(t *testing.T) {
 	var mu deadlock.Mutex
 	var val bool
+	next := func(v bool) bool { return !v }
 
 	testBind_Hooks(t, true)
-	testBind_BoolSetter(t, New(&mu, &val))
-	testBind_BoolSetter(t, New(&mu, &val).Success(func() {}))
-}
-
-func testBind_TimeSetter(t *testing.T, v Setter[time.Time]) {
-	val := v.JawsGet(nil).Add(time.Second)
-	if err := v.JawsSet(nil, val); err != nil {
-		t.Error(err)
-	}
-	if x := v.JawsGet(nil); x != val {
-		t.Error(x)
-	}
+	testBind_Setter(t, New(&mu, &val), next)
+	testBind_Setter(t, New(&mu, &val).Success(func() {}), next)
 }
 
 func TestBindFunc_Time(t *testing.T) {
 	var mu deadlock.Mutex
 	var val time.Time
+	next := func(v time.Time) time.Time { return v.Add(time.Second) }
 
 	testBind_Hooks(t, time.Now())
-	testBind_TimeSetter(t, New(&mu, &val))
-	testBind_TimeSetter(t, New(&mu, &val).Success(func() {}))
+	testBind_Setter(t, New(&mu, &val), next)
+	testBind_Setter(t, New(&mu, &val).Success(func() {}), next)
 }
 
 func TestBind_GetHTML_Default(t *testing.T) {
