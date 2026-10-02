@@ -390,6 +390,10 @@ that multiplicity. Tbody embeds a Container fixed to `tbody`; replacing it is
 unsupported. `Select.JawsInput` ignores a nil-interface handler; render and
 update require one. Typed nils are called normally.
 
+`Select` accepts one selected option. When using `named.BoolArray` as its
+handler, construct it with `named.NewBoolArray(false)` or use the zero value.
+Do not pass the HTML `multiple` attribute or a multi-select `BoolArray`.
+
 Each child must render one addressable direct DOM node with its Element Jid.
 `NewTemplate` supplies that wrapper. The slice returned by `JawsContains` becomes
 read-only after return. Duplicate child values require a widget type that
