@@ -215,16 +215,23 @@ func (nba *BoolArray) JawsGet(elem *jaws.Element) string {
 // JawsSet selects every [Bool] named name and updates affected UI. In
 // single-select mode, it clears Bools with other names, or clears all Bools if
 // name is absent. It returns [jaws.ErrValueUnchanged] if no state changed.
-func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) (err error) {
+func (nba *BoolArray) JawsSet(elem *jaws.Element, name string) error {
 	nba.mu.Lock()
 	changed := nba.setChangedLocked(name, true)
 	nba.mu.Unlock()
+	return dirtyChanged(elem, nba, changed)
+}
+
+// dirtyChanged updates changed Bools and their array after value locks are released.
+func dirtyChanged(elem *jaws.Element, nba *BoolArray, changed []*Bool) error {
 	if len(changed) == 0 {
 		return jaws.ErrValueUnchanged
 	}
 	for _, nb := range changed {
 		elem.Dirty(nb)
 	}
-	elem.Dirty(nba)
-	return
+	if nba != nil {
+		elem.Dirty(nba)
+	}
+	return nil
 }

@@ -84,7 +84,7 @@ func (nb *Bool) JawsGet(elem *jaws.Element) bool {
 // the restrictions on using a removed Bool.
 //
 // It returns [jaws.ErrValueUnchanged] if no checked state changes.
-func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
+func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) error {
 	nba := nb.nba
 	// Lock ordering invariant: when both locks are needed, the owning BoolArray's
 	// mutex is always acquired before the Bool's mutex (as done here and by the
@@ -96,27 +96,14 @@ func (nb *Bool) JawsSet(elem *jaws.Element, checked bool) (err error) {
 		nba.mu.Lock()
 	}
 	var changed []*Bool
-	nb.mu.Lock()
-	if nb.checked != checked {
-		nb.checked = checked
+	if nb.Set(checked) {
 		changed = append(changed, nb)
 	}
-	nb.mu.Unlock()
 	if nba != nil {
 		changed = append(changed, nba.deselectOthersLocked(nb.name, checked)...)
 		nba.mu.Unlock()
 	}
-	if len(changed) == 0 {
-		err = jaws.ErrValueUnchanged
-		return
-	}
-	for _, nb := range changed {
-		elem.Dirty(nb)
-	}
-	if nba != nil {
-		elem.Dirty(nba)
-	}
-	return
+	return dirtyChanged(elem, nba, changed)
 }
 
 // Checked reports whether nb is checked.

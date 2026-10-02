@@ -133,11 +133,7 @@ func (u *InputBool) JawsUpdate(elem *jaws.Element) {
 	if u.Last.Swap(v) != v {
 		// jaws.js applies a what.Value of "true"/"false" to a checkable input's
 		// checked state, so send the boolean as that literal text.
-		txt := "false"
-		if v {
-			txt = "true"
-		}
-		elem.SetValue(txt)
+		elem.SetValue(strconv.FormatBool(v))
 	}
 }
 
