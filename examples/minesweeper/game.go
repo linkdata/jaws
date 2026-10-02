@@ -150,7 +150,7 @@ func (g *game) clickCell(target *cell) (tags []any) {
 		return
 	}
 	for _, revealedCell := range revealed {
-		tags = append(tags, revealedCell)
+		tags = append(tags, revealedCell.CellTag())
 	}
 	tags = append(tags, &g.revealed)
 	return
@@ -170,7 +170,7 @@ func (g *game) toggleFlag(target *cell) (tags []any) {
 	} else {
 		g.flags--
 	}
-	tags = []any{target, &g.flags}
+	tags = []any{target.CellTag(), &g.flags}
 	return
 }
 

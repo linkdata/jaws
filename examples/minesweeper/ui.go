@@ -97,7 +97,7 @@ func setCellAttributes(elem *jaws.Element, state, label string, disabled bool) {
 // including getter, tag, and event-handler registration.
 //
 // A fresh definition is constructed by [cell.Button] for every template
-// execution. It retains the authoritative cell, never copied presentation state.
+// execution and reads the shared cell.
 type cellButton struct {
 	ui.Button
 	source *cell
@@ -113,10 +113,8 @@ func (c *cell) Button() *cellButton {
 	}
 }
 
-// JawsGetTag returns the precise dependency tag for this cell.
-func (c *cell) JawsGetTag() any {
-	// Register shared dependencies separately so Dirty(c) does not expand into
-	// a board-wide refresh.
+// CellTag returns the cell pointer used as its content dependency tag.
+func (c *cell) CellTag() any {
 	return c
 }
 
@@ -154,8 +152,7 @@ func (button *cellButton) JawsUpdate(elem *jaws.Element) {
 	state, label, disabled := c.attributesLocked()
 	c.game.mu.Unlock()
 
-	// Release the application lock before entering JaWS queueing. These values
-	// are a local capture for one control update, not retained presentation state.
+	// Release the application lock before entering JaWS queueing.
 	setCellAttributes(elem, state, label, disabled)
 	elem.SetInner(inner)
 }
@@ -163,17 +160,24 @@ func (button *cellButton) JawsUpdate(elem *jaws.Element) {
 // JawsClick handles a reveal or Shift-click flag attempt.
 func (c *cell) JawsClick(elem *jaws.Element, click jaws.Click) error {
 	if click.Shift {
-		elem.Request.Dirty(c.game.toggleFlag(c)...)
+		dirtyTags(elem, c.game.toggleFlag(c))
 	} else {
-		elem.Request.Dirty(c.game.clickCell(c)...)
+		dirtyTags(elem, c.game.clickCell(c))
 	}
 	return nil
 }
 
 // JawsContextMenu handles a flag attempt.
 func (c *cell) JawsContextMenu(elem *jaws.Element, _ jaws.Click) error {
-	elem.Request.Dirty(c.game.toggleFlag(c)...)
+	dirtyTags(elem, c.game.toggleFlag(c))
 	return nil
+}
+
+func dirtyTags(elem *jaws.Element, tags []any) {
+	// A flood can change more cells than one tag expansion permits.
+	for _, dependency := range tags {
+		elem.Dirty(dependency)
+	}
 }
 
 // Board returns the fixed grid of cells for template iteration.
@@ -200,7 +204,7 @@ func (g *game) Stats() bind.Getter[string] {
 // NewGameAction returns the semantic action for the New game Button.
 func (g *game) NewGameAction() ui.Object {
 	return ui.New("New game").Clicked(func(_ ui.Object, elem *jaws.Element, _ jaws.Click) error {
-		elem.Request.Dirty(g.reset()...)
+		dirtyTags(elem, g.reset())
 		return nil
 	})
 }
