@@ -2411,6 +2411,22 @@ func TestJaws_SecureHeadersMiddleware_UsesJawsCSP(t *testing.T) {
 	}
 }
 
+func TestJaws_SecureHeadersMiddleware_DoesNotExposeJawsMethods(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	handler := jw.SecureHeadersMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	if _, ok := handler.(interface{ Close() }); ok {
+		t.Fatal("middleware exposes Jaws.Close")
+	}
+	if _, ok := handler.(interface{ ContentSecurityPolicy() string }); ok {
+		t.Fatal("middleware exposes Jaws.ContentSecurityPolicy")
+	}
+}
+
 func TestJaws_SecureHeadersMiddleware_UsesUpdatedJawsCSP(t *testing.T) {
 	jw, err := New()
 	if err != nil {
