@@ -192,8 +192,10 @@ The getter runs during rendering and each update. Class operations preserve the
 template's `username` class; both branches handle changes in either direction.
 **The getter queues attribute and class commands during initial rendering too.**
 `TailHTML` or the WebSocket applies them; they are absent from the initial HTML.
-For initial markup without these commands, pass [initial attribute parameters
-and override `JawsUpdate`](ui/custom.md#update-attributes-after-rendering).
+If initial state must appear in the HTML, pass [initial attributes](ui/README.md#choose-initial-attributes)
+as well. Keep the getter for later changes; duplicate initial commands are
+usually acceptable. A [custom update](ui/custom.md#update-attributes-after-rendering)
+can avoid them when measured cost justifies it.
 The escaped name is written as the Span's content.
 After changing state under the same lock and unlocking, dirty its member tag, such as
 `jw.Dirty(myUser.PermissionsTag())`. The template has already registered all
