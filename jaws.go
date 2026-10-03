@@ -112,9 +112,11 @@ type Jaws struct {
 	// WebSocket upgrades are rejected. Defaults to false; enable only behind a
 	// single reverse proxy you control.
 	TrustForwardedHeaders bool
-	Logger                Logger     // Optional logger; [Jaws.Log] dispatches Error calls asynchronously and serially
-	Debug                 bool       // Enables debug HTML and reporting of otherwise-silent WebSocket transport errors. Call GenerateHeadHTML after changing it.
-	MakeAuth              MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
+	// Logger receives diagnostics; nil causes [Jaws.MustLog] to panic on errors.
+	// [Jaws.Log] dispatches Error calls asynchronously and serially.
+	Logger   Logger
+	Debug    bool       // Enables debug HTML and reporting of otherwise-silent WebSocket transport errors. Call GenerateHeadHTML after changing it.
+	MakeAuth MakeAuthFn // Function to create ui.With.Auth for Templates. If nil, templates get the fail-open DefaultAuth (IsAdmin()==true for everyone); set it to enforce authorization. See DefaultAuth.
 	// BaseContext is the parent context for Requests.
 	//
 	// New uses [context.Background]. If a custom context implements the optional

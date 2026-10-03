@@ -436,10 +436,16 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		}
 		for _, client := range clients {
 			messages := drainWire(t, client.request, "reset updates")
-			assertOnlyElementUpdates(t, messages, client.target, client.other, client.statistics)
+			assertOnlyElementUpdates(t, messages, client.target, client.statistics)
 			assertCellUpdates(t, messages, client.target, "hidden", "Row 1, column 1: hidden", "", false)
-			assertCellUpdates(t, messages, client.other, "hidden", "Row 1, column 2: hidden", "", false)
 			assertInnerUpdate(t, messages, client.statistics, "Mines: 1 | Flags: 0 | Safe cells left: 8")
+		}
+		first.InCh <- wire.WsMsg{Jid: resetElem.Jid(), What: what.Click, Data: "0 0 0 reset"}
+		waitForUpdates()
+		for _, client := range clients {
+			if messages := drainWire(t, client.request, "unchanged reset"); len(messages) != 0 {
+				t.Fatalf("unchanged reset sent updates: %+v", messages)
+			}
 		}
 
 		// Independent Request loops may mutate the shared game concurrently. The
@@ -468,6 +474,87 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 			assertOnlyElementUpdates(t, messages, client.target, client.other)
 			assertCellUpdates(t, messages, client.target, "flagged", "Row 1, column 1: flagged", flagHTML, true)
 			assertCellUpdates(t, messages, client.other, "flagged", "Row 1, column 2: flagged", flagHTML, true)
+		}
+	})
+}
+
+func TestLargeFloodUpdatesBothRequests(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw := newExampleJaws(t)
+		tmpl, err := template.ParseFS(assetsFS, "assets/ui/*.html")
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := newGame(20, 20, 20)
+		g.started = true
+		// A mine wall separates 200 reachable cells from 180 still-hidden cells.
+		for _, cell := range g.cells[10] {
+			cell.mine = true
+		}
+		g.calculateAdjacencyLocked()
+
+		type client struct {
+			request  *jawstest.TestRequest
+			messages []wire.WsMsg
+		}
+		clients := make([]*client, 0, 2)
+		for range 2 {
+			c := &client{request: jawstest.NewTestRequest(jw, nil)}
+			<-c.request.ReadyCh
+			collected := make(chan struct{})
+			go func() {
+				defer close(collected)
+				for msg := range c.request.OutCh {
+					c.messages = append(c.messages, msg)
+				}
+			}()
+			t.Cleanup(func() {
+				c.request.Close()
+				<-c.request.DoneCh
+				<-collected
+			})
+			var body strings.Builder
+			rw := ui.RequestWriter{Request: c.request.Request, Writer: &body}
+			if err := tmpl.ExecuteTemplate(&body, "index.html", ui.With{RequestWriter: rw, Dot: g}); err != nil {
+				t.Fatal(err)
+			}
+			c.request.BcastCh <- wire.Message{What: what.Update}
+			clients = append(clients, c)
+		}
+		settle := func() {
+			synctest.Wait()
+			time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
+			synctest.Wait()
+		}
+		settle()
+		for i, c := range clients {
+			if len(c.messages) != 0 {
+				t.Fatalf("client %d initial render sent %d records, want 0", i, len(c.messages))
+			}
+		}
+
+		first := clients[0].request
+		target := first.GetElements(g.cells[0][0])[0]
+		first.InCh <- wire.WsMsg{Jid: target.Jid(), What: what.Click, Data: "0 0 0 reveal"}
+		settle()
+		if g.gameOver || g.won || g.revealed != 200 {
+			t.Fatalf("flood left gameOver=%v won=%v revealed=%d, want false, false, 200", g.gameOver, g.won, g.revealed)
+		}
+		for i, c := range clients {
+			if len(c.messages) != 4*200+1 {
+				t.Fatalf("client %d sent %d records, want 801", i, len(c.messages))
+			}
+			stats := c.request.GetElements(&g.revealed)[0]
+			want := []*jaws.Element{stats}
+			for _, row := range g.cells[:10] {
+				for _, cell := range row {
+					elem := c.request.GetElements(cell)[0]
+					want = append(want, elem)
+					assertCellUpdates(t, c.messages, elem, "revealed", cell.labelLocked(), cell.htmlLocked(), true)
+				}
+			}
+			assertOnlyElementUpdates(t, c.messages, want...)
+			assertInnerUpdate(t, c.messages, stats, "Mines: 20 | Flags: 0 | Safe cells left: 180")
 		}
 	})
 }
@@ -647,9 +734,26 @@ func TestGameResetReturnsOnlyChangedTags(t *testing.T) {
 	flaggedCell := flagged.cells[0][0]
 	_ = flagged.toggleFlag(flaggedCell)
 	tags := flagged.reset()
-	assertTagSetEqual(t, tags, &flagged.flags, &flagged.cells)
+	assertTagSetEqual(t, tags, &flagged.flags, flaggedCell.CellTag())
 	if flaggedCell.flagged || flagged.flags != 0 {
 		t.Fatalf("reset() left a pre-start flag: cell=%#v flags=%d", flaggedCell, flagged.flags)
+	}
+
+	playing := newGame(2, 2, 1)
+	playing.started, playing.revealed, playing.flags = true, 1, 1
+	playing.cells[0][0].revealed = true
+	playing.cells[0][1].flagged = true
+	playing.cells[1][0].mine = true
+	playing.cells[1][1].adjacent = 1
+	tags = playing.reset()
+	assertTagSetEqual(t, tags, &playing.started, &playing.revealed, &playing.flags,
+		playing.cells[0][0].CellTag(), playing.cells[0][1].CellTag())
+	for _, row := range playing.cells {
+		for _, cell := range row {
+			if cell.mine || cell.revealed || cell.flagged || cell.adjacent != 0 {
+				t.Fatalf("reset() left cell state: %#v", cell)
+			}
+		}
 	}
 
 	g := newGame(2, 2, 1)
@@ -889,7 +993,8 @@ func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
 	}
 	assertTagSetEqual(t, flagTags, cell, &g.flags)
 
-	g2 := newGame(3, 3, 1)
+	// The first safe reveal wins this board, so reset re-enables every cell.
+	g2 := newGame(2, 2, 3)
 	_ = g2.clickCell(g2.cells[0][0])
 	resetTags, err := jawstag.TagExpand(g2.reset())
 	if err != nil {

@@ -110,8 +110,7 @@ func (l *warnCountLogger) Error(string, ...any) {}
 // TestTemplate_DefaultAuthWarnsOncePerJawsAcrossRenders verifies that with
 // MakeAuth unset, rendering a template that consults .Auth.IsAdmin logs the
 // fail-open warning only once per Jaws instance across many renders. The reused
-// jaws.Jaws.DefaultAuth keeps its sync.Once effective; a fresh DefaultAuth
-// allocated per render (the previous behavior) re-warns on every render.
+// jaws.Jaws.DefaultAuth keeps its sync.Once effective.
 func TestTemplate_DefaultAuthWarnsOncePerJawsAcrossRenders(t *testing.T) {
 	jw, rq := newCoreRequest(t)
 	logger := &warnCountLogger{substr: "DefaultAuth.IsAdmin returns true"}

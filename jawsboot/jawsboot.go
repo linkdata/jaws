@@ -11,7 +11,7 @@ import (
 )
 
 // assetsFS holds Bootstrap v5.3.8 from https://getbootstrap.com/. Follow the
-// version-update checklist in AI.md when updating the files.
+// version-update checklist in ../doc/bootstrap.md when updating the files.
 //
 //go:embed assets/static
 var assetsFS embed.FS
@@ -54,8 +54,8 @@ func Setup(jw *jaws.Jaws, handleFn jaws.HandleFunc, prefix string) (urls []*url.
 			// pattern syntax in the logical URL path as literal data.
 			handleFn(staticserve.NormalizeGET(u.String()), ss)
 		}
-		// Quietly 404 the predictable devtools source-map probes for the bundled
-		// assets; they are served only at their exact content-hashed paths.
+		// Source maps are not bundled. Exact 404 routes prevent devtools probes
+		// from falling through to an application's wildcard handler.
 		for _, name := range []string{"bootstrap.bundle.min.js.map", "bootstrap.min.css.map"} {
 			u := &url.URL{Path: path.Join(rootedPrefix, name)}
 			handleFn(staticserve.NormalizeGET(u.String()), http.NotFoundHandler())

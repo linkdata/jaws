@@ -16,7 +16,7 @@ func TestParse(t *testing.T) {
 		{"blank is Update", "", Update},
 		{"Update", "Update", Update},
 		{"JsVar", "JsVar", JsVar},
-		{"old Set name", "Set", Invalid},
+		{"unknown Set name", "Set", Invalid},
 		{"Inner", "Inner", Inner},
 		{"ContextMenu", "ContextMenu", ContextMenu},
 		{"lowercase is not matched", "inner", Invalid},

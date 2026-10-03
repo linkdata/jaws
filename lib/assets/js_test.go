@@ -18,10 +18,6 @@ import (
 	"github.com/linkdata/staticserve"
 )
 
-// Asset files are already tracked by git. Keep these tests focused on generated
-// HTML and browser behavior; do not add stored-hash provenance tests for files
-// whose contents and history are in the repository.
-
 func Test_PreloadHTML(t *testing.T) {
 	const extraScript = "someExtraScript.js"
 	const extraScriptWithQuery = "someExtraQuery.js?x=1&copy=2"

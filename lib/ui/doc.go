@@ -5,43 +5,17 @@
 // [Range] for numeric controls; [Container], [Tbody], [Select], and [MultiSelect]
 // for dynamic children; and [Template], [Handler], and [RequestWriter] for templates.
 //
-// Every non-nil value used as a [github.com/linkdata/jaws.UI] must be comparable
-// at runtime and equal to itself, and is scoped to one Request. Construct fresh
-// widgets for each Request; they may share synchronized application state,
-// binders, handlers, and tags.
+// Widgets follow [github.com/linkdata/jaws.UI]'s request ownership and equality
+// requirements. Input widgets retain state for one live Element; other widgets
+// document their supported multiplicity on their concrete types.
 //
-// Within one Request, a widget normally backs one live
-// [github.com/linkdata/jaws.Element]. Widgets based on [HTMLInner], plus [Img],
-// [Option], [Template], [Container], [Tbody], [Select], and [MultiSelect], support
-// multiple live Elements under their concrete contracts. Input widgets and [JsVarBinding] require
-// distinct widget values.
+// [HTMLInner] widgets adapt content with
+// [github.com/linkdata/jaws/lib/bind.MakeHTMLGetter]. Plain strings are trusted
+// HTML; adapters for string-valued getters escape their text. Existing
+// [github.com/linkdata/jaws/lib/bind.HTMLGetter] values retain their own rendering
+// behavior. Render-parameter strings are trusted raw attributes.
 //
-// [NewContainer], [NewTbody], [NewSelect], [NewMultiSelect], and [NewTemplate] return
-// definition values. Use them as values; taking their addresses replaces definition equality
-// with pointer identity and is unsupported.
+// The [widget guide] covers templates, inputs, containers, and custom widgets.
 //
-// HTML-inner widgets route content through
-// [github.com/linkdata/jaws/lib/bind.MakeHTMLGetter]. Existing
-// [github.com/linkdata/jaws/lib/bind.HTMLGetter] values are used unchanged, and
-// plain strings and [html/template.HTML] are trusted HTML. Adapters for string-valued
-// [github.com/linkdata/jaws/lib/bind.Getter] and [fmt.Stringer] values escape their
-// output. Binders from [github.com/linkdata/jaws/lib/bind.New] escape default
-// and Format output; GetHTML hook output is trusted HTML. A Binder[string]
-// wrapper without JawsGetHTML uses escaped JawsGet output. String and
-// [html/template.HTMLAttr] render parameters, including slices, and
-// [NewTemplate] attribute strings are trusted raw attributes. Route untrusted
-// content through an escaping adapter. Build attributes from untrusted values with
-// [github.com/linkdata/jaws/lib/htmlio.Attr] and a trusted name; convert the result
-// to string for [NewTemplate].
-//
-// Browser input, JsVar proposal, click, and context-menu events are forwarded
-// only while the WebSocket is open and are not replayed. Native form reset does
-// not update Go bindings. Independently bound [Radio] values do not form one
-// server-side group by sharing an HTML name; see [RequestWriter.RadioGroup].
-//
-// Each browser-to-server WebSocket message is limited to 32 KiB by
-// [github.com/linkdata/jaws.Request.ServeHTTP]. Standard widgets do not chunk
-// payloads. An oversized message closes the connection, and its read-limit error
-// is retained in the Request cancellation cause, which is passed to
-// [github.com/linkdata/jaws.Jaws.Log].
+// [widget guide]: https://github.com/linkdata/jaws/blob/main/doc/ui/README.md
 package ui

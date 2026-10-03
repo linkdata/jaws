@@ -84,7 +84,9 @@ func (g *game) reset() (tags []any) {
 
 	// A started game has placed mines. Before the first reveal, a nonzero flag
 	// count is the only way any cell can differ from its reset state.
-	boardChanged := g.started || g.flags != 0
+	if !g.started && g.flags == 0 {
+		return
+	}
 	if g.started {
 		tags = append(tags, &g.started)
 	}
@@ -100,16 +102,20 @@ func (g *game) reset() (tags []any) {
 	if g.flags != 0 {
 		tags = append(tags, &g.flags)
 	}
-	g.resetLocked()
-	if boardChanged {
-		tags = append(tags, &g.cells)
-	}
+	tags = append(tags, g.resetLocked()...)
 	return
 }
 
-func (g *game) resetLocked() {
+func (g *game) resetLocked() (tags []any) {
+	if g.gameOver {
+		// Every button must be re-enabled after a terminal game.
+		tags = append(tags, &g.cells)
+	}
 	for _, row := range g.cells {
 		for _, current := range row {
+			if !g.gameOver && (current.revealed || current.flagged) {
+				tags = append(tags, current.CellTag())
+			}
 			current.reset()
 		}
 	}
@@ -118,6 +124,7 @@ func (g *game) resetLocked() {
 	g.won = false
 	g.revealed = 0
 	g.flags = 0
+	return
 }
 
 // clickCell applies a reveal attempt and returns the changed dependency tags.
@@ -150,7 +157,7 @@ func (g *game) clickCell(target *cell) (tags []any) {
 		return
 	}
 	for _, revealedCell := range revealed {
-		tags = append(tags, revealedCell)
+		tags = append(tags, revealedCell.CellTag())
 	}
 	tags = append(tags, &g.revealed)
 	return
@@ -170,7 +177,7 @@ func (g *game) toggleFlag(target *cell) (tags []any) {
 	} else {
 		g.flags--
 	}
-	tags = []any{target, &g.flags}
+	tags = []any{target.CellTag(), &g.flags}
 	return
 }
 

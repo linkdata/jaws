@@ -186,28 +186,28 @@ func expand(depth int, tagValue any, result []any, active []any, inGetter *bool)
 	}
 }
 
-// TagExpand expands tagValue into a flat list of unique, usable tag keys.
+// TagExpand expands tagValue into a flat list of unique, usable tags.
 //
 // tagValue may be nil, a [Tag], []Tag, []any, a [TagGetter], or another value that is
-// comparable at runtime and equals itself. A nil interface contributes no keys. A
+// comparable at runtime and equals itself. A nil interface contributes no tags. A
 // typed nil is a non-nil interface and follows the normal rules for its dynamic type,
 // including dispatch to [TagGetter.JawsGetTag] when it implements [TagGetter].
 //
 // The predeclared string, bool, signed integer, unsigned integer other than uintptr,
 // and floating-point types are rejected with [ErrIllegalTagType], as are
 // [template.HTML], [template.HTMLAttr], [jid.Jid] and [key.Key]. An unusable expanded
-// key is rejected with [ErrNotUsableAsTag], which also matches [ErrNotComparable]
+// tag is rejected with [ErrNotUsableAsTag], which also matches [ErrNotComparable]
 // under errors.Is. Expansion allows at most 10 nested levels and 100 unique
 // tags; exceeding either limit returns [ErrTooManyTags]. A count failure can
 // return 101 partial entries.
 //
 // On error, result contains the tags expanded before the failure. If an expanded
-// value is not usable as a tag key, result is nil and err matches
+// value is not usable as a tag, result is nil and err matches
 // [ErrNotUsableAsTag].
 //
 // A single call may invoke a [TagGetter] more than once, and later calls may expand
 // the same value again. When expansion encounters a cyclic TagGetter graph, it uses
-// the participating TagGetter values themselves as keys; they must therefore be
+// the participating TagGetter values themselves as tags; they must therefore be
 // usable as tags. Implementations must satisfy [TagGetter]'s stable-identity contract.
 //
 // TagExpand does not copy input slices or slices returned by
@@ -222,9 +222,7 @@ func TagExpand(tagValue any) (result []any, err error) {
 	// trees with a small number of leaves. The depth and unique-tag limits guard
 	// accidental recursion and fan-out; they are not a work budget for adversarial
 	// graphs. In particular, a compact DAG can repeat the same shared subtree along
-	// exponentially many paths while producing one unique tag. Do not complicate the
-	// expansion semantics or TagGetter call behavior to optimize such constructed
-	// inputs unless the public contract first grows an explicit hostile-input model.
+	// exponentially many paths while producing one unique tag.
 	// NewErrNotUsableAsTag rejects tags that are not comparable at runtime, so the
 	// existing == tag dedup in appendUniqueTag does not panic on them. recover
 	// stays as a defense-in-depth net: should a non-comparable value ever reach

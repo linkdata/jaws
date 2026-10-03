@@ -247,8 +247,8 @@ func (jw *Jaws) clientIP(r *http.Request) (ip netip.Addr) {
 }
 
 // forwardedClientIP extracts the client IP from proxy-supplied headers.
-// It uses the rightmost X-Forwarded-For address across all header lines, falling
-// back to X-Real-IP. Conflicting valid addresses yield no forwarded IP.
+// It parses only the rightmost element of each header's last line, preferring
+// X-Forwarded-For over X-Real-IP. Conflicting valid addresses yield no forwarded IP.
 func forwardedClientIP(h http.Header) (ip netip.Addr, ok bool) {
 	xff := lastHeaderIP(h.Values("X-Forwarded-For"))
 	xrip := lastHeaderIP(h.Values("X-Real-Ip"))

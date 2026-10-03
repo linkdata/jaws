@@ -1,271 +1,158 @@
 ---
 name: jaws
-description: Build or refactor Go UIs with github.com/linkdata/jaws. Use for page and partial rendering, containers, binders, events, dependency tags, sessions, or updates.
+description: Design, implement, or review Go UIs using github.com/linkdata/jaws. Find version-matched documentation and validate JaWS design decisions about templates, widgets, bindings, attributes, tags, and updates.
 metadata:
-  short-description: Build apps with JaWS
+  short-description: JaWS guides and design checklists
 ---
 
-# JaWS application design
+# JaWS
 
-Build the UI directly from synchronized server state. JaWS is an immediate-mode,
-server-driven UI framework, not MVC. Authoritative server state is the only
-application state model; this is a design requirement, not a preference.
+## Find the matching documentation
 
-## Match the application version first
-
-Resolve the JaWS source selected by the consumer module, for example with:
+In a JaWS checkout, use its `doc/README.md`. In a consuming application, find
+its selected module source, including a local `replace`, with:
 
 ```sh
 go list -m -f '{{.Dir}}' github.com/linkdata/jaws
 ```
 
-Use that directory, including any active `replace`; never substitute a sibling
-checkout or guidance from another version.
+Open `doc/README.md` there. All guide paths below are relative to that module
+root. Use `go doc <package>.<Symbol>` for exported API contracts. The
+[online wiki](https://github.com/linkdata/jaws/tree/main/doc) describes the
+development branch and may differ from the selected version.
 
-Read only the version-matched guides relevant to the task:
+## Validate each design decision
 
-- `lib/ui/AI.md` for handlers, templates, widgets, containers, or JsVar.
-- `lib/bind/AI.md` for binders, getters, setters, conversion, or hooks.
-- `lib/tag/AI.md` for choosing, registering, expanding, or debugging dependency
-  keys.
-- Root `AI.md` for Requests, Elements, dirty dispatch, serving, sessions,
-  routing, context, or transport behavior.
-- `examples/AI.md` and one relevant example guide when producing example code.
+**Every time you make or change a decision below, check its checklist against
+the implementation.** Resolve failed checks before proceeding; run interaction
+checks once that interaction is runnable. Read the named
+local guide for details. Skip checklists for decisions not touched; do not add
+review artifacts unless requested.
 
-When changing JaWS itself, also follow its repository rule to read the root
-guide and the guide beside every package changed. If an installed dependency
-does not contain a guide, inspect its exported docs and source instead.
+### Choose state ownership and bindings
 
-## Immediate-mode ownership model
+Guide: `doc/bindings.md`, `doc/sessions.md`.
 
-- Application code reconstructs desired UI definition values from synchronized
-  server state.
-- JaWS retains live Elements and the original definitions attached to them for
-  events, updates, and reconciliation.
-- Construct fresh UI definitions for each Request. Definitions may refer to
-  synchronized shared application state, binders, handlers, and stable tags.
-- Do not retain JaWS Requests, Elements, or UI definitions in application or
-  domain state. JaWS owns that live tree.
+- [ ] Use application objects directly. Put bindings, computed content, actions,
+  attributes, and tag methods on them; avoid copied presentation state.
+- [ ] Distinguish shared, session, and Request-local state. Synchronize mutable
+  state used by concurrent callbacks, including within one Request. Keep
+  published identity fields immutable; whole-struct assignments write them too.
+- [ ] Give editable controls writable sources with stable tags. Keep validation
+  and authorization in setters or actions, not just browser attributes.
 
-Definition dots should retain stable pointers to authoritative synchronized
-state. Render and update through direct binders and synchronized getters over
-that state.
+### Choose page structure
 
-Application code MUST NOT create a second representation of application state
-for rendering. Page, screen, state, component, view-model, or DTO structs that
-copy authoritative fields for templates, getters, attributes, or updates are
-forbidden. Renaming such a copy does not make it acceptable. If a proposed type
-exists only to carry render data copied from domain state, stop and redesign the
-UI to read the authoritative state directly.
+Guide: `doc/ui/README.md`, `doc/ui/controls.md`.
 
-Application code MUST NOT use broad snapshots to manufacture fragment-wide
-atomic rendering. JaWS requires race-free reads and correct dependency
-invalidation, not a transaction across an entire fragment. Do not hold an
-application lock across template execution to manufacture one. Separate reads
-may observe adjacent valid states; dirty dispatch is the consistency mechanism
-that makes matching Elements converge on current authoritative state.
+- [ ] Use standard Go `define`, `template`, `block`, `if`, `with`, and `range`
+  when structure stays fixed after construction. Place widgets where output
+  must change; plain template expressions do not update themselves.
+- [ ] Use a Container when children can be added, removed, reordered, or replaced;
+  preserve equal child definitions so unchanged Elements survive. Dirty the
+  provider for list changes and retained children's tags for content changes.
+- [ ] Use a JaWS Template only when rerunning that region is intended. Account
+  for replacement of its contents, focus, and unsent edits when HTML changes.
 
-When mutation code owns the writes, it MUST return or dirty the exact dependency
-tags whose rendered output may change. It MUST NOT snapshot application state
-only to diff it afterward and discover which ordinary mutation tags to dirty.
-Derive that tag set directly from the mutation semantics.
+### Choose widgets and their lifetime
 
-Copying mutable collection storage under its lock so a caller can iterate after
-unlock is a synchronization boundary, not a presentation snapshot. Capture
-multiple primitives together only when one widget, attribute set, or operation
-requires an invariant. Such a capture MUST remain local to that operation; it
-must not become a retained render object, template Dot, or fragment-wide state
-model.
+Guide: `doc/ui/README.md#widget-lifetime-and-identity`, `doc/ui/custom.md`.
 
-For a Container, a freshly returned equal child is a reconciliation key. JaWS
-reuses the existing Element and its original UI value; it does not replace
-`elem.UI()` with the newly returned equal value. An unequal child removes the
-old Element and renders a new one.
+- [ ] Compose standard widgets first; embed one to override `JawsUpdate`. Write
+  `JawsRender` when custom markup is needed.
+- [ ] Construct fresh widgets per Request. Share synchronized sources and tags,
+  not Elements or Requests. Follow each widget's within-Request reuse contract.
+- [ ] Keep UI definitions comparable and equal to themselves. For Register,
+  supply a render-independent updater and no nested JaWS widgets.
 
-Dirtying only the parent reruns child selection. It does not update the output
-of an unchanged retained child, so that child needs its own dependency tag.
-Captured values that affect rendering must either participate in definition
-equality or be read indirectly from synchronized mutable state.
+### Choose initial attributes
 
-## Choose the smallest rendering primitive
+Guide: `doc/ui/README.md#choose-initial-attributes`.
 
-- When an authoritative source implements the getter and event interfaces for a
-  standard widget, pass that source directly as the widget's primary argument,
-  for example `{{$.Button .Action}}`. When the read is naturally a functor,
-  adapt it with `bind.HTMLGetterFunc`; for text, use `bind.StringGetterFunc` and
-  let the widget's `bind.MakeHTMLGetter` conversion escape it. A bound value can
-  customize markup with `Binder.GetHTML` while remaining a standard
-  `HTMLGetter`.
-- An application UI may overload a standard widget's render or update behavior,
-  but this is discouraged when a standard getter, binder, semantic `ui.Object`,
-  or render parameter expresses the same control. Keep the overload only when it
-  adds behavior the standard composition cannot provide. Embed or retain the
-  standard widget, document the exact phase behavior being replaced, and keep
-  the outer definition as the Element's single UI value for both phases.
-- By default, HTML-inner widgets call their getters during initial rendering and
-  dirty updates; a justified outer updater may replace the dirty phase. If a
-  getter queues wrapper attributes, `TailHTML` may repeat attributes already
-  emitted inline. Treat an overload that suppresses that payload as a performance
-  change: retain a benchmark and weigh the measured result against the simpler
-  standard composition.
-- **Full HTML document:** use `ui.Handler`. It creates the JaWS Request, applies
-  `no-store`, renders without a generated wrapper, and treats the page Dot as
-  arbitrary template data rather than a tag or equality key. The page
-  Element is render-only; nested widgets own live updates. Do not call
-  `NewRequest` before delegating to it and do not emulate a page with a bare
-  `ui.Template`.
-- **Static included fragment:** use Go's native template action. Pass `.Dot`
-  when the fragment expects application data (`{{template "name" .Dot}}`), or
-  `.` only when it intentionally expects the JaWS `ui.With` wrapper. Small
-  static markup may simply remain inline.
-- **Fixed live region:** use a wrapped `ui.Template` / `$.Template` partial.
-- **Changing direct-child set, order, definition identity, or captured
-  dependencies:** use Container, Tbody, or Select.
+- [ ] Put static attributes in constant template strings. For dynamic initial
+  attributes, normally pass a member function returning `template.HTMLAttr`,
+  just like a tag. `JawsInitialHTMLAttr` is an alternative source contract.
+- [ ] Use ordinary template conditions for initial attributes on ordinary HTML.
+  Initial attribute expressions are not reevaluated by a widget update.
 
-One `ui.Handler` reuses its configured Dot across HTTP requests, so that Dot
-must support concurrent execution. For request- or session-specific data, use
-an outer HTTP handler to load the data and invoke a newly constructed
-`ui.Handler(jw, name, dot)` for that request. Put `SessionMiddleware` outside
-the page handler when initial rendering needs a Session; `AutoSession` runs at
-WebSocket upgrade and is too late for initial page state.
+### Choose later content and attribute updates
 
-`ui.Handler` owns `NewRequest` and recognizes `jaws.ConnectHandler` in its
-top-level Dot's method set, including promoted methods. It installs `JawsConnect`
-before page template execution; the plain GET does not invoke it. An
-implementation available only on a nested Template Dot is ignored without a
-diagnostic. The bundled client connects after parsing the document. Other
-Request setup requires a custom page handler. A full-document Template is not a
-supported workaround. A connection identifies a JaWS-capable client, not
-affirmative human intent; use a semantic click action when that distinction
-matters.
+Guide: `doc/ui/custom.md#update-attributes-after-rendering`, `doc/bindings.md`.
 
-A retained Template update keeps its wrapper Element and Jid, sends new inner
-HTML, and unregisters/recreates managed descendants. It does not preserve
-descendant identity, focus, scroll position, or client widget state.
+- [ ] Update the existing Element where possible. Handle both directions of
+  attribute and class changes; preserve unrelated classes.
+- [ ] A getter runs initially too. If initial markup already supplies attributes,
+  put their later commands in `JawsUpdate` to avoid duplicate startup work.
+  Call the embedded updater when its content/value still needs updating.
+- [ ] Keep getters free of application-state mutations. Register every state
+  dependency used by content or attributes.
 
-## Definition identity and dependency tags
+### Choose dependency tags and update scope
 
-- Every non-nil UI used for reconciliation must be comparable at runtime and
-  equal to itself. Keep slices, maps, functions, and NaN-bearing values out of
-  definitions.
-- Use Template, Container, Tbody, and Select definitions as values, not pointer
-  wrappers. Their Dot/provider/handler participates in equality.
-- A Template Dot is also an implicit tag. A comparable context struct registers
-  that struct as one key; JaWS does not recursively register its fields.
-- Make Dot dependencies deliberate. Implement a stable `JawsGetTag`, or return
-  nil when children and explicit params own all dependencies. This changes tag
-  expansion, never definition comparability or equality.
-- A `JawsGetTag` result must not change with a mutable association. Register
-  stable dependency identities on the provider. When that association selects
-  different data, make the selected object's identity part of a reconstructed
-  child definition and dirty the provider to reconcile it.
-- Prefer pointers to authoritative data or fields as tags. Register shared group
-  tags separately; do not return a group tag from an item's own `JawsGetTag`, or
-  `Dirty(item)` expands into a group refresh.
-- Dirty an Element for one request-local control. Dirty ordinary dependency tags
-  for every matching Element across live Requests. Do not broaden dirty scope to
-  hide missing dependencies.
+Guide: `doc/tags.md`.
 
-## Bindings and semantic widget objects
+- [ ] Use stable tags accepted by `tag.TagExpand`, preferably from member methods. An
+  Element registers every state dependency affecting its content or attributes;
+  these sets of dependencies may overlap.
+- [ ] Standard widgets register source tags and render-parameter tags
+  automatically. `JawsGetTag` and manual registration are optional; neither is
+  required for tags supplied in the template. Dirtying one tag does not dirty
+  other tags on its Elements. A `JawsGetTag` result must expand to the same tag
+  set after its first non-nil result, including under concurrent calls.
+- [ ] Use `Dirty(tag)` for matching Elements across Requests; `Dirty(elem)`
+  selects that exact Element. Use Request-specific tags for local dependencies.
+  Broadcast has different destination rules; consult `doc/transport.md`.
 
-Prefer `bind.New(&mu, &field)` for editable scalar state. It uses the real lock,
-stores directly in the real field, and keeps `&field` as its stable tag through
-chained hooks.
+### Implement a mutation or event
 
-`SetLocked` replaces the previous setter. Validate or normalize while already
-locked, then delegate the accepted write:
+Guide: `doc/bindings.md`, `doc/tags.md`, `doc/runtime.md`.
 
-```go
-binder := bind.New(&mu, &current).SetLocked(
-	func(prev bind.Binder[int], elem *jaws.Element, next int) error {
-		if next < minimum {
-			next = minimum
-		}
-		return prev.JawsSetLocked(elem, next)
-	},
-)
-```
+- [ ] Attach handlers to rendered widgets or JaWS Templates during rendering.
+  In handlers, change state, dirty tags, and return promptly; apply DOM commands
+  during rendering or updates.
+- [ ] Identify affected dependencies while changing state, then dirty their tags
+  after unlocking. Avoid scanning all displayed values just to discover changes
+  an operation already knows.
+- [ ] Dirty only dependencies whose output can change, including on repeated or
+  bulk actions. Preserve reconciliation of rejected or normalized input; an
+  unchanged stored value can still need a browser correction.
+- [ ] Expansion is limited to 100 unique tags per call. For larger changed sets,
+  dirty independent tags separately. Use a shared tag when the whole group
+  needs updating, not merely because the action concerns shared state.
 
-Delegation preserves storage, `jaws.ErrValueUnchanged`, input reconciliation,
-and whether `Success` runs. Do not assign the field directly, call public
-`JawsSet`/`JawsGet`, or reacquire the same lock from a locked hook.
+### Choose session, authorization, or browser state
 
-When a composed `ui.Object` or Binder owns content or initial attributes, pass
-it as the widget's first getter argument:
+Guide: `doc/sessions.md`, `doc/deployment.md`, `doc/ui/jsvar.md`.
 
-```gotemplate
-{{/* Content, click handler, tag, and initial attrs are all used. */}}
-{{$.Button .Action `class="btn"`}}
+- [ ] If initial rendering needs a Session, establish it before rendering and
+  initialize its state atomically. Session storage supplies no dependency tags.
+- [ ] If templates use `$.Auth`, configure `MakeAuth`; enforce authorization
+  independently in protected operations.
+- [ ] For browser-writable `JsVarStore`, validate the complete proposed value
+  and caller authorization in `ClientCheck`.
 
-{{/* Handler/tag may register, but Object content and initial attrs are ignored. */}}
-{{$.Button "Run" .Action `class="btn"`}}
-```
+### Pass content or attributes across a trust boundary
 
-Do not pass the same Object in both positions; that duplicates handler/tag
-registration. Construct fresh semantic Objects near the state and behavior they
-represent rather than splitting one control into label, click, and attribute
-helpers.
+Guide: `doc/bindings.md#html-and-attribute-safety`.
 
-## Wrapper and initial-attribute lifecycle
+- [ ] Keep user-provided strings out of raw JaWS HTML content and attribute
+  parameters. Normal strings there are trusted markup; template autoescaping
+  does not protect helper arguments.
+- [ ] Use escaping bindings/string getters for text, or escape before returning
+  `template.HTML`. Use `htmlio.Attr` with trusted names for attribute syntax
+  containing untrusted values. `Element.SetAttr` instead takes an unescaped logical value.
 
-- `$.Template` owns its generated wrapper and Jid. Its partial must not emit
-  `id="{{$.Jid}}"` or forward wrapper attributes onto another root.
-- HTML-inner widgets read initial attrs from their primary getter; input widgets
-  read them from their primary binding/source; Template reads constructor attrs
-  and attrs from Dot for its generated wrapper.
-- Render params contribute literal attributes and register recognized handlers
-  and tags. A parameter-valued `InitialHTMLAttrHandler` is not invoked.
-- Prefer an ordinary render parameter for attributes specific to one widget use.
-  Put `InitialHTMLAttrHandler` on a shared getter only when every widget using
-  that getter should inherit those attributes.
-- `ui.NewTemplate(tag, name, dot, attrs...)` accepts trusted raw wrapper attributes,
-  which participate in Template equality. For duplicate names, precedence is render
-  params, constructor attrs, then Dot attrs.
-- Initial attrs run once for that Element. Dirty updates do not rerun them.
-  Change dynamic attrs through Element update methods or replace the Element.
-- A `template.HTMLAttr` result is raw opening-tag syntax, not a DOM update or
-  attribute diff. By itself it identifies neither removals nor attribute
-  ownership. Never reinterpret an initial-attribute hook as an update getter; a
-  reusable dynamic-attribute contract must define ownership and diff semantics,
-  preferably through explicit structured set/remove operations.
-- A retained Template wrapper keeps its attributes while its recreated
-  descendants run their own initial attrs.
-- Object attribute hooks concatenate. Binder attribute hooks run with the Binder
-  lock held and replace the earlier path unless they delegate to the previous
-  Binder; do not re-enter the public Binder API.
-- Keep widget-specific attributes out of a Binder reused by different widget
-  kinds. For example, pass input-only `disabled` separately when the same Binder
-  also renders a Span.
+### Verify an interaction
 
-Plain strings passed to HTML-producing JaWS helpers are trusted raw HTML. Route
-untrusted content through escaping Getter/Stringer forms. Build attributes from
-untrusted values with `htmlio.Attr` and a trusted name; convert the result to
-`string` for `NewTemplate`.
+Guide: `doc/testing.md`, `doc/browser.md`.
 
-## Render shape and verification
-
-- Before implementing, identify the authoritative state, its synchronization,
-  the direct binders/getters that read it, and the precise dependencies whose
-  rendered output each mutation can change. If the plan includes a
-  render-specific copy of domain fields or a snapshot/diff layer for ordinary
-  dirty tracking, stop and redesign it first.
-- Keep HTML structure in templates and state mutations out of getter/render
-  paths. When one direct getter result must remain consistent within a template
-  execution, assign that value to a local template variable. This is not a
-  reason to materialize the fragment as a render DTO or broad snapshot.
-- Use direct field-backed binders and simple helpers before introducing custom
-  binder, tag, or component abstractions.
-- Test behavior with real JaWS Requests and Elements.
-- Decode wire messages when identity matters: an equal retained fragment should
-  keep its Jid and receive `Inner`; an identity change should produce the
-  expected Remove/Append/Order operations.
-- Use at least two live Requests or clients for cross-request dirtying, session,
-  connect, and disconnect behavior.
-- Test pure domain transitions separately from JaWS transport.
-
-The following are completion blockers. Do not finish while the design contains
-an application-owned UI tree, a full-document Template, any render DTO or
-retained presentation snapshot, screen-shaped render state, pointer-wrapped
-definition values, mutable tag identity, duplicate JaWS IDs, direct locked-field
-assignment, snapshot/diff dirty tracking for mutation-owned writes, or broad
-dirtying that masks dependency errors. Refactor the violation before continuing.
+- [ ] Check initial HTML, tail commands, and subsequent WebSocket output
+  separately. Assert HTML semantics rather than incidental quote formatting.
+- [ ] Settle processing before asserting complete output: commands, targets,
+  and serialized bytes; follow the guide's collector/wait pattern. Include
+  unchanged actions and bulk operations; check unrelated Elements stay quiet.
+- [ ] For shared state, use two Requests and verify local state remains local.
+  At the intended scale, check mutation cost as well as wire volume.
+- [ ] Run applicable tests, including concurrent mutations and rendering/update
+  callbacks under `go test -race`. Check browser events, keyboard operation,
+  focus, and rejected input where relevant.

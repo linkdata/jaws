@@ -118,7 +118,7 @@ func (jw *Jaws) setDirty(tags []any) {
 // configured an expansion error is queued and the partial result is still applied,
 // while without one the call panics before anything is marked dirty. An expanded
 // non-nil pointer to a live [Element] belonging to this Jaws selects only that
-// Element; other Element pointers are ignored. Other keys select matching Elements
+// Element; other Element pointers are ignored. Other tags select matching Elements
 // on every live [Request]. Updates run on the normal batched dirty pass, so
 // [Jaws.Serve] or [Jaws.ServeWithTimeout] must be running for delivery.
 //

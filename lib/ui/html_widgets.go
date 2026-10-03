@@ -30,7 +30,7 @@ func (u *HTMLInner) renderInner(elem *jaws.Element, w io.Writer, htmlTag, htmlTy
 //
 // Unlike the typed input widgets, which dedup against a stored last value,
 // HTMLInner keeps no last-rendered value and re-sends the inner HTML on every
-// update; mark the [jaws.Element] dirty only when the content has actually changed.
+// update. Dirty its dependency tags only when content or attributes can change.
 func (u *HTMLInner) JawsUpdate(elem *jaws.Element) {
 	elem.SetInner(u.HTMLGetter.JawsGetHTML(elem))
 }

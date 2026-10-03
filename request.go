@@ -118,9 +118,8 @@ type eventFnCall struct {
 }
 
 // reqState is the lifecycle state of a [Request], stored in Request.state as an
-// atomic int32. It consolidates what were separate registered/claimed/running flags
-// so the transitions are explicit and race-safe. The live states are reqPending,
-// reqClaimed and reqRunning; reqUnclaimable and reqFinished are terminal.
+// atomic int32 so the transitions are explicit and race-safe. The live states are
+// reqPending, reqClaimed and reqRunning; reqUnclaimable and reqFinished are terminal.
 type reqState int32
 
 const (
@@ -717,9 +716,9 @@ func (rq *Request) tryTagsOf(elem *Element) (tags []any, ok bool) {
 	return
 }
 
-// TagsOf returns a snapshot of the exact keys registered for elem in rq.
+// TagsOf returns a snapshot of the exact tags registered for elem in rq.
 //
-// It returns nil if elem is nil or has no registered keys. The returned slice is
+// It returns nil if elem is nil or has no registered tags. The returned slice is
 // caller-owned and has unspecified order.
 func (rq *Request) TagsOf(elem *Element) (tags []any) {
 	if elem != nil {
@@ -847,12 +846,12 @@ func (rq *Request) hasLiveTagLocked(tagValue any) bool {
 
 // HasTag reports whether elem has tagValue in rq.
 //
-// HasTag is an advanced operation for inspecting one already-expanded tag key.
+// HasTag is an advanced operation for inspecting one already-expanded tag.
 // It uses tagValue directly as a map key without expanding or validating it. Callers
-// should normally pass a key returned by [Request.TagsOf] or [tag.TagExpand]. Invalid
+// should normally pass a tag returned by [Request.TagsOf] or [tag.TagExpand]. Invalid
 // values may panic; in particular, a value that is not comparable at runtime panics.
 //
-// Passing a [tag.TagGetter] tests that value itself, not the keys returned by
+// Passing a [tag.TagGetter] tests that source itself, not the tags returned by
 // [tag.TagGetter.JawsGetTag]. Use [Request.GetElements] when tagValue should be
 // expanded.
 func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
@@ -867,11 +866,9 @@ func (rq *Request) HasTag(elem *Element, tagValue any) (yes bool) {
 // process loop drains the list in makeUpdateList and updates the selected Elements.
 // Takes rq.mu.
 //
-// Do not filter ordinary tags against tagMap: initial rendering may register a
-// matching tag after this tick. Non-running Requests can retain duplicate or
-// foreign tags until they connect or retire. This tradeoff was reviewed in
-// #365 and #417; add per-Request deduplication only if representative workloads
-// show material availability pressure that warrants the extra lifecycle state.
+// Ordinary tags are retained without filtering against tagMap because initial
+// rendering may register a matching tag after this tick. Non-running Requests
+// can retain duplicate or foreign tags until they connect or retire.
 //
 // It may run after the caller's dirt snapshot was taken but before rq finished
 // (see distributeDirt). A finished Request is unregistered (registered is false), so
@@ -891,11 +888,11 @@ func (rq *Request) appendDirtyTags(tags []any) {
 	rq.mu.Unlock()
 }
 
-// TagExpanded registers already-expanded keys with elem.
+// TagExpanded registers already-expanded tags with elem.
 //
-// TagExpanded is an advanced, additive API that neither expands nor validates keys and
+// TagExpanded is an advanced, additive API that neither expands nor validates tags and
 // does not schedule an update. Callers should normally use [Request.Tag]. expandedTags
-// must contain only keys that [tag.TagExpand] can emit, either from a successful
+// must contain only tags that [tag.TagExpand] can emit, either from a successful
 // expansion or from a partial result whose error the caller handled. Passing other
 // values may panic or create registrations unreachable through the expanding lookup,
 // dirtying, and broadcast APIs.
@@ -927,13 +924,13 @@ func (rq *Request) TagExpanded(elem *Element, expandedTags []any) {
 // registered during initial rendering. Associations remain active until elem is
 // removed or rq ends; individual associations cannot be removed.
 //
-// See package [github.com/linkdata/jaws/lib/tag] for choosing stable dependency
-// identities and for the registration and targeting model.
+// See package [github.com/linkdata/jaws/lib/tag] for choosing dependency tags
+// and for the registration and update model.
 //
 // Tag expands tagItems through [Jaws.MustTagExpand]. With a [Jaws.Logger] configured,
 // it queues an expansion error and registers the partial result. Without a Logger,
 // an expansion error causes Tag to panic before registering anything. Use
-// [Request.TagExpanded] to register keys you expanded yourself.
+// [Request.TagExpanded] to register tags you expanded yourself.
 //
 // Tag does not expand tagItems when elem is nil or foreign, or when tagItems is empty.
 // For a deleted elem, it still expands non-empty tagItems but registers nothing.
@@ -949,7 +946,7 @@ func (rq *Request) Tag(elem *Element, tagItems ...any) {
 // configured, it queues an expansion error and uses the partial result. Without a
 // Logger, an expansion error causes GetElements to panic before the lookup.
 //
-// Each Element registered under at least one resulting key is returned once. The
+// Each Element registered under at least one resulting tag is returned once. The
 // returned slice is a caller-owned snapshot in unspecified order.
 func (rq *Request) GetElements(tagValue any) (elems []*Element) {
 	expanded := rq.Jaws.MustTagExpand(tagValue)

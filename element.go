@@ -116,7 +116,7 @@ func (elem *Element) Tag(tags ...any) {
 
 // HasTag reports whether this Element has tagValue.
 //
-// It reports false for a deleted Element. This is the advanced exact-key lookup
+// It reports false for a deleted Element. This is the advanced single-tag lookup
 // described by [Request.HasTag]: tagValue is not expanded or validated, and an
 // invalid value may panic.
 func (elem *Element) HasTag(tagValue any) bool {
@@ -532,7 +532,7 @@ func (elem *Element) ApplyParams(params []any) (attrs []template.HTMLAttr) {
 // The returned tagValue does not confirm registration. It is nil if getter or its
 // candidate is a nil interface, or if the candidate is ineligible for expansion. A
 // successfully expandable tagValue may be retained for later dirtying only while it
-// expands to the same keys. Retained slices must not be mutated concurrently with
+// expands to the same tags. Retained slices must not be mutated concurrently with
 // expansion; candidates derived from a [tag.TagGetter] rely on its stable-identity
 // contract.
 //

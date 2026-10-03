@@ -90,7 +90,7 @@ func (rw RequestWriter) HeadHTML() error {
 }
 
 // TailHTML writes optional HTML code at the end of the page's BODY section that
-// will immediately apply updates made during initial rendering.
+// can apply queued attribute and class updates before the WebSocket connects.
 func (rw RequestWriter) TailHTML() error {
 	return rw.Request.TailHTML(rw)
 }
