@@ -436,10 +436,16 @@ func TestConnectedRequestsConvergeAfterDirtying(t *testing.T) {
 		}
 		for _, client := range clients {
 			messages := drainWire(t, client.request, "reset updates")
-			assertOnlyElementUpdates(t, messages, client.target, client.other, client.statistics)
+			assertOnlyElementUpdates(t, messages, client.target, client.statistics)
 			assertCellUpdates(t, messages, client.target, "hidden", "Row 1, column 1: hidden", "", false)
-			assertCellUpdates(t, messages, client.other, "hidden", "Row 1, column 2: hidden", "", false)
 			assertInnerUpdate(t, messages, client.statistics, "Mines: 1 | Flags: 0 | Safe cells left: 8")
+		}
+		first.InCh <- wire.WsMsg{Jid: resetElem.Jid(), What: what.Click, Data: "0 0 0 reset"}
+		waitForUpdates()
+		for _, client := range clients {
+			if messages := drainWire(t, client.request, "unchanged reset"); len(messages) != 0 {
+				t.Fatalf("unchanged reset sent updates: %+v", messages)
+			}
 		}
 
 		// Independent Request loops may mutate the shared game concurrently. The
@@ -728,9 +734,26 @@ func TestGameResetReturnsOnlyChangedTags(t *testing.T) {
 	flaggedCell := flagged.cells[0][0]
 	_ = flagged.toggleFlag(flaggedCell)
 	tags := flagged.reset()
-	assertTagSetEqual(t, tags, &flagged.flags, &flagged.cells)
+	assertTagSetEqual(t, tags, &flagged.flags, flaggedCell.CellTag())
 	if flaggedCell.flagged || flagged.flags != 0 {
 		t.Fatalf("reset() left a pre-start flag: cell=%#v flags=%d", flaggedCell, flagged.flags)
+	}
+
+	playing := newGame(2, 2, 1)
+	playing.started, playing.revealed, playing.flags = true, 1, 1
+	playing.cells[0][0].revealed = true
+	playing.cells[0][1].flagged = true
+	playing.cells[1][0].mine = true
+	playing.cells[1][1].adjacent = 1
+	tags = playing.reset()
+	assertTagSetEqual(t, tags, &playing.started, &playing.revealed, &playing.flags,
+		playing.cells[0][0].CellTag(), playing.cells[0][1].CellTag())
+	for _, row := range playing.cells {
+		for _, cell := range row {
+			if cell.mine || cell.revealed || cell.flagged || cell.adjacent != 0 {
+				t.Fatalf("reset() left cell state: %#v", cell)
+			}
+		}
 	}
 
 	g := newGame(2, 2, 1)
@@ -970,7 +993,8 @@ func TestSingleCellDirtyStaysScopedToOneCell(t *testing.T) {
 	}
 	assertTagSetEqual(t, flagTags, cell, &g.flags)
 
-	g2 := newGame(3, 3, 1)
+	// The first safe reveal wins this board, so reset re-enables every cell.
+	g2 := newGame(2, 2, 3)
 	_ = g2.clickCell(g2.cells[0][0])
 	resetTags, err := jawstag.TagExpand(g2.reset())
 	if err != nil {
