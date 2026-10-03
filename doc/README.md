@@ -5,16 +5,6 @@ widgets bind controls to server values, and a WebSocket carries browser events
 and targeted DOM updates. Application state lives on the server; the browser
 holds the displayed values and transient interaction state.
 
-## Design checklist
-
-- **State:** pass application objects directly to templates; use their methods for [bindings, actions, and computed content](bindings.md).
-- **Structure:** use [standard templates](ui/README.md#render-a-page-or-partial) for fixed structure; use [containers](ui/controls.md#lists-and-selections) when children change.
-- **Attributes:** keep static attributes as template strings; use member functions for [dynamic initial attributes](ui/README.md#choose-initial-attributes). Choose how [later attribute changes](ui/custom.md#update-attributes-after-rendering) are applied.
-- **Dependencies:** register every state dependency an Element uses. Have mutations identify the affected [tags](tags.md); dirty them after unlocking.
-- **Lifetime:** construct [fresh widgets per Request](ui/README.md#widget-lifetime-and-identity), sharing synchronized application state and stable tags.
-- **HTML:** [escape user-provided values](bindings.md#html-and-attribute-safety); raw strings passed to JaWS HTML helpers are trusted markup.
-- **Verification:** check initial markup and [complete wire output](testing.md), including no-ops, at the intended application size.
-
 ## Start here
 
 1. [Getting started](getting-started.md): install JaWS and run a complete application.

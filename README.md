@@ -31,7 +31,8 @@ project. Repository checks are described in [development](doc/development.md).
 
 ## Coding-assistant entry point
 
-The optional [JaWS skill](.agents/skills/jaws/SKILL.md) links to the same wiki.
+The optional [JaWS skill](.agents/skills/jaws/SKILL.md) provides design checklists
+and links to the same wiki.
 To install it, copy `.agents/skills/jaws/` from the checkout into
 `~/.agents/skills/jaws/`. Use documentation from the module version selected by
 the application.
