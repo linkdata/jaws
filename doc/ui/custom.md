@@ -6,50 +6,14 @@
 
 A [getter](../bindings.md#compute-content-and-attributes) can update attributes
 as well as content. It also runs during initial rendering and queues those
-attribute commands. To put initial attributes directly in markup and send
-commands only on later updates, keep the standard widget's render method and
-override `JawsUpdate`.
-
-Using the User's [binding](../bindings.md#bind-a-field),
-[initial attributes](README.md#choose-initial-attributes), and
-[permission tag](../tags.md#register-dependencies):
-
-```go
-type nameInput struct {
-    ui.Text
-    user *User
-}
-
-func (u *User) NameInput() *nameInput {
-    return &nameInput{Text: *ui.NewText(u.NameBinding()), user: u}
-}
-
-func (w *nameInput) JawsUpdate(e *jaws.Element) {
-    w.Text.JawsUpdate(e)
-    w.user.mu.RLock()
-    canEdit := w.user.canEditName
-    w.user.mu.RUnlock()
-    if canEdit {
-        e.RemoveAttr("readonly")
-    } else {
-        e.SetAttr("readonly", "")
-    }
-}
-```
-
-```gotemplate
-{{with .Dot}}
-  {{$.NewUI .NameInput `class="username"` .NameAttrs .PermissionsTag}}
-{{end}}
-```
-
-The embedded Text supplies rendering, input handling, and the name binding's
-tag. The override calls its value updater and changes `readonly` in either
-direction. The template supplies static attributes, dynamic initial attributes,
-and the additional dependency tag. After changing `canEditName` and unlocking,
-dirty `PermissionsTag()`. Initial attributes are not reevaluated.
-Enforce [permissions in the setter](../deployment.md#authorization);
-`readonly` controls browser editing.
+attribute commands. If initial attributes must appear in markup, pass them
+[as parameters](README.md#choose-initial-attributes) and keep the getter for
+later changes. A JaWS Template wrapper needs a `JawsUpdate` override to change
+its attributes because its update replaces only inner HTML. If measured cost
+justifies avoiding the getter's initial commands, put initial attributes in
+markup and handle later changes in `JawsUpdate` instead of a getter. Call the
+embedded updater if its content or value still needs updating. Handle attribute
+changes in both directions with `Element.SetAttr` and `RemoveAttr`.
 
 ## Render custom markup
 

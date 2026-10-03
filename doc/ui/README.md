@@ -162,9 +162,11 @@ these methods. `JawsInitialHTMLAttr` is an alternative when the source itself
 should supply initial attributes.
 
 These expressions run when the template renders. Changing their source state
-does not update an existing attribute. For later changes, use
-[a getter or an overridden `JawsUpdate`](custom.md#update-attributes-after-rendering),
-or rerender a containing region that replaces the affected element.
+does not update an existing attribute. For later changes, use a
+[getter](../bindings.md#compute-content-and-attributes). A custom
+[`JawsUpdate`](custom.md#update-attributes-after-rendering) handles cases such
+as JaWS Template wrapper attributes. Rerendering a containing region replaces
+the affected Element.
 
 ## Widget lifetime and identity
 

@@ -58,8 +58,13 @@ Guide: `doc/ui/README.md`, `doc/ui/controls.md`.
 
 Guide: `doc/ui/README.md#widget-lifetime-and-identity`, `doc/ui/custom.md`.
 
-- [ ] Compose standard widgets first; embed one to override `JawsUpdate`. Write
-  `JawsRender` when custom markup is needed.
+- [ ] **Use standard widgets with application bindings, getters, and templates.**
+  Attribute changes, events, and focus retention usually need no custom widget.
+  A JaWS Template wrapper is an exception: its updates replace only inner HTML.
+- [ ] Before adding a custom UI type or overriding `JawsRender`/`JawsUpdate`,
+  identify required behavior standard composition cannot provide, or a measured
+  cost that justifies specialization. If needed, embed a standard widget and
+  override only what is necessary.
 - [ ] Construct fresh widgets per Request. Share synchronized sources and tags,
   not Elements or Requests. Follow each widget's within-Request reuse contract.
 - [ ] Keep UI definitions comparable and equal to themselves. For Register,
@@ -81,9 +86,14 @@ Guide: `doc/ui/custom.md#update-attributes-after-rendering`, `doc/bindings.md`.
 
 - [ ] Update the existing Element where possible. Handle both directions of
   attribute and class changes; preserve unrelated classes.
-- [ ] A getter runs initially too. If initial markup already supplies attributes,
-  put their later commands in `JawsUpdate` to avoid duplicate startup work.
-  Call the embedded updater when its content/value still needs updating.
+- [ ] Use getters for later attribute changes. If an attribute must be correct
+  in initial HTML, also supply it through an initial attribute method; getter
+  commands alone are absent from initial HTML.
+- [ ] Getters run initially too, and `HTMLInner` resends content on updates.
+  Accept redundant commands and content unless measured cost justifies an
+  override.
+- [ ] In a justified `JawsUpdate` override, call the embedded updater when its
+  content or value still needs updating.
 - [ ] Keep getters free of application-state mutations. Register every state
   dependency used by content or attributes.
 
