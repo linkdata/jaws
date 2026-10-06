@@ -117,6 +117,9 @@ root, replace a subtree, or delete an object property.
 
 ## Connection loss
 
+A server-requested reload stops connection recovery before reloading the page.
+It does not show the connection-loss indicator.
+
 After a WebSocket failure, the client waits five seconds before probing
 `/jaws/.ping`. A successful probe reloads a page whose navigation age is at least
 60 seconds. Otherwise, the client shows a connection-loss indicator and retries

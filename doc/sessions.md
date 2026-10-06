@@ -72,6 +72,12 @@ cookie. See
 [session.go](../session.go) for these contracts. `Jaws.Close` invalidates all
 Sessions and clears their data.
 
+`Request.Reload` stops event dispatch for one page, sends a reload command, and
+closes its connection. Pending pages reload when their WebSocket connects,
+without running the connection callback. Session data and cookies are preserved.
+Use it when a page must stop processing events before it reloads, such as after
+authorization is revoked.
+
 `MaxSessions` limits registered Sessions globally. `MaxSessionsPerIP` limits a
 client address bucket. Both default to zero, which disables the respective
 limit. A lower per-IP cap reserves capacity for other buckets. Replacement needs

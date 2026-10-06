@@ -1027,6 +1027,32 @@ process.stdout.write(JSON.stringify({reloads: reloads, errors: errors, state: ja
 	}
 }
 
+func TestJawsJS_ReloadStopsReconnect(t *testing.T) {
+	raw := runJawsJSSnippet(t, `
+let reloads = 0, closes = 0, timers = 0;
+window.location.reload = function() { reloads++; };
+setTimeout = function() { timers++; };
+function FakeSocket() {}
+FakeSocket.prototype.removeEventListener = function() {};
+FakeSocket.prototype.close = function() { closes++; };
+WebSocket = FakeSocket;
+jaws = new FakeSocket();
+jawsMessage({data: 'Reload\t\t""\n'});
+jawsFailed();
+process.stdout.write(JSON.stringify({reloads, closes, timers, stopped: jaws === null}));
+`)
+	var got struct {
+		Reloads, Closes, Timers int
+		Stopped                 bool
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Reloads != 1 || got.Closes != 1 || got.Timers != 0 || !got.Stopped {
+		t.Fatalf("reload handling = %+v", got)
+	}
+}
+
 func TestJawsJS_StorePathGuards(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 function FakeSocket() { this.readyState = 1; this.sent = []; }

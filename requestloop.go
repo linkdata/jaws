@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/linkdata/jaws/lib/jid"
 	"github.com/linkdata/jaws/lib/key"
@@ -53,6 +54,16 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 					incomingMsgCh = nil
 				}
 			case <-eventDoneCh:
+				if rq.reload.Load() {
+					timer := time.NewTimer(rq.Jaws.getWebSocketTimeout())
+					select {
+					case outboundMsgCh <- wire.WsMsg{What: what.Reload}:
+					case <-jawsDoneCh:
+					case <-httpDoneCh:
+					case <-timer.C:
+					}
+					timer.Stop()
+				}
 				close(outboundMsgCh)
 				if panicValue != nil {
 					var err error
@@ -71,6 +82,9 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 	}()
 
 	for {
+		if rq.reload.Load() {
+			return
+		}
 		var tagmsg wire.Message
 		var wsmsg wire.WsMsg
 		var ok bool
@@ -81,6 +95,9 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		// JawsUpdate for the selected Elements. Updates queue browser messages
 		// on the Request.
 		for _, elem := range rq.makeUpdateList() {
+			if rq.reload.Load() {
+				return
+			}
 			elem.JawsUpdate()
 		}
 
@@ -125,6 +142,9 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 // message destination to the affected elements and dispatches by command. Called
 // only from process.
 func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFnCall) {
+	if rq.reload.Load() {
+		return
+	}
 	// Reload, Redirect, Order and Alert are page-global commands: they apply to
 	// the whole document, so emit the single Jid:0 frame and return before
 	// resolving Dest.
@@ -514,13 +534,15 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 
 // eventCaller calls event functions.
 //
-// Once the Request context is cancelled it stops invoking handlers and drains the
-// remaining queued calls as no-ops. This cannot strand events on a still-live
-// Request: process selects on the same rq.Context().Done() and returns, then closes
+// Once the Request is reloading or cancelled it stops invoking handlers and drains
+// queued calls as no-ops. The processing loop exits in either case and closes
 // eventCallCh, so the no-op drain is always part of teardown.
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wire.WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
+		if rq.reload.Load() {
+			continue
+		}
 		select {
 		case <-rq.Context().Done():
 			continue
