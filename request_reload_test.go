@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,14 +33,10 @@ func TestRequestReload(t *testing.T) {
 			requestCtx := rq.Context()
 			connected := make(chan struct{})
 			rq.SetConnectFn(func(rq *Request) error {
-				if when == "pending" {
-					t.Error("reload ran ConnectFn")
-				}
+				close(connected)
 				if when == "connecting" {
 					rq.Reload()
-					return rq.Context().Err()
 				}
-				close(connected)
 				return nil
 			})
 			if when == "pending" {
@@ -56,12 +51,12 @@ func TestRequestReload(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = conn.CloseNow() }()
+			select {
+			case <-connected:
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
 			if when == "connected" {
-				select {
-				case <-connected:
-				case <-ctx.Done():
-					t.Fatal(ctx.Err())
-				}
 				rq.Reload()
 				rq.Reload()
 			}
@@ -103,58 +98,18 @@ func TestRequestReload(t *testing.T) {
 	}
 }
 
-func TestRequestReloadStopsNewEvents(t *testing.T) {
+func TestRequestReloadAllowsEventsUntilDisconnect(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
-	started := make(chan struct{})
-	release := make(chan struct{})
-	defer close(release)
-	queued := make(chan struct{})
-	var calls atomic.Int32
+	called := make(chan struct{})
 	item := &testUi{}
 	rq.Register(item, func(*Element, string) error {
-		switch calls.Add(1) {
-		case 1:
-			close(started)
-			<-release
-		case 2:
-			close(queued)
-		}
+		close(called)
 		return nil
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
-	send := func(msg wire.WsMsg) {
-		t.Helper()
-		select {
-		case rq.InCh <- msg:
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		}
-	}
-	msg := wire.WsMsg{Jid: jidForTag(rq.Request, item), What: what.Input}
-	send(msg)
-	send(msg)
-	// The unbuffered handoff of a third message fences admission of both events.
-	send(wire.WsMsg{})
-	select {
-	case <-started:
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	}
 	rq.Reload()
-	send(msg)
-	send(wire.WsMsg{})
-	select {
-	case release <- struct{}{}:
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	}
-	select {
-	case <-queued:
-	case <-ctx.Done():
-		t.Fatal("event queued before Reload did not run")
-	}
 	select {
 	case msg := <-rq.OutCh:
 		if msg.What != what.Reload {
@@ -163,17 +118,16 @@ func TestRequestReloadStopsNewEvents(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
-	if rq.Context().Err() != nil {
-		t.Fatal("request cancelled before the writer disconnected")
-	}
-	rq.Cancel(nil) // Simulate the writer closing the connection after Reload.
+	// The harness has no socket writer, so the request remains connected.
 	select {
-	case <-rq.DoneCh:
+	case rq.InCh <- wire.WsMsg{Jid: jidForTag(rq.Request, item), What: what.Input}:
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
-	if calls.Load() != 2 {
-		t.Fatalf("callbacks=%d, want the two events accepted before Reload", calls.Load())
+	select {
+	case <-called:
+	case <-ctx.Done():
+		t.Fatal("Reload stopped event dispatch before disconnection")
 	}
 }
 
@@ -186,57 +140,7 @@ func TestRequestReloadAfterCancel(t *testing.T) {
 	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Cancel(nil)
 	rq.Reload()
-	if rq.reloading() {
-		t.Fatal("Reload changed an already cancelled request")
-	}
-}
-
-func TestRequestReloadStateTransitions(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	go jw.Serve()
-	defer jw.Close()
-	for _, when := range []string{"pending", "claimed", "running", "concurrent"} {
-		t.Run(when, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
-			rq := jw.NewRequest(httptest.NewRecorder(), r)
-			if when == "pending" {
-				rq.Reload()
-			}
-			if jw.UseRequest(rq.JawsKey, r) != rq {
-				t.Fatal("claim failed")
-			}
-			if when == "claimed" {
-				rq.Reload()
-			}
-			reloaded := make(chan struct{})
-			if when == "concurrent" {
-				go func() {
-					rq.Reload()
-					close(reloaded)
-				}()
-			}
-			if !rq.startServe() {
-				t.Fatal("startServe failed")
-			}
-			if when == "concurrent" {
-				<-reloaded
-			}
-			if when == "running" {
-				rq.Reload()
-			}
-			if rq.loadState() != reqRunning || !rq.reloading() {
-				t.Fatal("running request lost its reload flag")
-			}
-			if rq.startServe() || jw.UseRequest(rq.JawsKey, r) != nil {
-				t.Fatal("reload allowed a duplicate connection")
-			}
-			rq.stopServe()
-			if rq.loadState() != reqFinished || !rq.reloading() {
-				t.Fatal("finished request lost its reload flag")
-			}
-		})
+	if msgs := rq.getSendMsgs(); len(msgs) != 0 {
+		t.Fatalf("Reload queued messages on a cancelled request: %v", msgs)
 	}
 }
