@@ -156,7 +156,56 @@ func TestRequestReloadAfterCancel(t *testing.T) {
 	rq := jw.NewRequest(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	rq.Cancel(nil)
 	rq.Reload()
-	if rq.reload.Load() {
+	if rq.reloading() {
 		t.Fatal("Reload changed an already cancelled request")
+	}
+}
+
+func TestRequestReloadStateTransitions(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	for _, when := range []string{"pending", "claimed", "running", "concurrent"} {
+		t.Run(when, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			rq := jw.NewRequest(httptest.NewRecorder(), r)
+			if when == "pending" {
+				rq.Reload()
+			}
+			if jw.UseRequest(rq.JawsKey, r) != rq {
+				t.Fatal("claim failed")
+			}
+			if when == "claimed" {
+				rq.Reload()
+			}
+			reloaded := make(chan struct{})
+			if when == "concurrent" {
+				go func() {
+					rq.Reload()
+					close(reloaded)
+				}()
+			}
+			if !rq.startServe() {
+				t.Fatal("startServe failed")
+			}
+			if when == "concurrent" {
+				<-reloaded
+			}
+			if when == "running" {
+				rq.Reload()
+			}
+			if rq.loadState() != reqRunning || !rq.reloading() {
+				t.Fatal("running request lost its reload flag")
+			}
+			if rq.startServe() || jw.UseRequest(rq.JawsKey, r) != nil {
+				t.Fatal("reload allowed a duplicate connection")
+			}
+			rq.stopServe()
+			if rq.loadState() != reqFinished || !rq.reloading() {
+				t.Fatal("finished request lost its reload flag")
+			}
+		})
 	}
 }

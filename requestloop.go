@@ -54,7 +54,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 					incomingMsgCh = nil
 				}
 			case <-eventDoneCh:
-				if rq.reload.Load() {
+				if rq.reloading() {
 					timer := time.NewTimer(rq.Jaws.getWebSocketTimeout())
 					select {
 					case outboundMsgCh <- wire.WsMsg{What: what.Reload}:
@@ -82,7 +82,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 	}()
 
 	for {
-		if rq.reload.Load() {
+		if rq.reloading() {
 			return
 		}
 		var tagmsg wire.Message
@@ -95,7 +95,7 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		// JawsUpdate for the selected Elements. Updates queue browser messages
 		// on the Request.
 		for _, elem := range rq.makeUpdateList() {
-			if rq.reload.Load() {
+			if rq.reloading() {
 				return
 			}
 			elem.JawsUpdate()
@@ -142,7 +142,7 @@ func (rq *Request) handleIncoming(wsmsg wire.WsMsg, eventCallCh chan eventFnCall
 // message destination to the affected elements and dispatches by command. Called
 // only from process.
 func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFnCall) {
-	if rq.reload.Load() {
+	if rq.reloading() {
 		return
 	}
 	// Reload, Redirect, Order and Alert are page-global commands: they apply to
@@ -540,7 +540,7 @@ func (rq *Request) makeUpdateList() (todo []*Element) {
 func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh chan<- wire.WsMsg, eventDoneCh chan<- struct{}) {
 	defer close(eventDoneCh)
 	for call := range eventCallCh {
-		if rq.reload.Load() {
+		if rq.reloading() {
 			continue
 		}
 		select {

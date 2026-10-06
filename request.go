@@ -90,8 +90,7 @@ type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey          key.Key                 // (read-only) random key assigned before publication, immutable thereafter; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
-	state            atomic.Int32            // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
-	reload           atomic.Bool             // stops application callbacks while the final Reload is delivered
+	state            atomic.Int32            // reqState lifecycle and reqReloadFlag; see loadState/casState
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
 	lastJid          Jid                     // last element Jid allocated within this Request
@@ -118,8 +117,7 @@ type eventFnCall struct {
 	data string
 }
 
-// reqState is the lifecycle state of a [Request], stored in Request.state as an
-// atomic int32 so the transitions are explicit and race-safe. The live states are
+// reqState describes the lifecycle bits in Request.state. The live states are
 // reqPending, reqClaimed and reqRunning; reqUnclaimable and reqFinished are terminal.
 type reqState int32
 
@@ -130,6 +128,9 @@ const (
 	reqRunning                     // ServeHTTP WebSocket loop running
 	reqFinished                    // completed or retired; unregistered
 )
+
+// reqReloadFlag is set only by Reload under rq.mu and preserved by every lifecycle transition.
+const reqReloadFlag int32 = 1 << 8
 
 func (s reqState) String() string {
 	switch s {
@@ -156,10 +157,19 @@ func (s reqState) registered() bool { return s == reqPending || s == reqClaimed 
 // reqClaimed and is not a terminal state).
 func (s reqState) claimed() bool { return s == reqClaimed || s == reqRunning }
 
-func (rq *Request) loadState() reqState   { return reqState(rq.state.Load()) }
-func (rq *Request) storeState(s reqState) { rq.state.Store(int32(s)) }
+func (rq *Request) loadState() reqState { return reqState(rq.state.Load() &^ reqReloadFlag) }
+func (rq *Request) reloading() bool     { return rq.state.Load()&reqReloadFlag != 0 }
+
+// storeState requires an unpublished Request or both rq.mu and jw.mu.
+func (rq *Request) storeState(s reqState) {
+	rq.state.Store(int32(s) | (rq.state.Load() & reqReloadFlag))
+}
+
 func (rq *Request) casState(old, want reqState) bool {
-	return rq.state.CompareAndSwap(int32(old), int32(want))
+	// Reload only sets its flag, so these two attempts also cover it racing
+	// with the lifecycle transition. Neither transition clears the flag.
+	return rq.state.CompareAndSwap(int32(old), int32(want)) ||
+		rq.state.CompareAndSwap(int32(old)|reqReloadFlag, int32(want)|reqReloadFlag)
 }
 
 // finishLocked detaches a live Request from its Session and transitions it to
@@ -650,7 +660,7 @@ func (rq *Request) Cancel(err error) {
 func (rq *Request) Reload() {
 	rq.mu.Lock()
 	if rq.ctx.Err() == nil {
-		rq.reload.Store(true)
+		rq.state.Or(reqReloadFlag)
 		if rq.loadState() == reqRunning {
 			rq.cancelFn(nil)
 		}
@@ -1211,10 +1221,10 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		}
 	}()
 
-	if !rq.reload.Load() {
+	if !rq.reloading() {
 		err = rq.onConnect()
 	}
-	if rq.reload.Load() {
+	if rq.reloading() {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			_ = rq.Jaws.Log(err)
 		}
@@ -1230,7 +1240,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		// long enough to send its final frame. Other cancellation remains abrupt.
 		ioctx, cancelIO := context.WithCancel(context.WithoutCancel(ctx))
 		stop := context.AfterFunc(ctx, func() {
-			if !rq.reload.Load() {
+			if !rq.reloading() {
 				cancelIO()
 			}
 		})
@@ -1258,7 +1268,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		// Production deliberately discards the recovered value so a loop panic stays
 		// contained to the failed Request while its connection is torn down.
 		rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
-		if rq.reload.Load() {
+		if rq.reloading() {
 			<-written
 		}
 	}
