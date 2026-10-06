@@ -82,11 +82,13 @@ func validateJsVarPath(path string) error {
 // JsVarCheck validates the complete tentative state of a browser proposal.
 //
 // A nil check denies browser writes. The check runs under the store's write lock
-// after jq tentatively applies a changed value. It must only inspect next;
+// after jq tentatively applies a changed value. If T has Go fields omitted from
+// JSON, unchanged proposals are checked and published like changed ones. It
+// must only inspect next;
 // an error or panic rolls the proposal back. The source can authorize a user
 // or session. Validate the complete value, including changes through parent
-// and root paths. The check sees converted Go values, not raw browser JSON;
-// see [JsVarBinding.JawsInput].
+// and root paths and Go fields omitted from JSON. The check sees converted Go
+// values, not raw browser JSON; see [JsVarBinding.JawsInput].
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -138,6 +140,7 @@ type JsVarStore[T any] struct {
 	locker   bind.RWLocker
 	value    *T
 	partial  bool // plain JSON tree with matching jq paths and safe partial patches
+	hidden   bool // partial tree with Go fields omitted from JSON
 	version  uint64
 	floor    uint64 // older bindings need a root patch
 	changes  []jsVarChange
@@ -167,12 +170,12 @@ func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value 
 			err = jq.ErrInvalidReceiver
 		} else {
 			store = &JsVarStore[T]{
-				jaws:    jw,
-				name:    name,
-				locker:  bind.AsRWLocker(locker),
-				value:   value,
-				partial: plainJsVarType(reflect.TypeOf(value).Elem()),
+				jaws:   jw,
+				name:   name,
+				locker: bind.AsRWLocker(locker),
+				value:  value,
 			}
+			store.partial, store.hidden = classifyJsVarType(reflect.TypeOf(value).Elem())
 		}
 	}
 	return
@@ -651,7 +654,7 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 	if store.partial {
 		// Plain trees map decoded proposals to the same jq/JSON paths.
 		// Check the changed subtree before accepting it.
-		changed, err = jq.SetChecked(store.value, path, value, func() error {
+		check := func() error {
 			var next any = store.value
 			if path != "" {
 				var getErr error
@@ -663,7 +666,15 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 				return encodeErr
 			}
 			return store.ClientCheck(elem, store.value, path)
-		})
+		}
+		if changed, err = jq.SetChecked(store.value, path, value, check); err == nil && !changed && store.hidden {
+			// jq skips the check for equal Go values. Whether a proposal is equal
+			// can depend on fields absent from browser JSON, so check and publish
+			// as if it changed: the check sees the same next value either way.
+			if err = check(); err == nil {
+				changed = true
+			}
+		}
 		if changed {
 			store.record(path)
 		}
@@ -768,8 +779,17 @@ var jsVarMarshalers = [...]reflect.Type{
 
 // plainJsVarType is conservative about encoder paths and reference aliases.
 // Map branches are partial under the documented JSON-tree/no-alias contract.
-func plainJsVarType(t reflect.Type) bool {
-	return plainJsVarTypeSeen(t, make(map[reflect.Type]bool))
+func plainJsVarType(t reflect.Type) (plain bool) {
+	plain, _ = classifyJsVarType(t)
+	return
+}
+
+// classifyJsVarType reports whether t is plain, and whether a plain t has Go
+// fields omitted from JSON.
+func classifyJsVarType(t reflect.Type) (plain, hidden bool) {
+	plain = plainJsVarTypeSeen(t, make(map[reflect.Type]bool), &hidden)
+	hidden = plain && hidden
+	return
 }
 
 func plainJsVarScalar(t reflect.Type) bool {
@@ -782,7 +802,7 @@ func plainJsVarScalar(t reflect.Type) bool {
 	return false
 }
 
-func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
+func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool, hidden *bool) bool {
 	if seen[t] {
 		return false
 	}
@@ -805,6 +825,7 @@ func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
 				return false
 			}
 			if !field.IsExported() || field.Tag.Get("json") == "-" {
+				*hidden = true
 				continue
 			}
 			name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
@@ -829,15 +850,15 @@ func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
 					return false
 				}
 			}
-			if !plainJsVarTypeSeen(field.Type, seen) {
+			if !plainJsVarTypeSeen(field.Type, seen, hidden) {
 				return false
 			}
 		}
 		return true
 	case reflect.Map:
-		return t.Key() == reflect.TypeFor[string]() && plainJsVarTypeSeen(t.Elem(), seen)
+		return t.Key() == reflect.TypeFor[string]() && plainJsVarTypeSeen(t.Elem(), seen, hidden)
 	case reflect.Array:
-		return plainJsVarTypeSeen(t.Elem(), seen)
+		return plainJsVarTypeSeen(t.Elem(), seen, hidden)
 	}
 	return false
 }

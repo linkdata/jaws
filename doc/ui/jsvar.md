@@ -37,7 +37,9 @@ write, and connection behavior.
 `ClientCheck` is required for browser writes; nil denies them. It receives the
 complete tentative Go value under the store's write lock. Validate authorization
 through the originating Element and validate the full value, including parent and
-root changes. An error or panic rolls the proposal back. The callback must only
+root changes and Go fields omitted from JSON: a `null` proposal zeroes the whole
+Go struct. If the type has such fields, unchanged proposals are checked and
+published like changed ones. An error or panic rolls the proposal back. The callback must only
 inspect: do not mutate or retain tentative data, reacquire the lock, or call a
 store setter. Every binding receives the same JSON value; use separate stores
 for data with different visibility.
