@@ -268,6 +268,7 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	buffers := jw.requestBufferPool.Get().(*requestBuffers)
 	rq = &Request{
 		Jaws:     jw,
+		wakeCh:   make(chan struct{}, 1),
 		buffers:  buffers,
 		todoDirt: buffers.todoDirt,
 		elems:    buffers.elems,

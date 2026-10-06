@@ -70,6 +70,10 @@ Browser event handlers run serially within each Request, concurrently with updat
 processing and handlers in other Requests. Synchronize shared application state
 and return promptly.
 
+Queued browser commands wake the Request processing loop. Maintenance also wakes
+Requests with queued output. State-driven rendering still uses `Dirty` and the
+normal update interval.
+
 An event accepted before its target is removed can still reach that deleted
 Element. Its render, update, and queue helpers become no-ops. Browser events
 while disconnected are not replayed; see [browser integration](browser.md).

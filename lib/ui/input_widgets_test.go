@@ -126,7 +126,6 @@ func TestInputBool_JawsUpdateEmitsCheckedState(t *testing.T) {
 		// false -> true emits "true".
 		sb.Set(true)
 		checkbox.JawsUpdate(elem)
-		tr.InCh <- wire.WsMsg{} // wake the loop so the queued op flushes to OutCh
 		if v, ok := waitValue(); !ok || v != "true" {
 			t.Fatalf("expected SetValue %q on false->true, got ok=%v v=%q", "true", ok, v)
 		}
@@ -134,7 +133,6 @@ func TestInputBool_JawsUpdateEmitsCheckedState(t *testing.T) {
 		// true -> false emits "false".
 		sb.Set(false)
 		checkbox.JawsUpdate(elem)
-		tr.InCh <- wire.WsMsg{}
 		if v, ok := waitValue(); !ok || v != "false" {
 			t.Fatalf("expected SetValue %q on true->false, got ok=%v v=%q", "false", ok, v)
 		}
@@ -142,7 +140,6 @@ func TestInputBool_JawsUpdateEmitsCheckedState(t *testing.T) {
 		// Unchanged value emits nothing (Last.Swap dedup).
 		checkbox.JawsUpdate(elem)
 		checkbox.JawsUpdate(elem)
-		tr.InCh <- wire.WsMsg{}
 		if v, ok := waitValue(); ok {
 			t.Fatalf("unchanged bool value re-emitted SetValue %q", v)
 		}

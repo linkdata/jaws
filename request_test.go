@@ -2364,7 +2364,7 @@ func TestRequest_Dirty(t *testing.T) {
 
 		rq.Dirty(tss1)
 		rq.Dirty(tss2)
-		// Dirtying marks the elements; the Serve loop broadcasts what.Update only
+		// Dirtying marks the elements; the Serve loop distributes dirt only
 		// when its updateTicker fires (1ms in tests). Advance the fake clock past
 		// it, then let the process loop re-render both elements (JawsGet again).
 		time.Sleep(2 * time.Millisecond)
@@ -2377,8 +2377,8 @@ func TestRequest_Dirty(t *testing.T) {
 		th.True(n1 >= 2)
 		th.True(n2 >= 2)
 		// Pin an upper bound by proving the system quiesces: with jw.dirty now empty,
-		// distributeDirt returns 0, no further what.Update is broadcast, so getCalled
-		// must not increase. This catches a runaway re-render/re-broadcast regression.
+		// distributeDirt has no work and sends no wake-ups, so getCalled
+		// must not increase. This catches a runaway re-render regression.
 		time.Sleep(2 * time.Millisecond)
 		synctest.Wait()
 		th.Equal(atomic.LoadInt32(&tss1.getCalled), n1)
@@ -4420,9 +4420,12 @@ func TestWS_AutoSessionCloseAtPublication(t *testing.T) {
 	readCtx, cancelRead := context.WithTimeout(t.Context(), testTimeout)
 	defer cancelRead()
 	var messages strings.Builder
-	for !strings.Contains(messages.String(), marker) {
+	for {
 		messageType, data, err := conn.Read(readCtx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
 			t.Fatalf("reading WebSocket messages: %v (got %q)", err, messages.String())
 		}
 		if messageType != websocket.MessageText {
@@ -4431,6 +4434,9 @@ func TestWS_AutoSessionCloseAtPublication(t *testing.T) {
 		messages.Write(data)
 	}
 
+	if strings.Contains(messages.String(), marker) {
+		t.Fatal("message sent after Reload")
+	}
 	if connectSession != nil {
 		t.Errorf("ConnectFn Session() = %v, want nil after Session.Close", connectSession)
 	}

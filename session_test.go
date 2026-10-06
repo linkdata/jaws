@@ -1289,17 +1289,8 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	default:
 	}
 
-	// Session.Close arms a reload on the live request only, and wakes it with a
-	// key-targeted Update. The finished request gets neither.
-	closeDone := make(chan struct{})
-	go func() {
-		sess.Close()
-		close(closeDone)
-	}()
-	got = nextBroadcast(t, jw)
-	th.Equal(got.What, what.Update)
-	th.Equal(got.Dest, live.JawsKey)
-	// deadSession queued the reload before the wake broadcast, so it is visible now.
+	// Session.Close queues a reload only on the live Request, without broadcasting.
+	sess.Close()
 	live.muQueue.Lock()
 	th.Equal(len(live.wsQueue), 1)
 	if len(live.wsQueue) == 1 {
@@ -1310,11 +1301,6 @@ func TestSession_ProducersSkipRecycled(t *testing.T) {
 	finished.muQueue.Lock()
 	th.Equal(len(finished.wsQueue), 0)
 	finished.muQueue.Unlock()
-	select {
-	case <-closeDone:
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for Session.Close")
-	}
 	select {
 	case extra := <-jw.bcastCh:
 		t.Fatalf("recycled request must not broadcast, got %#v", extra)
@@ -1458,8 +1444,7 @@ func TestSessionCloseDoesNotReachLaterRequest(t *testing.T) {
 // TestSessionCloseReloadsAssociatedPendingRequest covers issue #215: closing a
 // Session must reload a Request that is associated but whose WebSocket has not
 // subscribed yet. The reload is queued on the Request by Session.Close and
-// delivered when the WebSocket connects, independent of the (dropped) wake-up
-// broadcast.
+// delivered when the WebSocket connects.
 func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1487,36 +1472,7 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 		t.Fatalf("target state = %v, want %v", got, reqPending)
 	}
 
-	// A separate control subscription, not attached to the session, is an ordering
-	// probe against the serve loop: broadcasts are processed in order.
-	controlHTTP := httptest.NewRequest(http.MethodGet, server.URL+"/", nil)
-	controlHTTP.RemoteAddr = "127.0.0.2:1"
-	control := jw.newRequest(controlHTTP)
-	if control.Session() != nil {
-		t.Fatal("control Request must not share the session")
-	}
-	controlCh := jw.subscribe(control, 8)
-	if controlCh == nil {
-		t.Fatal("control subscription failed")
-	}
-	waitForServeLoop(t, jw) // ensure control is installed in subs
-
 	sess.Close()
-
-	// Prove the close wake-up was processed while the target had no subscription:
-	// once the control marker arrives, the earlier key-targeted Update to the
-	// (unsubscribed) target has already been handled and dropped. The unfixed
-	// implementation broadcast the reload here and lost it.
-	const controlMarker = "control ordering marker"
-	jw.Broadcast(wire.Message{Dest: control.JawsKey, What: what.Alert, Data: controlMarker})
-	select {
-	case msg := <-controlCh:
-		if msg.What != what.Alert || msg.Data != controlMarker {
-			t.Fatalf("control subscription got %#v, want Alert %q", msg, controlMarker)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for control ordering marker")
-	}
 
 	// Now the target's browser opens its WebSocket.
 	connected := make(chan struct{})
@@ -1545,24 +1501,28 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 		t.Fatal("target Request did not start its WebSocket")
 	}
 
-	// A post-connect marker terminates the read loop. Batching is opportunistic, so
-	// the reload may arrive in an earlier frame; accumulate frames until the marker
-	// and assert exactly one Reload command survived the close.
+	// Reload terminates the connection; messages queued after it are discarded.
 	const targetMarker = "post-connect marker"
 	jw.Broadcast(wire.Message{Dest: target.JawsKey, What: what.Alert, Data: targetMarker})
 
 	readCtx, cancelRead := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancelRead()
 	var acc strings.Builder
-	for !strings.Contains(acc.String(), targetMarker) {
+	for {
 		mt, data, err := conn.Read(readCtx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
 			t.Fatalf("reading from target Request: %v (got %q)", err, acc.String())
 		}
 		if mt != websocket.MessageText {
 			t.Fatalf("WebSocket message type = %v, want text", mt)
 		}
 		acc.Write(data)
+	}
+	if strings.Contains(acc.String(), targetMarker) {
+		t.Fatal("message sent after Reload")
 	}
 	if n := strings.Count(acc.String(), what.Reload.String()+"\t"); n != 1 {
 		t.Fatalf("got %d Reload commands, want exactly 1: %q", n, acc.String())
@@ -1571,8 +1531,7 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 
 // TestSessionCloseReloadsConnectedRequestExactlyOnce closes a Session whose
 // Request is already connected and asserts that exactly one Reload is delivered.
-// It reads through a post-close marker rather than a single frame, so a delayed
-// duplicate reload would be caught.
+// It reads until normal closure and checks that messages after Reload are discarded.
 func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1620,8 +1579,7 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 		t.Fatal("Request did not start its WebSocket")
 	}
 
-	// The Request is now connected and subscribed; close the session and then send
-	// a marker to bound the read.
+	// Close the session and queue a marker that must be discarded after Reload.
 	sess.Close()
 	const marker = "post-close marker"
 	jw.Broadcast(wire.Message{Dest: rq.JawsKey, What: what.Alert, Data: marker})
@@ -1629,9 +1587,12 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 	readCtx, cancelRead := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancelRead()
 	var acc strings.Builder
-	for !strings.Contains(acc.String(), marker) {
+	for {
 		mt, data, err := conn.Read(readCtx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
 			t.Fatalf("reading from Request: %v (got %q)", err, acc.String())
 		}
 		if mt != websocket.MessageText {
@@ -1639,15 +1600,16 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 		}
 		acc.Write(data)
 	}
+	if strings.Contains(acc.String(), marker) {
+		t.Fatal("message sent after Reload")
+	}
 	if n := strings.Count(acc.String(), what.Reload.String()+"\t"); n != 1 {
 		t.Fatalf("got %d Reload commands, want exactly 1: %q", n, acc.String())
 	}
 }
 
-// TestServeKeyTargetedUpdateFailFast verifies the overload classification the
-// Session.Close wake-up relies on: only the internal nil-destination Update tick
-// is droppable, while every addressed Update — tag-targeted or key-targeted — is
-// one-shot and must fail-fast an overloaded Request.
+// TestServeKeyTargetedUpdateFailFast verifies that an unaddressed Update is
+// coalescible, while every addressed Update must fail-fast an overloaded Request.
 func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1694,7 +1656,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 		}
 	}
 
-	// A nil-destination Update is the coalescible dirty-render tick: overflowing it
+	// A nil-destination Update is coalescible: overflowing it
 	// must neither cancel the Request nor kill its subscription.
 	dropRq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	dropCh := jw.subscribe(dropRq, 1) // not drained during the overflow below
@@ -1748,7 +1710,7 @@ func TestServeKeyTargetedUpdateFailFast(t *testing.T) {
 	}
 	awaitCancel("tag-targeted Update", tagRq)
 
-	// A key-targeted Update is the Session.Close wake-up: overflow must fail-fast.
+	// A key-targeted Update is addressed: overflow must fail-fast.
 	wakeRq := jw.newRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if jw.subscribe(wakeRq, 1) == nil { // never drained
 		t.Fatal("wake subscription failed")

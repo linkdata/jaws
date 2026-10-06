@@ -259,9 +259,9 @@ func TestElement_Queued(t *testing.T) {
 		th.NoErr(rq.UI(tss))
 		rq.Jaws.Dirty(tss)
 		rq.Dirty(tss)
-		// The Serve loop only broadcasts what.Update when its updateTicker fires
+		// The Serve loop only distributes dirt when its updateTicker fires
 		// (1ms in tests). Advance the fake clock past it, then let the process
-		// loop drain the update and invoke JawsUpdate.
+		// loop drain its dirty work and invoke JawsUpdate.
 		time.Sleep(2 * time.Millisecond)
 		synctest.Wait()
 		n := atomic.LoadInt32(&tss.updateCalled)
@@ -558,13 +558,6 @@ func TestElement_ReplaceMessageTargetsElementHTML(t *testing.T) {
 	html := `<div id="` + jid.String() + `">replaced</div>`
 
 	elem.Replace(template.HTML(html))
-	// Element.Replace queues directly on the Request, so poke the process loop
-	// once to ensure queued messages are flushed to OutCh in this harness.
-	select {
-	case rq.InCh <- wire.WsMsg{}:
-	case <-time.After(time.Second):
-		t.Fatal("timeout waking request process loop")
-	}
 	msg := nextOutboundMsg(t, rq)
 
 	if msg.What != what.Replace {

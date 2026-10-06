@@ -109,8 +109,6 @@ func TestContainer_UpdateEmitsWireOps(t *testing.T) {
 
 		tc.contents = []jaws.UI{span1, span2}
 		elem.JawsUpdate()
-		// Wake the harness loop so the queued ops flush to OutCh.
-		tr.InCh <- wire.WsMsg{}
 
 		synctest.Wait()
 		var sawAppend, sawOrder bool
@@ -409,7 +407,6 @@ func TestContainerUpdateRenderErrorDoesNotAppendFailedChild(t *testing.T) {
 			t.Fatalf("failed append child %v leaked into the request registry", failingChild.jid)
 		}
 
-		tr.InCh <- wire.WsMsg{}
 		synctest.Wait()
 		for {
 			select {
@@ -736,7 +733,6 @@ func TestSelectWidget_AppliesGetterAfterInitialRender(t *testing.T) {
 				t.Fatalf("initial option markup unexpectedly selected an option: %s", got)
 			}
 
-			tr.InCh <- wire.WsMsg{}
 			select {
 			case msg := <-tr.OutCh:
 				if msg.What != what.Value || msg.Data != tc.want {
@@ -791,7 +787,6 @@ func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
 	if err := elem.JawsRender(&sb, nil); err != nil {
 		t.Fatal(err)
 	}
-	tr.InCh <- wire.WsMsg{}
 	select {
 	case msg := <-tr.OutCh:
 		if msg.What != what.Value || msg.Data != "1" {
@@ -804,7 +799,6 @@ func TestSelectWidget_AppendsOptionBeforeSettingNewValue(t *testing.T) {
 	sh.Set("2")
 	sh.contents = []jaws.UI{opt1, opt2}
 	selectUI.JawsUpdate(elem)
-	tr.InCh <- wire.WsMsg{}
 
 	sawAppend := false
 	for {

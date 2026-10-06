@@ -90,6 +90,7 @@ type Request struct {
 	Jaws             *Jaws                   // (read-only) the JaWS instance the Request belongs to
 	JawsKey          key.Key                 // (read-only) random key assigned before publication, immutable thereafter; routes JaWS URLs and request-targeted broadcasts only while registered
 	remoteIP         netip.Addr              // (read-only) remote IP, or the zero netip.Addr if unset
+	wakeCh           chan struct{}           // coalesced processing-loop wake-ups; never closed
 	state            atomic.Int32            // reqState lifecycle (reqUnclaimable/reqPending/reqClaimed/reqRunning/reqFinished); see loadState/casState
 	lastWriteSeconds atomic.Int32            // [Jaws.runtimeSeconds] value at the most recent RequestWriter write; lock-free, drives pending-eviction preference (pendingEvictionVictimLocked) and idle expiry (maintenance)
 	mu               deadlock.RWMutex        // protects following
@@ -155,7 +156,9 @@ func (s reqState) registered() bool { return s == reqPending || s == reqClaimed 
 // reqClaimed and is not a terminal state).
 func (s reqState) claimed() bool { return s == reqClaimed || s == reqRunning }
 
-func (rq *Request) loadState() reqState   { return reqState(rq.state.Load()) }
+func (rq *Request) loadState() reqState { return reqState(rq.state.Load()) }
+
+// storeState requires an unpublished Request or both rq.mu and jw.mu.
 func (rq *Request) storeState(s reqState) { rq.state.Store(int32(s)) }
 func (rq *Request) casState(old, want reqState) bool {
 	return rq.state.CompareAndSwap(int32(old), int32(want))
@@ -308,26 +311,19 @@ func (rq *Request) killSession(wasClaimed bool) {
 	rq.mu.Unlock()
 }
 
-// deadSession atomically detaches sess and arms one page reload, returning the
-// Request identity that belonged to it.
-//
-// A zero return means rq no longer belongs to sess: it has finished, or has been
-// detached from this Session.
+// deadSession detaches sess and queues a page reload if rq still belongs to it.
 //
 // The reload is queued onto wsQueue rather than broadcast, so a Request whose
 // WebSocket has not subscribed yet still reloads on connect: process drains
 // wsQueue before its first select. Holding rq.mu here excludes both a concurrent
 // recycle and the process loop's getSendMsgs, so the queue append is safe.
-// Session.Close wakes an already-running process with a key-targeted Update.
-func (rq *Request) deadSession(sess *Session) (k key.Key) {
+func (rq *Request) deadSession(sess *Session) {
 	rq.mu.Lock()
 	if rq.session == sess {
 		rq.session = nil
-		k = rq.JawsKey
 		rq.queue(wire.WsMsg{What: what.Reload})
 	}
 	rq.mu.Unlock()
-	return
 }
 
 // sessionDestKey returns rq's identity only while it still belongs to sess.
@@ -573,9 +569,10 @@ func (rq *Request) replaceContext(fn func(oldCtx context.Context) (newCtx contex
 
 // maintenance performs periodic Request cleanup.
 //
-// It purges browser-removal tombstones. For a request that never went live it
-// also cancels and reports expiry once it has been idle (no [RequestWriter]
-// write) longer than requestTimeout, or immediately if its context is already
+// It wakes queued output and purges browser-removal tombstones.
+// For a request that never went live it also cancels and reports expiry once
+// it has been idle (no [RequestWriter] write) longer than requestTimeout, or
+// immediately if its context is already
 // done. nowSeconds is the reference instant ([Jaws.runtimeSeconds]). Called from
 // the Serve loop's maintenance pass while jw.mu is held.
 //
@@ -595,6 +592,12 @@ func (rq *Request) maintenance(nowSeconds int32, requestTimeout time.Duration) (
 		}
 	}
 	rq.purgeDeletedElementsLocked()
+	// Maintenance also wakes queued output when no notification is pending.
+	rq.muQueue.Lock()
+	if len(rq.wsQueue) > 0 {
+		rq.wake()
+	}
+	rq.muQueue.Unlock()
 	return
 }
 
@@ -636,6 +639,22 @@ func (rq *Request) cancel(err error) {
 // and retain the derived context's cancellation function instead.
 func (rq *Request) Cancel(err error) {
 	rq.cancel(err)
+}
+
+// Reload queues a command asking the browser to reload its page.
+//
+// The WebSocket writer sends Reload and closes the connection, which cancels
+// the Request's context. Events and callbacks run normally until disconnection.
+// A pending Request sends Reload after its [ConnectFn], if any, returns nil.
+// Socket writes use the WebSocket timeout; delivery requires a working connection.
+// Calling Reload after cancellation has no effect.
+// Session data and cookies are unchanged. See [Request] for pointer lifetime.
+func (rq *Request) Reload() {
+	rq.mu.Lock()
+	if rq.ctx.Err() == nil {
+		rq.queue(wire.WsMsg{What: what.Reload})
+	}
+	rq.mu.Unlock()
 }
 
 // alertData builds the wire payload for an Alert message, HTML-escaping both the
@@ -883,6 +902,9 @@ func (rq *Request) appendDirtyTags(tags []any) {
 				}
 			}
 			rq.todoDirt = append(rq.todoDirt, tagValue)
+		}
+		if len(rq.todoDirt) > 0 {
+			rq.wake()
 		}
 	}
 	rq.mu.Unlock()
@@ -1181,7 +1203,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 	// Size the broadcast buffer with headroom that scales with the page's element
 	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
 	// would block, kills the subscription and cancels this request for every message
-	// except the coalescible nil-destination Update tick, which it drops instead.
+	// except a coalescible nil-destination Update, which it drops instead.
 	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
 	defer func() {
 		// onConnect is user code and may return an error or panic. Release its
@@ -1193,11 +1215,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 
 	if err = rq.onConnect(); err == nil {
 		incomingMsgCh := make(chan wire.WsMsg)
-		// Snapshot ctx after onConnect so a context installed by the callback
-		// governs all WebSocket loops.
-		rq.mu.RLock()
-		ctx := rq.ctx
-		rq.mu.RUnlock()
+		ctx := rq.Context()
 		// Transport failures ordinarily only report that the peer is no longer
 		// reachable. A read-limit violation is actionable application feedback, so
 		// retain it even when transport debugging is disabled.
@@ -1209,7 +1227,7 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 		}
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
 		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
-		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // calls ws.Close()
+		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // closes the WebSocket
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays
