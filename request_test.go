@@ -4420,9 +4420,12 @@ func TestWS_AutoSessionCloseAtPublication(t *testing.T) {
 	readCtx, cancelRead := context.WithTimeout(t.Context(), testTimeout)
 	defer cancelRead()
 	var messages strings.Builder
-	for !strings.Contains(messages.String(), marker) {
+	for {
 		messageType, data, err := conn.Read(readCtx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
 			t.Fatalf("reading WebSocket messages: %v (got %q)", err, messages.String())
 		}
 		if messageType != websocket.MessageText {
@@ -4431,6 +4434,9 @@ func TestWS_AutoSessionCloseAtPublication(t *testing.T) {
 		messages.Write(data)
 	}
 
+	if strings.Contains(messages.String(), marker) {
+		t.Fatal("message sent after Reload")
+	}
 	if connectSession != nil {
 		t.Errorf("ConnectFn Session() = %v, want nil after Session.Close", connectSession)
 	}

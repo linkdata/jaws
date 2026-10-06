@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/linkdata/jaws/lib/what"
 )
 
 // writeBatchLimit is the threshold at which WriteLoop stops appending whole
@@ -130,6 +131,9 @@ func readWebSocket(ctx context.Context, resultCh chan<- wsReadResult, ws *websoc
 // WebSocket.
 //
 // Consecutive queued records may be coalesced into one text message.
+// Reload ends its batch and closes the connection after that batch is written.
+// Records queued after Reload are discarded. After closing, ccf(nil) is called
+// if ccf is non-nil and neither ctx nor doneCh is done.
 //
 // Each WebSocket write has its own writeTimeout deadline; writeTimeout must be
 // positive.
@@ -154,8 +158,15 @@ func WriteLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan s
 				return
 			}
 			writectx, writecancel := context.WithTimeout(ctx, writeTimeout)
-			err = ws.Write(writectx, websocket.MessageText, batchData(msg, outboundMsgCh))
+			data, reload := batchData(msg, outboundMsgCh)
+			err = ws.Write(writectx, websocket.MessageText, data)
 			writecancel()
+			if err == nil && reload {
+				// Close before cancelling: a cancelled reader also closes the socket.
+				_ = ws.Close(websocket.StatusNormalClosure, "")
+				reportError(ctx, doneCh, ccf, nil)
+				return
+			}
 		}
 	}
 	reportError(ctx, doneCh, ccf, err)
@@ -185,21 +196,23 @@ func reportError(ctx context.Context, doneCh <-chan struct{}, ccf context.Cancel
 	}
 }
 
-func batchData(firstMsg WsMsg, outboundMsgCh <-chan WsMsg) []byte {
-	b := firstMsg.Append(nil)
+func batchData(firstMsg WsMsg, outboundMsgCh <-chan WsMsg) (b []byte, reload bool) {
+	b = firstMsg.Append(nil)
+	reload = firstMsg.What == what.Reload
 	// accumulate data to send as long as more messages are available until it
 	// exceeds writeBatchLimit
 batchloop:
-	for len(b) < writeBatchLimit {
+	for !reload && len(b) < writeBatchLimit {
 		select {
 		case msg, ok := <-outboundMsgCh:
 			if !ok {
 				break batchloop
 			}
 			b = msg.Append(b)
+			reload = msg.What == what.Reload
 		default:
 			break batchloop
 		}
 	}
-	return b
+	return
 }

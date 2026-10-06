@@ -31,6 +31,7 @@ func TestRequestReload(t *testing.T) {
 			sess := jw.NewSession(httptest.NewRecorder(), hr)
 			sess.Set("kept", true)
 			rq := jw.NewRequest(httptest.NewRecorder(), hr)
+			requestCtx := rq.Context()
 			connected := make(chan struct{})
 			rq.SetConnectFn(func(rq *Request) error {
 				if when == "pending" {
@@ -89,6 +90,11 @@ func TestRequestReload(t *testing.T) {
 				t.Fatalf("reloads=%d, session data=%v, cookie=%v", reloads, sess.Get("kept"), sess.Cookie())
 			}
 			select {
+			case <-requestCtx.Done():
+			case <-ctx.Done():
+				t.Fatal("request outlived reload")
+			}
+			select {
 			case <-writing:
 			case <-ctx.Done():
 				t.Fatal("writer outlived reload")
@@ -97,53 +103,77 @@ func TestRequestReload(t *testing.T) {
 	}
 }
 
-func TestRequestReloadStopsQueuedEvents(t *testing.T) {
+func TestRequestReloadStopsNewEvents(t *testing.T) {
 	rq := newTestRequest(t)
 	defer rq.Close()
 	started := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
+	queued := make(chan struct{})
 	var calls atomic.Int32
 	item := &testUi{}
 	rq.Register(item, func(*Element, string) error {
-		if calls.Add(1) == 1 {
+		switch calls.Add(1) {
+		case 1:
 			close(started)
-			<-rq.Context().Done()
+			<-release
+		case 2:
+			close(queued)
 		}
 		return nil
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
-	for range 2 {
+	send := func(msg wire.WsMsg) {
+		t.Helper()
 		select {
-		case rq.InCh <- wire.WsMsg{Jid: jidForTag(rq.Request, item), What: what.Input}:
+		case rq.InCh <- msg:
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
 	}
+	msg := wire.WsMsg{Jid: jidForTag(rq.Request, item), What: what.Input}
+	send(msg)
+	send(msg)
+	// The unbuffered handoff of a third message fences admission of both events.
+	send(wire.WsMsg{})
 	select {
 	case <-started:
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
 	rq.Reload()
-	reloads := 0
-	for {
-		select {
-		case msg, ok := <-rq.OutCh:
-			if !ok {
-				if calls.Load() != 1 || reloads != 1 {
-					t.Fatalf("callbacks=%d reloads=%d, want 1 each", calls.Load(), reloads)
-				}
-				return
-			}
-			if reloads != 0 {
-				t.Fatal("message followed final Reload")
-			}
-			if msg.What == what.Reload {
-				reloads++
-			}
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+	send(msg)
+	send(wire.WsMsg{})
+	select {
+	case release <- struct{}{}:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	select {
+	case <-queued:
+	case <-ctx.Done():
+		t.Fatal("event queued before Reload did not run")
+	}
+	select {
+	case msg := <-rq.OutCh:
+		if msg.What != what.Reload {
+			t.Fatalf("got %v, want Reload", msg)
 		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if rq.Context().Err() != nil {
+		t.Fatal("request cancelled before the writer disconnected")
+	}
+	rq.Cancel(nil) // Simulate the writer closing the connection after Reload.
+	select {
+	case <-rq.DoneCh:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("callbacks=%d, want the two events accepted before Reload", calls.Load())
 	}
 }
 
@@ -166,6 +196,7 @@ func TestRequestReloadStateTransitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	go jw.Serve()
 	defer jw.Close()
 	for _, when := range []string{"pending", "claimed", "running", "concurrent"} {
 		t.Run(when, func(t *testing.T) {

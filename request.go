@@ -651,21 +651,28 @@ func (rq *Request) Cancel(err error) {
 
 // Reload retires the Request and asks the browser to reload its page.
 //
-// New event callbacks stop immediately; callbacks already running may finish.
-// A connected Request is cancelled and sends Reload before closing its WebSocket.
+// New events are ignored immediately; already accepted callbacks may run until
+// disconnection. The WebSocket writer sends Reload and closes the connection,
+// which cancels the Request's context.
 // A pending Request sends Reload when it connects, without calling its ConnectFn.
 // Socket writes use the WebSocket timeout; delivery requires a working connection.
 // Calling Reload again, or after cancellation, has no effect.
 // Session data and cookies are unchanged. See [Request] for pointer lifetime.
+// Running Requests use [Jaws.Broadcast] and inherit its processing-loop requirement.
 func (rq *Request) Reload() {
+	var k key.Key
 	rq.mu.Lock()
-	if rq.ctx.Err() == nil {
+	if rq.ctx.Err() == nil && !rq.reloading() {
 		rq.state.Or(reqReloadFlag)
+		rq.queue(wire.WsMsg{What: what.Reload})
 		if rq.loadState() == reqRunning {
-			rq.cancelFn(nil)
+			k = rq.JawsKey
 		}
 	}
 	rq.mu.Unlock()
+	if k != 0 {
+		rq.Jaws.Broadcast(wire.Message{Dest: k, What: what.Update})
+	}
 }
 
 // alertData builds the wire payload for an Alert message, HTML-escaping both the
@@ -1224,28 +1231,9 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 	if !rq.reloading() {
 		err = rq.onConnect()
 	}
-	if rq.reloading() {
-		if err != nil && !errors.Is(err, context.Canceled) {
-			_ = rq.Jaws.Log(err)
-		}
-		err = nil // A connect callback may return cancellation after Reload.
-	}
 	if err == nil {
 		incomingMsgCh := make(chan wire.WsMsg)
-		// Snapshot the application context after onConnect.
-		rq.mu.RLock()
-		ctx := rq.ctx
-		rq.mu.RUnlock()
-		// Reload cancels application work immediately but keeps transport alive
-		// long enough to send its final frame. Other cancellation remains abrupt.
-		ioctx, cancelIO := context.WithCancel(context.WithoutCancel(ctx))
-		stop := context.AfterFunc(ctx, func() {
-			if !rq.reloading() {
-				cancelIO()
-			}
-		})
-		defer stop()
-		defer cancelIO()
+		ctx := rq.Context()
 		// Transport failures ordinarily only report that the peer is no longer
 		// reachable. A read-limit violation is actionable application feedback, so
 		// retain it even when transport debugging is disabled.
@@ -1256,21 +1244,13 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 			rq.cancel(err)
 		}
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
-		go wire.ReadLoop(ioctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
-		written := make(chan struct{})
-		go func() {
-			defer close(written)
-			defer cancelIO()
-			wire.WriteLoop(ioctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws) // closes the WebSocket
-		}()
+		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
+		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // closes the WebSocket
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays
 		// contained to the failed Request while its connection is torn down.
 		rq.process(broadcastMsgCh, incomingMsgCh, outboundMsgCh) // unsubscribes broadcastMsgCh, closes outboundMsgCh
-		if rq.reloading() {
-			<-written
-		}
 	}
 	return
 }

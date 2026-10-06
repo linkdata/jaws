@@ -1505,8 +1505,7 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 
 	// Prove the close wake-up was processed while the target had no subscription:
 	// once the control marker arrives, the earlier key-targeted Update to the
-	// (unsubscribed) target has already been handled and dropped. The unfixed
-	// implementation broadcast the reload here and lost it.
+	// (unsubscribed) target has already been handled and dropped.
 	const controlMarker = "control ordering marker"
 	jw.Broadcast(wire.Message{Dest: control.JawsKey, What: what.Alert, Data: controlMarker})
 	select {
@@ -1545,24 +1544,28 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 		t.Fatal("target Request did not start its WebSocket")
 	}
 
-	// A post-connect marker terminates the read loop. Batching is opportunistic, so
-	// the reload may arrive in an earlier frame; accumulate frames until the marker
-	// and assert exactly one Reload command survived the close.
+	// Reload terminates the connection; messages queued after it are discarded.
 	const targetMarker = "post-connect marker"
 	jw.Broadcast(wire.Message{Dest: target.JawsKey, What: what.Alert, Data: targetMarker})
 
 	readCtx, cancelRead := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancelRead()
 	var acc strings.Builder
-	for !strings.Contains(acc.String(), targetMarker) {
+	for {
 		mt, data, err := conn.Read(readCtx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
 			t.Fatalf("reading from target Request: %v (got %q)", err, acc.String())
 		}
 		if mt != websocket.MessageText {
 			t.Fatalf("WebSocket message type = %v, want text", mt)
 		}
 		acc.Write(data)
+	}
+	if strings.Contains(acc.String(), targetMarker) {
+		t.Fatal("message sent after Reload")
 	}
 	if n := strings.Count(acc.String(), what.Reload.String()+"\t"); n != 1 {
 		t.Fatalf("got %d Reload commands, want exactly 1: %q", n, acc.String())
@@ -1571,8 +1574,7 @@ func TestSessionCloseReloadsAssociatedPendingRequest(t *testing.T) {
 
 // TestSessionCloseReloadsConnectedRequestExactlyOnce closes a Session whose
 // Request is already connected and asserts that exactly one Reload is delivered.
-// It reads through a post-close marker rather than a single frame, so a delayed
-// duplicate reload would be caught.
+// It reads until normal closure and checks that messages after Reload are discarded.
 func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -1620,8 +1622,7 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 		t.Fatal("Request did not start its WebSocket")
 	}
 
-	// The Request is now connected and subscribed; close the session and then send
-	// a marker to bound the read.
+	// Close the session and queue a marker that must be discarded after Reload.
 	sess.Close()
 	const marker = "post-close marker"
 	jw.Broadcast(wire.Message{Dest: rq.JawsKey, What: what.Alert, Data: marker})
@@ -1629,15 +1630,21 @@ func TestSessionCloseReloadsConnectedRequestExactlyOnce(t *testing.T) {
 	readCtx, cancelRead := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancelRead()
 	var acc strings.Builder
-	for !strings.Contains(acc.String(), marker) {
+	for {
 		mt, data, err := conn.Read(readCtx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
 			t.Fatalf("reading from Request: %v (got %q)", err, acc.String())
 		}
 		if mt != websocket.MessageText {
 			t.Fatalf("WebSocket message type = %v, want text", mt)
 		}
 		acc.Write(data)
+	}
+	if strings.Contains(acc.String(), marker) {
+		t.Fatal("message sent after Reload")
 	}
 	if n := strings.Count(acc.String(), what.Reload.String()+"\t"); n != 1 {
 		t.Fatalf("got %d Reload commands, want exactly 1: %q", n, acc.String())

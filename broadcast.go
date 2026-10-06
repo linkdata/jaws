@@ -188,6 +188,9 @@ func (jw *Jaws) distributeDirt() int {
 }
 
 // Reload requests all active [Request] values to reload their current page.
+//
+// Each WebSocket closes after sending Reload. See [Jaws.Broadcast] for the
+// processing-loop requirement.
 func (jw *Jaws) Reload() {
 	jw.Broadcast(wire.Message{
 		What: what.Reload,

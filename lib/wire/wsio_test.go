@@ -2,8 +2,10 @@ package wire
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -679,6 +681,75 @@ func TestWriteLoop_WritesOneFinalFrame(t *testing.T) {
 	cancel()
 	_ = client.Close()
 	waitDone(t, writeDone, "WriteLoop after context cancel")
+}
+
+func TestWriteLoop_ReloadClosesConnection(t *testing.T) {
+	for _, preceding := range []string{"", "small", strings.Repeat("x", writeBatchLimit)} {
+		t.Run(fmt.Sprint(len(preceding)), func(t *testing.T) {
+			client, server := pipe(t)
+			client.SetReadLimit(2 * writeBatchLimit)
+			defer func() { _ = client.CloseNow() }()
+			defer func() { _ = server.CloseNow() }()
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			ioctx, cancelIO := context.WithCancelCause(t.Context())
+			defer cancelIO(nil)
+			inCh := make(chan WsMsg)
+			readDone := make(chan struct{})
+			go func() {
+				defer close(readDone)
+				ReadLoop(ioctx, cancelIO, nil, inCh, time.Hour, time.Hour, server)
+			}()
+			// After delivering the first record, ReadLoop blocks delivering the
+			// second. Closing the socket alone cannot unblock that delivery.
+			input := (&WsMsg{What: what.Input, Jid: 1}).Format()
+			if err := client.Write(ctx, websocket.MessageText, []byte(input+input)); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-inCh:
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			outCh := make(chan WsMsg, 3)
+			var want []WsMsg
+			if preceding != "" {
+				want = append(want, WsMsg{What: what.Alert, Data: preceding})
+			}
+			want = append(want, WsMsg{What: what.Reload})
+			for _, msg := range want {
+				outCh <- msg
+			}
+			outCh <- WsMsg{What: what.Alert, Data: "after reload"}
+			written := make(chan struct{})
+			go func() {
+				defer close(written)
+				WriteLoop(ioctx, cancelIO, nil, outCh, time.Second, server)
+			}()
+			var got []WsMsg
+			for {
+				_, data, err := client.Read(ctx)
+				if err != nil {
+					if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+						t.Fatal(err)
+					}
+					break
+				}
+				for record := range bytes.Lines(data) {
+					msg, ok := Parse(record)
+					if !ok {
+						t.Fatalf("invalid record: %q", record)
+					}
+					got = append(got, msg)
+				}
+			}
+			waitDone(t, written, "WriteLoop after Reload")
+			waitDone(t, readDone, "ReadLoop after Reload")
+			if !slices.Equal(got, want) {
+				t.Fatalf("messages = %+v, want %+v", got, want)
+			}
+		})
+	}
 }
 
 func TestWriteLoop_RespectsContext(t *testing.T) {

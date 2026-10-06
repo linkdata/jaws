@@ -219,7 +219,7 @@ func (sess *Session) addCookie(w http.ResponseWriter, r *http.Request) (added bo
 // Existing [Request] values already associated with the [Session] will ask the
 // browser to reload the pages. This holds even for a [Request] whose WebSocket
 // has not connected yet: the reload is queued on the [Request] and delivered when
-// it connects.
+// it connects. Each WebSocket closes after sending Reload.
 // Key/value pairs in the [Session] are left unmodified; use [Session.Clear] to remove all of them.
 //
 // It must not be called before the JaWS processing loop ([Jaws.Serve] or
@@ -254,7 +254,9 @@ func (sess *Session) Close() (cookie *http.Cookie) {
 	return
 }
 
-// Reload calls [Session.Broadcast] with a message asking browsers to reload the page.
+// Reload asks the Session's active pages to reload.
+//
+// Each WebSocket closes after sending Reload.
 // See [Session.Broadcast] for the processing-loop requirement.
 func (sess *Session) Reload() {
 	sess.Broadcast(wire.Message{What: what.Reload})

@@ -105,6 +105,9 @@ These are logical payloads before wire quoting:
 | `SClass`, `RClass` | One class name |
 | `Value` | Live control value, not an HTML attribute value |
 
+`Reload` is the final outbound record. The writer sends its batch and closes the
+WebSocket, discarding any later records.
+
 Browser `Input` and `JsVar` events invoke `JawsInput` on their Element. `Input`
 carries the control value. `JsVar` carries a `path=json` proposal. Click and
 context-menu events carry coordinates, modifier state, the nearest name, and
