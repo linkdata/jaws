@@ -82,11 +82,12 @@ func validateJsVarPath(path string) error {
 // JsVarCheck validates the complete tentative state of a browser proposal.
 //
 // A nil check denies browser writes. The check runs under the store's write lock
-// after jq tentatively applies a changed value. It must only inspect next;
+// after jq tentatively applies a changed Go value. It must only inspect next;
 // an error or panic rolls the proposal back. The source can authorize a user
-// or session. Validate the complete value, including changes through parent
-// and root paths. The check sees converted Go values, not raw browser JSON;
-// see [JsVarBinding.JawsInput].
+// or session. Validate the complete value, including fields omitted from JSON
+// and changes through parent or root paths. A null proposal for a struct zeroes
+// all its fields, including unexported and json:"-" fields. The check sees
+// converted Go values, not raw browser JSON; see [JsVarBinding.JawsInput].
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -117,7 +118,8 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // ClientCheck and ExtraTags must be configured before first use and remain
 // unchanged while the store is active.
 // Every binding sees the same JSON value; ClientCheck controls writes, not
-// disclosure.
+// disclosure. Proposal outcomes can depend on Go fields omitted from JSON,
+// even when the JSON values are identical. Keep secrets outside the bound value.
 //
 // All reads and writes of the bound value must use the supplied locker. Server
 // mutations must use SetPath, DeletePath, or WriteLocked to publish changes.
