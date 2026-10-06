@@ -82,13 +82,12 @@ func validateJsVarPath(path string) error {
 // JsVarCheck validates the complete tentative state of a browser proposal.
 //
 // A nil check denies browser writes. The check runs under the store's write lock
-// after jq tentatively applies a changed value. If T has Go fields omitted from
-// JSON, unchanged proposals are checked and published like changed ones. It
-// must only inspect next;
+// after jq tentatively applies a changed Go value. It must only inspect next;
 // an error or panic rolls the proposal back. The source can authorize a user
-// or session. Validate the complete value, including changes through parent
-// and root paths and Go fields omitted from JSON. The check sees converted Go
-// values, not raw browser JSON; see [JsVarBinding.JawsInput].
+// or session. Validate the complete value, including fields omitted from JSON
+// and changes through parent or root paths. A null proposal for a struct zeroes
+// all its fields, including unexported and json:"-" fields. The check sees
+// converted Go values, not raw browser JSON; see [JsVarBinding.JawsInput].
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -119,7 +118,8 @@ func JSONSizeCheck[T any](maxBytes int) (check JsVarCheck[T]) {
 // ClientCheck and ExtraTags must be configured before first use and remain
 // unchanged while the store is active.
 // Every binding sees the same JSON value; ClientCheck controls writes, not
-// disclosure.
+// disclosure. Proposal outcomes can depend on Go fields omitted from JSON,
+// even when the JSON values are identical. Keep secrets outside the bound value.
 //
 // All reads and writes of the bound value must use the supplied locker. Server
 // mutations must use SetPath, DeletePath, or WriteLocked to publish changes.
@@ -140,7 +140,6 @@ type JsVarStore[T any] struct {
 	locker   bind.RWLocker
 	value    *T
 	partial  bool // plain JSON tree with matching jq paths and safe partial patches
-	hidden   bool // partial tree with Go fields omitted from JSON
 	version  uint64
 	floor    uint64 // older bindings need a root patch
 	changes  []jsVarChange
@@ -170,12 +169,12 @@ func NewJsVarStore[T any](jw *jaws.Jaws, name string, locker sync.Locker, value 
 			err = jq.ErrInvalidReceiver
 		} else {
 			store = &JsVarStore[T]{
-				jaws:   jw,
-				name:   name,
-				locker: bind.AsRWLocker(locker),
-				value:  value,
+				jaws:    jw,
+				name:    name,
+				locker:  bind.AsRWLocker(locker),
+				value:   value,
+				partial: plainJsVarType(reflect.TypeOf(value).Elem()),
 			}
-			store.partial, store.hidden = classifyJsVarType(reflect.TypeOf(value).Elem())
 		}
 	}
 	return
@@ -654,7 +653,7 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 	if store.partial {
 		// Plain trees map decoded proposals to the same jq/JSON paths.
 		// Check the changed subtree before accepting it.
-		check := func() error {
+		changed, err = jq.SetChecked(store.value, path, value, func() error {
 			var next any = store.value
 			if path != "" {
 				var getErr error
@@ -666,15 +665,7 @@ func (binding *JsVarBinding[T]) applyProposal(elem *jaws.Element, path string, v
 				return encodeErr
 			}
 			return store.ClientCheck(elem, store.value, path)
-		}
-		if changed, err = jq.SetChecked(store.value, path, value, check); err == nil && !changed && store.hidden {
-			// jq skips the check for equal Go values. Whether a proposal is equal
-			// can depend on fields absent from browser JSON, so check and publish
-			// as if it changed: the check sees the same next value either way.
-			if err = check(); err == nil {
-				changed = true
-			}
-		}
+		})
 		if changed {
 			store.record(path)
 		}
@@ -779,17 +770,8 @@ var jsVarMarshalers = [...]reflect.Type{
 
 // plainJsVarType is conservative about encoder paths and reference aliases.
 // Map branches are partial under the documented JSON-tree/no-alias contract.
-func plainJsVarType(t reflect.Type) (plain bool) {
-	plain, _ = classifyJsVarType(t)
-	return
-}
-
-// classifyJsVarType reports whether t is plain, and whether a plain t has Go
-// fields omitted from JSON.
-func classifyJsVarType(t reflect.Type) (plain, hidden bool) {
-	plain = plainJsVarTypeSeen(t, make(map[reflect.Type]bool), &hidden)
-	hidden = plain && hidden
-	return
+func plainJsVarType(t reflect.Type) bool {
+	return plainJsVarTypeSeen(t, make(map[reflect.Type]bool))
 }
 
 func plainJsVarScalar(t reflect.Type) bool {
@@ -802,7 +784,7 @@ func plainJsVarScalar(t reflect.Type) bool {
 	return false
 }
 
-func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool, hidden *bool) bool {
+func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
 	if seen[t] {
 		return false
 	}
@@ -825,7 +807,6 @@ func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool, hidden *bool
 				return false
 			}
 			if !field.IsExported() || field.Tag.Get("json") == "-" {
-				*hidden = true
 				continue
 			}
 			name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
@@ -850,15 +831,15 @@ func plainJsVarTypeSeen(t reflect.Type, seen map[reflect.Type]bool, hidden *bool
 					return false
 				}
 			}
-			if !plainJsVarTypeSeen(field.Type, seen, hidden) {
+			if !plainJsVarTypeSeen(field.Type, seen) {
 				return false
 			}
 		}
 		return true
 	case reflect.Map:
-		return t.Key() == reflect.TypeFor[string]() && plainJsVarTypeSeen(t.Elem(), seen, hidden)
+		return t.Key() == reflect.TypeFor[string]() && plainJsVarTypeSeen(t.Elem(), seen)
 	case reflect.Array:
-		return plainJsVarTypeSeen(t.Elem(), seen, hidden)
+		return plainJsVarTypeSeen(t.Elem(), seen)
 	}
 	return false
 }
