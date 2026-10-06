@@ -894,7 +894,6 @@ func TestNumericRegisterLogsAndQueuesNothing(t *testing.T) {
 					t.Fatalf("logged errors = %v", logged)
 				}
 
-				tr.InCh <- wire.WsMsg{}
 				synctest.Wait()
 				select {
 				case msg := <-tr.OutCh:

@@ -25,6 +25,10 @@ import (
 // or updates, though its fields are left intact and its methods still operate on the
 // now finished Request. Request identities are never reused, so a retained Element
 // can never come to represent an unrelated connection.
+//
+// Browser commands queued by Element methods wake a running Request's processing loop.
+// Event handlers run concurrently with updates; use [Request.Dirty] for changes
+// that need to be applied through [Updater.JawsUpdate].
 type Element struct {
 	*Request // (read-only) the Request the Element belongs to
 	// internals
@@ -220,16 +224,6 @@ func (elem *Element) JsVar(data string) {
 // queue enqueues a wire message of the given type and data for this element on
 // its Request, tagged with the element's Jid. It is a no-op once the element has
 // been deleted.
-//
-// It is intended to be called while the element is rendering or updating; the
-// message is appended to the Request's muQueue-guarded outbound queue and flushed
-// the next time the processing loop runs a send pass. During rendering and updating
-// that pass is imminent. Called from an event handler, however, the message is
-// flushed only when the loop is next woken — by a broadcast, an incoming event, or a
-// dirty-driven update — which on an otherwise-idle request is not guaranteed to
-// happen promptly. The reliable event-driven path is therefore to mark the element
-// dirty (see [Request.Dirty]), which schedules a [Updater.JawsUpdate] and the wakeup
-// that delivers it.
 func (elem *Element) queue(wht what.What, data string) (queued bool) {
 	if !elem.deleted.Load() {
 		elem.Request.queue(wire.WsMsg{
@@ -258,12 +252,6 @@ func isReservedAttr(attr string) bool {
 // The framework-owned "id" attribute is rejected (ASCII case-insensitively):
 // attempting to set it is reported as [ErrReservedAttribute] via reportMisuse and
 // nothing is sent, since it carries the [Element]'s JaWS identity.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetAttr(attr, value string) {
 	if isReservedAttr(attr) {
 		elem.Jaws.reportMisuse(fmt.Errorf("jaws: Element.SetAttr: %q: %w", attr, ErrReservedAttribute))
@@ -278,12 +266,6 @@ func (elem *Element) SetAttr(attr, value string) {
 // The framework-owned "id" attribute is rejected (ASCII case-insensitively):
 // attempting to remove it is reported as [ErrReservedAttribute] via reportMisuse and
 // nothing is sent, since it carries the [Element]'s JaWS identity.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) RemoveAttr(attr string) {
 	if isReservedAttr(attr) {
 		elem.Jaws.reportMisuse(fmt.Errorf("jaws: Element.RemoveAttr: %q: %w", attr, ErrReservedAttribute))
@@ -294,24 +276,12 @@ func (elem *Element) RemoveAttr(attr string) {
 
 // SetClass queues sending a class
 // to the browser for the [Element].
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) SetClass(cls string) {
 	elem.queue(what.SClass, cls)
 }
 
 // RemoveClass queues sending a request to remove a class
 // to the browser for the [Element].
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) RemoveClass(cls string) {
 	elem.queue(what.RClass, cls)
 }
@@ -321,12 +291,6 @@ func (elem *Element) RemoveClass(cls string) {
 // When innerHTML exactly matches the browser's current serialized inner HTML,
 // JaWS leaves the existing descendants and their live state unchanged. Use
 // [Element.Replace] when matching markup must still create new nodes.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt.
 func (elem *Element) SetInner(innerHTML template.HTML) {
 	elem.queue(what.Inner, string(innerHTML))
 }
@@ -334,12 +298,10 @@ func (elem *Element) SetInner(innerHTML template.HTML) {
 // SetValue queues sending a new current input value in textual form
 // to the browser for the [Element].
 //
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To reconcile only this Element after a browser event, call
+// To reconcile only this Element after a browser event, call
 // elem.Dirty(elem); this schedules JawsUpdate on the Request loop and serializes the
 // correction with other updates. Dirty a source tag instead when shared application
-// state changed. Calling SetValue directly from an event handler may not flush
-// promptly and bypasses that update ordering.
+// state changed. Calling SetValue directly bypasses that update ordering.
 func (elem *Element) SetValue(value string) {
 	elem.queue(what.Value, value)
 }
@@ -351,10 +313,7 @@ func (elem *Element) SetValue(value string) {
 // jsfunc must be an application-controlled dot path; put user data in jsonstr,
 // not jsfunc.
 //
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent; a call queued directly from an event handler is only flushed when the
-// processing loop is next woken. To call JavaScript for every element matching a
-// tag, use [Jaws.JsCall].
+// To call JavaScript for every element matching a tag, use [Jaws.JsCall].
 func (elem *Element) JsCall(jsfunc, jsonstr string) {
 	elem.queue(what.Call, jsCallData(jsfunc, jsonstr))
 }
@@ -378,12 +337,6 @@ func (elem *Element) JsCall(jsfunc, jsonstr string) {
 // expected id attribute. If the guard does not find it, the call is a programming
 // error: debug builds panic and production builds report it via [Jaws.MustLog]
 // and skip the replacement.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt.
 func (elem *Element) Replace(htmlCode template.HTML) {
 	if !elem.deleted.Load() {
 		var b []byte
@@ -400,12 +353,6 @@ func (elem *Element) Replace(htmlCode template.HTML) {
 }
 
 // Append appends a new HTML element as a child to the current one.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Append(htmlCode template.HTML) {
 	elem.queue(what.Append, string(htmlCode))
 }
@@ -417,7 +364,6 @@ func (elem *Element) Append(htmlCode template.HTML) {
 // command is queued. The browser also verifies that child is a direct DOM child
 // of elem before applying the insertion.
 //
-// Call this while elem is rendering or updating, when a send pass is imminent.
 // To insert HTML at the same child index in every element matching a tag, use
 // [Jaws.Insert].
 func (elem *Element) InsertBefore(child *Element, htmlCode template.HTML) {
@@ -427,12 +373,6 @@ func (elem *Element) InsertBefore(child *Element, htmlCode template.HTML) {
 }
 
 // Order reorders the HTML elements.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Order(jidList []jid.Jid) {
 	if !elem.deleted.Load() && len(jidList) > 0 {
 		var b []byte
@@ -453,12 +393,6 @@ func (elem *Element) Order(jidList []jid.Jid) {
 // nor the registry is changed. The caller is responsible for ensuring child is
 // a direct DOM child of elem; the browser verifies that relationship before
 // applying the removal.
-//
-// Call this while the [Element] is rendering or updating, when a send pass is
-// imminent. To change the [Element] in response to a browser event, mark it dirty
-// with [Request.Dirty] instead: a change queued directly from an event handler is
-// flushed only when the processing loop is next woken, which on an otherwise-idle
-// request is not guaranteed to be prompt (see [Element.queue]).
 func (elem *Element) Remove(child *Element) {
 	if elem.validChildElement("Remove", child) {
 		if elem.queue(what.Remove, child.Jid().String()) {

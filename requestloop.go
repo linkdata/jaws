@@ -90,6 +90,8 @@ func (rq *Request) process(broadcastMsgCh chan wire.Message, incomingMsgCh <-cha
 		case <-jawsDoneCh:
 		case <-httpDoneCh:
 		case <-rq.Context().Done():
+		case <-rq.wakeCh:
+			continue
 		case tagmsg, ok = <-broadcastMsgCh:
 		case wsmsg, ok = <-incomingMsgCh:
 			if ok {
@@ -234,13 +236,25 @@ func (rq *Request) handleRemove(containerJid Jid, data string) {
 	}
 }
 
-// queue appends a single outbound message to the request's pending wsQueue under
+// wake schedules a processing pass without blocking. One pending signal is enough
+// because process drains all queued work before waiting again.
+func (rq *Request) wake() {
+	select {
+	case rq.wakeCh <- struct{}{}:
+	default:
+	}
+}
+
+// queue appends a single outbound message and wakes the processing loop under
 // muQueue, the leaf lock that orders writes independently of rq.mu. The Request's
 // process loop drains it through sendQueue and getSendMsgs; drainTailScript drains
 // tail fixups.
 func (rq *Request) queue(msg wire.WsMsg) {
 	rq.muQueue.Lock()
 	rq.wsQueue = append(rq.wsQueue, msg)
+	if len(rq.wsQueue) == 1 {
+		rq.wake()
+	}
 	rq.muQueue.Unlock()
 }
 

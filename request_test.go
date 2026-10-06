@@ -2364,7 +2364,7 @@ func TestRequest_Dirty(t *testing.T) {
 
 		rq.Dirty(tss1)
 		rq.Dirty(tss2)
-		// Dirtying marks the elements; the Serve loop broadcasts what.Update only
+		// Dirtying marks the elements; the Serve loop distributes dirt only
 		// when its updateTicker fires (1ms in tests). Advance the fake clock past
 		// it, then let the process loop re-render both elements (JawsGet again).
 		time.Sleep(2 * time.Millisecond)
@@ -2377,8 +2377,8 @@ func TestRequest_Dirty(t *testing.T) {
 		th.True(n1 >= 2)
 		th.True(n2 >= 2)
 		// Pin an upper bound by proving the system quiesces: with jw.dirty now empty,
-		// distributeDirt returns 0, no further what.Update is broadcast, so getCalled
-		// must not increase. This catches a runaway re-render/re-broadcast regression.
+		// distributeDirt has no work and sends no wake-ups, so getCalled
+		// must not increase. This catches a runaway re-render regression.
 		time.Sleep(2 * time.Millisecond)
 		synctest.Wait()
 		th.Equal(atomic.LoadInt32(&tss1.getCalled), n1)

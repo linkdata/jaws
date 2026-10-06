@@ -107,7 +107,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 		}
 	}
 
-	// Every addressed frame except the internal Update tick is required, so an
+	// Every frame except an unaddressed Update is required, so an
 	// overloaded Request is cancelled instead of silently losing a frame.
 	mustBroadcast := func(msg wire.Message) {
 		for msgCh, rq := range subs {
@@ -117,7 +117,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			select {
 			case msgCh <- msg:
 			default:
-				// Only an unaddressed Update tick can be dropped.
+				// Only an unaddressed Update can be dropped.
 				if msg.What != what.Update || msg.Dest != nil {
 					killSub(msgCh)
 					rq.cancel(fmt.Errorf("%w: %v: broadcast channel full sending %s", ErrRequestOverloaded, rq, msg.String()))
@@ -131,9 +131,7 @@ func (jw *Jaws) ServeWithTimeout(requestTimeout time.Duration) {
 			normalShutdown = true
 			return
 		case <-jw.updateTicker.C:
-			if jw.distributeDirt() > 0 {
-				mustBroadcast(wire.Message{What: what.Update})
-			}
+			jw.distributeDirt()
 		case <-t.C:
 			jw.refreshRuntimeSeconds()
 			jw.maintenance(requestTimeout)

@@ -518,7 +518,6 @@ func TestLargeFloodUpdatesBothRequests(t *testing.T) {
 			if err := tmpl.ExecuteTemplate(&body, "index.html", ui.With{RequestWriter: rw, Dot: g}); err != nil {
 				t.Fatal(err)
 			}
-			c.request.BcastCh <- wire.Message{What: what.Update}
 			clients = append(clients, c)
 		}
 		settle := func() {

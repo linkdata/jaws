@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/linkdata/jaws/lib/what"
-	"github.com/linkdata/jaws/lib/wire"
 )
 
 func newStatusTestJaws(t *testing.T, configure func(*Jaws)) *Jaws {
@@ -157,7 +155,6 @@ func dispatchStatusDirt(t *testing.T, jw *Jaws, want int) {
 	if got := jw.distributeDirt(); got != want {
 		t.Fatalf("distributed status tags = %d, want %d", got, want)
 	}
-	jw.Broadcast(wire.Message{What: what.Update})
 }
 
 func requireStatusCount(t *testing.T, values <-chan int, want int) {

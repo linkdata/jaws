@@ -84,7 +84,6 @@ func TestMultiSelectInitialValues(t *testing.T) {
 			if len(elems) != 1 {
 				t.Fatalf("handler elements = %d, want 1", len(elems))
 			}
-			tr.InCh <- wire.WsMsg{}
 			awaitNumberRangeValue(t, tr, elems[0], tt.want)
 		})
 	}
@@ -99,7 +98,6 @@ func TestMultiSelectUpdatesOptionsBeforeValues(t *testing.T) {
 	widget := NewMultiSelect(handler)
 	elem, _ := renderUI(t, tr.Request, widget)
 	before := containerElements(t, elem)
-	tr.InCh <- wire.WsMsg{}
 	awaitNumberRangeValue(t, tr, elem, `["1","2"]`)
 
 	handler.children = []jaws.UI{two, three, one}
@@ -109,7 +107,6 @@ func TestMultiSelectUpdatesOptionsBeforeValues(t *testing.T) {
 	if len(after) != 3 || after[0] != before[1] || after[2] != before[0] {
 		t.Fatal("reordering did not retain existing option Elements")
 	}
-	tr.InCh <- wire.WsMsg{}
 	sawAppend, sawOrder := false, false
 	for {
 		select {
@@ -171,7 +168,6 @@ func TestMultiSelectInputReconciliation(t *testing.T) {
 				if origin.UI() != peer.UI() || requireContainerState(t, origin) == requireContainerState(t, peer) {
 					t.Fatal("equal MultiSelect definitions must keep separate Element states")
 				}
-				tr.InCh <- wire.WsMsg{}
 				awaitNumberRangeValue(t, tr, origin, `["1","2"]`)
 				awaitNumberRangeValue(t, tr, peer, `["1","2"]`)
 

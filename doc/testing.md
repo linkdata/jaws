@@ -167,7 +167,6 @@ defer func() {
     <-drained
 }()
 
-tr.BcastCh <- wire.Message{What: what.Update} // Flush queued initial adjustments.
 synctest.Wait()
 time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
 synctest.Wait()
@@ -179,11 +178,11 @@ synctest.Wait() // Let the dirty pass and collector finish.
 // Inspect records here, while the other goroutines are blocked.
 ```
 
-The unaddressed Update wakes the Request to flush initial render output;
-`synctest.Wait` supplies synchronization. Fake time then crosses the normal
-dirty-update interval without a real-time delay. This settles a synchronous
-handler followed by one dirty pass. Advance application timers or release
-application-owned gates explicitly when an action schedules additional work.
+Queued output wakes the Request automatically; `synctest.Wait` supplies
+synchronization. Fake time then crosses the normal dirty-update interval without
+a real-time delay. This settles a synchronous handler followed by one dirty pass.
+Advance application timers or release application-owned gates explicitly when an
+action schedules additional work.
 
 After the final wait, compare the complete collected records with the expected
 commands and targets, including the absence of unrelated targets. Count
