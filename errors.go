@@ -25,6 +25,9 @@ var ErrValueUnchanged = errors.New("value unchanged")
 //
 // The cancellation cause reachable via [context.Cause] on [Request.Context]
 // wraps this sentinel, so callers can match it with [errors.Is].
+// A Request can overload on its own events or on broadcasts from other clients.
+// Shared broadcasts must fit each recipient's processing and network capacity;
+// see [Jaws.Broadcast].
 var ErrRequestOverloaded = errors.New("request overloaded")
 
 // ErrValueNotFinite indicates that a [Request] was cancelled by a non-finite UI value.

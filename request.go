@@ -1201,10 +1201,11 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 	numElems := len(rq.elems)
 	rq.mu.RUnlock()
 	// Size the broadcast buffer with headroom that scales with the page's element
-	// count. mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
+	// count, with a floor of 64 to absorb synchronized bursts on small pages.
+	// mustBroadcast (see Jaws.Serve) sends here non-blocking and, if the send
 	// would block, kills the subscription and cancels this request for every message
 	// except a coalescible nil-destination Update, which it drops instead.
-	pendingSubscription := rq.Jaws.subscribe(rq, 4+numElems*4)
+	pendingSubscription := rq.Jaws.subscribe(rq, max(64, 4+numElems*4))
 	defer func() {
 		// onConnect is user code and may return an error or panic. Release its
 		// subscription unless process took responsibility for doing so.
@@ -1226,8 +1227,12 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 			rq.cancel(err)
 		}
 		outboundMsgCh := make(chan wire.WsMsg, cap(pendingSubscription))
-		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws) // closes incomingMsgCh
-		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)              // closes the WebSocket
+		maxEventRate := rq.Jaws.MaxEventRate
+		if maxEventRate == 0 {
+			maxEventRate = DefaultMaxEventRate
+		}
+		go wire.ReadLoop(ctx, disconnect, rq.Jaws.Done(), incomingMsgCh, idleInterval, wsTimeout, ws, maxEventRate) // closes incomingMsgCh
+		go wire.WriteLoop(ctx, disconnect, rq.Jaws.Done(), outboundMsgCh, wsTimeout, ws)                            // closes the WebSocket
 		broadcastMsgCh := pendingSubscription
 		pendingSubscription = nil
 		// Production deliberately discards the recovered value so a loop panic stays

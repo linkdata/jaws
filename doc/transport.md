@@ -127,10 +127,18 @@ the Request connection. The resulting error is retained as the Request's
 cancellation cause and passed to `Jaws.Log`. The client does not split input,
 JavaScript proposals, click data, or removal reports across messages.
 
+`Jaws.MaxEventRate` paces `Click`, `ContextMenu`, `Input`, and `JsVar` records
+per Request, including records batched in one WebSocket message. The default is
+100 records per second; zero selects the default and a negative value disables
+it. Events wait in order without being dropped; pacing can also delay the first
+event. `Remove` is uncharged but remains in record order. This limit applies to
+WebSocket input, not in-process broadcasts or the test harness. See
+[capacity](deployment.md#capacity) for shared broadcasts.
+
 `wire.ReadLoop` sends keepalive pings when a read remains idle. Parsing and
-delivery time do not count as read-idle time. Incoming data or a successful ping
-restarts the interval. Data received while a ping is pending makes a failure
-of that ping irrelevant to the connection.
+delivery time, including rate-limit waits, do not count as read-idle time.
+Incoming data or a successful ping restarts the interval. Data received while
+a ping is pending makes a failure of that ping irrelevant to the connection.
 
 `wire.WriteLoop` combines queued records into a text message until reaching its
 32 KiB flush threshold. It appends whole records, so a batch can exceed the

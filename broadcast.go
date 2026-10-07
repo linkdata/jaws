@@ -25,6 +25,12 @@ import (
 //
 // All convenience helpers on [Jaws] that call Broadcast inherit this requirement.
 //
+// Broadcast commands are not coalesced. A full recipient queue cancels that
+// Request with [ErrRequestOverloaded], except that unaddressed [what.Update]
+// messages are skipped. Per-event broadcasts on shared tags let clients drive
+// every recipient's bandwidth requirements. Keep that byte rate within the
+// slowest supported client link, or use [Jaws.Dirty] to coalesce shared-state updates.
+//
 // [what.Replace] and [what.Remove] are reported as [ErrReplaceNotBroadcastable]
 // and [ErrRemoveNotBroadcastable], and are not sent. Use [Element.Replace],
 // [Jaws.Delete], or [Element.Remove] instead.
@@ -357,6 +363,10 @@ func (jw *Jaws) Delete(target any) {
 }
 
 // Append calls the JavaScript appendChild method on all HTML elements matching target.
+//
+// Each call broadcasts a separate command. Per-event appends on shared tags must
+// fit every recipient's bandwidth; see [Jaws.Broadcast]. Prefer [Jaws.Dirty] for
+// coalesced shared-state updates.
 func (jw *Jaws) Append(target any, html template.HTML) {
 	jw.broadcastTo(target, what.Append, string(html))
 }

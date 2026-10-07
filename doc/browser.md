@@ -111,6 +111,9 @@ path must already exist, and invalid or reserved paths throw. Bound array writes
 must target an existing canonical index. The server accepts or reconciles
 proposals through the [JavaScript binding API](ui/jsvar.md).
 
+Both reads and writes that submit bound values consume the Request's
+[`MaxEventRate` budget](deployment.md#capacity).
+
 Binding nodes provide the store name and initial JSON during the initial page
 render. The live values then reside on `window`. Server patches can replace the
 root, replace a subtree, or delete an object property.

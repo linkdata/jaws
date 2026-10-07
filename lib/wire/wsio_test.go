@@ -36,7 +36,7 @@ func TestReadLoop_RespectsContextDone(t *testing.T) {
 	readDoneCh := make(chan struct{})
 	go func() {
 		defer close(readDoneCh)
-		ReadLoop(ctx, nil, jawsDoneCh, inCh, time.Hour, time.Hour, server)
+		ReadLoop(ctx, nil, jawsDoneCh, inCh, time.Hour, time.Hour, server, 0)
 	}()
 
 	writeCtx, writeCancel := context.WithTimeout(t.Context(), 3*time.Second)
@@ -67,7 +67,7 @@ func TestReadLoop_RespectsDone(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server, 0)
 			close(loopDone)
 		}()
 
@@ -95,7 +95,7 @@ func TestReadLoop_RespectsDoneWhileReading(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server, 0)
 			close(loopDone)
 		}()
 
@@ -148,7 +148,7 @@ func TestReadWriteLoop_RoundTrip(t *testing.T) {
 			readDoneCh := make(chan struct{})
 			go func() {
 				defer close(readDoneCh)
-				ReadLoop(ctx, nil, doneCh, inCh, time.Hour, time.Hour, server)
+				ReadLoop(ctx, nil, doneCh, inCh, time.Hour, time.Hour, server, 0)
 			}()
 			writeDoneCh := make(chan struct{})
 			go func() {
@@ -188,7 +188,7 @@ func TestReadLoop_SkipsMalformedRecords(t *testing.T) {
 		defer closeWireBubble(cancel, client, server)()
 
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server, 0)
 			close(loopDone)
 		}()
 		if err := client.Write(ctx, websocket.MessageText, payload); err != nil {
@@ -234,7 +234,7 @@ func TestReadLoop_BatchedDeliveryIsInterruptible(t *testing.T) {
 				defer closeWireBubble(cancel, client, server)()
 
 				go func() {
-					ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server)
+					ReadLoop(ctx, cancel, doneCh, inCh, time.Hour, time.Hour, server, 0)
 					close(loopDone)
 				}()
 				if err := client.Write(ctx, websocket.MessageText, payload); err != nil {
@@ -290,7 +290,7 @@ func TestReadLoop_DoesNotPingWhileDelivering(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server, 0)
 			close(loopDone)
 		}()
 
@@ -348,7 +348,7 @@ func TestReadLoop_ReadActivitySupersedesPingFailure(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, 10*time.Second, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, 10*time.Second, server, 0)
 			close(loopDone)
 		}()
 
@@ -401,7 +401,7 @@ func TestReadLoop_ReportsUnresponsivePeer(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, idleInterval, pingTimeout, server, 0)
 			close(loopDone)
 		}()
 
@@ -698,7 +698,7 @@ func TestWriteLoop_ReloadClosesConnection(t *testing.T) {
 			readDone := make(chan struct{})
 			go func() {
 				defer close(readDone)
-				ReadLoop(ioctx, cancelIO, nil, inCh, time.Hour, time.Hour, server)
+				ReadLoop(ioctx, cancelIO, nil, inCh, time.Hour, time.Hour, server, 0)
 			}()
 			// After delivering the first record, ReadLoop blocks delivering the
 			// second. Closing the socket alone cannot unblock that delivery.
@@ -931,7 +931,7 @@ func TestReadLoop_ReportsError(t *testing.T) {
 	readDoneCh := make(chan struct{})
 	go func() {
 		defer close(readDoneCh)
-		ReadLoop(ctx, cancel, jawsDoneCh, inCh, time.Hour, time.Hour, server)
+		ReadLoop(ctx, cancel, jawsDoneCh, inCh, time.Hour, time.Hour, server, 0)
 	}()
 
 	waitDone(t, readDoneCh, "ReadLoop after read error")
@@ -975,7 +975,7 @@ func TestReadLoop_RespectsDoneWhileWaitingForPong(t *testing.T) {
 
 		client.CloseRead(ctx)
 		go func() {
-			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, time.Hour, server)
+			ReadLoop(ctx, cancel, doneCh, inCh, time.Second, time.Hour, server, 0)
 			close(loopDone)
 		}()
 

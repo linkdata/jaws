@@ -105,6 +105,21 @@ client IP, and permits each request key to be claimed once.
 
 ## Capacity
 
+`MaxEventRate` limits incoming `Click`, `ContextMenu`, `Input`, and `JsVar`
+records together to 100 per second per Request by default. Zero selects the
+default; a negative value disables the limit. Records are paced in order without
+being dropped, with an initial 10 ms wait at the default rate. `Remove` consumes
+no event budget but cannot overtake a waiting event. Fast range-slider or
+JavaScript activity can accumulate delay; configure the rate for the
+application's workload.
+
+The per-Request limit does not bound aggregate broadcasts from many clients.
+Broadcast helpers such as `Append`, `SetInner`, and `Alert` send a command per
+call. On shared tags, each client's events can increase every subscriber's
+required bandwidth. Requests whose queues fill are disconnected with
+`ErrRequestOverloaded`. Prefer `Dirty`/`Update` coalescing for shared state;
+per-event broadcast byte rates must fit the slowest supported client link.
+
 `MaxPendingRequestsPerIP` defaults to 100. IPv4 clients share a bucket by
 address; IPv6 uses a /64, with the well-known `64:ff9b::/96` NAT64 prefix mapped
 to its embedded IPv4 address. At capacity a new page retires the oldest idle
