@@ -117,7 +117,8 @@ known to the Request are removed from server bookkeeping.
 
 `Hook` is a synchronous test event. The browser never sends it, and inbound
 messages do not dispatch it. A broadcast Hook invokes a matching handler; that
-handler must not send its own messages. Its returned error becomes an alert.
+handler must not send its own messages. Returned errors follow the
+[event alert policy](runtime.md#connect-and-handle-events).
 
 ## Limits and connection loops
 

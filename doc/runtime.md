@@ -61,10 +61,12 @@ page dot does not install them. See `ConnectFn` in
 
 Register event handlers during rendering, before the Element is frozen.
 Dispatch tries attached handlers in reverse registration order, then the
-Element's UI. Return `jaws.ErrEventUnhandled` to try the next handler. Other
-errors are logged and, when possible, displayed as browser danger alerts.
-Recovered panics show a generic alert while logs retain details.
-If no handler accepts an event, it is ignored without an error or alert.
+Element's UI. Return `jaws.ErrEventUnhandled` to try the next handler; an event
+with no accepting handler is ignored. Other errors are logged and, when possible,
+displayed as browser danger alerts unless they match `jaws.ErrEventLogOnly`.
+Recovered panics and JsVar store rejections match this sentinel. During browser
+events, use `Request.Alert` for explicit feedback, including inside
+[`ClientCheck`](ui/jsvar.md).
 
 Browser event handlers run serially within each Request, concurrently with update
 processing and handlers in other Requests. Synchronize shared application state

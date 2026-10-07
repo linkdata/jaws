@@ -226,13 +226,11 @@ func newErrNoWebSocketRequest(rq *Request) error {
 	return errNoWebSocketRequest{Addr: rq.remoteIP}
 }
 
-// ErrEventHandlerPanic is returned by [CallEventHandlers] when a user event handler
-// panics.
+// ErrEventHandlerPanic reports a recovered event-handler panic.
 //
-// Match it with [errors.Is]. When the recovered panic value is itself an error it is
-// available via Unwrap (and thus [errors.As] / [errors.Is]); a non-error panic value
-// appears only in the formatted message. Request event processing logs the full
-// error and queues a generic browser alert.
+// [CallEventHandlers] returns an error matching this sentinel and [ErrEventLogOnly].
+// It unwraps to the recovered value if that value is an error; other panic values
+// appear only in the error text.
 var ErrEventHandlerPanic errEventHandlerPanic
 
 type errEventHandlerPanic struct {
@@ -247,13 +245,8 @@ func (e errEventHandlerPanic) Error() string {
 	return fmt.Sprintf("jaws: %v panic: %v", e.Type, e.Value)
 }
 
-// JawsClientAlert returns the browser message for a recovered handler panic.
-func (errEventHandlerPanic) JawsClientAlert() string {
-	return "event handler failed"
-}
-
 func (errEventHandlerPanic) Is(target error) bool {
-	return target == ErrEventHandlerPanic
+	return target == ErrEventHandlerPanic || target == ErrEventLogOnly
 }
 
 func (e errEventHandlerPanic) Unwrap() error {
@@ -262,6 +255,13 @@ func (e errEventHandlerPanic) Unwrap() error {
 	}
 	return nil
 }
+
+// ErrEventLogOnly marks event errors that are logged without automatic browser alerts.
+//
+// Request event processing suppresses an error's alert when [errors.Is] matches
+// this sentinel. Recovered handler panics and JsVar rejections match it.
+// Explicit [Request.Alert] calls are unaffected.
+var ErrEventLogOnly = errors.New("event error is log-only")
 
 type errEventUnhandled struct{}
 

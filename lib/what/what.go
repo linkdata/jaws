@@ -69,12 +69,10 @@ const (
 
 	// Hook synchronously invokes the matching event handler.
 	//
-	// Hook is a testing facility rather than part of the browser wire protocol:
-	// the JaWS client never sends it, and inbound client messages are never
-	// dispatched as Hook. Broadcasting a Hook message lets a test drive an
-	// element's event handler synchronously, without round-tripping through the
-	// client. The handler must not send messages of its own; any error it
-	// returns is delivered to the client as an [Alert].
+	// Hook is a test-only broadcast event; inbound client messages never dispatch
+	// it. Handlers must not send messages of their own. Errors are logged and
+	// normally sent as [Alert] messages; recovered panics and JsVar store rejections
+	// omit alerts.
 	Hook
 )
 

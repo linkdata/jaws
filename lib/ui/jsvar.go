@@ -82,12 +82,18 @@ func validateJsVarPath(path string) error {
 // JsVarCheck validates the complete tentative state of a browser proposal.
 //
 // A nil check denies browser writes. The check runs under the store's write lock
-// after jq tentatively applies a changed Go value. It must only inspect next;
-// an error or panic rolls the proposal back. The source can authorize a user
-// or session. Validate the complete value, including fields omitted from JSON
+// after jq tentatively applies a changed Go value. It must not mutate or retain
+// next, reacquire the lock, or call a store setter. An error or panic rolls the
+// proposal back. The source can authorize a user or session.
+// Validate the complete value, including fields omitted from JSON
 // and changes through parent or root paths. A null proposal for a struct zeroes
 // all its fields, including unexported and json:"-" fields. The check sees
 // converted Go values, not raw browser JSON; see [JsVarBinding.JawsInput].
+//
+// Rejection errors are logged during event processing without automatic browser
+// alerts. When handling browser input, the check may call [jaws.Request.Alert]
+// on source.Request to provide user-facing feedback. An error matching
+// [ErrJsVarTooLarge] cancels the Request.
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -586,8 +592,9 @@ func (store *JsVarStore[T]) projectVisiblePatch(path, root string, visible any) 
 // A rejected, invalid, or unchanged proposal schedules a canonical correction
 // for its source binding. A changed accepted proposal invalidates every binding.
 // An unchanged proposal to a complex Go shape is rejected.
+// Returned errors match [jaws.ErrEventLogOnly].
 // A panicking check rolls back and schedules a root correction before the panic
-// continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
+// continues. [ErrJsVarTooLarge] cancels the source Request.
 //
 // Browser JSON numbers are decoded as float64 and converted by jq to the Go
 // destination before ClientCheck runs. Conversion may lose information: 300
@@ -629,7 +636,6 @@ func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err
 	if err != nil {
 		if errors.Is(err, ErrJsVarTooLarge) {
 			elem.Request.Cancel(err)
-			return ErrJsVarTooLarge
 		}
 		return errJsVarClientWrite{err}
 	}

@@ -39,8 +39,12 @@ complete tentative Go value under the store's write lock. Validate authorization
 through the originating Element and validate the full value, including fields
 omitted from JSON and changes through parent or root paths. A `null` proposal for
 a struct zeroes all its fields, including unexported and `json:"-"` fields. An
-error or panic rolls the proposal back. The callback must only inspect: do not
-mutate or retain tentative data, reacquire the lock, or call a store setter.
+error or panic rolls the proposal back. The callback must only inspect tentative
+data: do not mutate or retain it, reacquire the lock, or call a store setter.
+
+Rejected proposals, including panicking checks, are logged and corrected without
+automatic browser alerts. When handling browser input, `ClientCheck` can call
+`source.Request.Alert("warning", "Choose a valid value.")` for user feedback.
 
 Every binding receives the same JSON value; use separate stores for data with
 different visibility. Proposal outcomes can depend on Go fields omitted from
