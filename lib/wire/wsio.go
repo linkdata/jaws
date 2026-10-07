@@ -8,6 +8,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/linkdata/jaws/lib/what"
+	"github.com/linkdata/rate"
 )
 
 // writeBatchLimit is the threshold at which WriteLoop stops appending whole
@@ -19,6 +20,12 @@ const writeBatchLimit = 32 * 1024
 //
 // Records are LF-terminated and delivered in order. A text message may contain
 // multiple records; malformed records are skipped independently.
+//
+// maxEventRate limits Click, ContextMenu, Input, and JsVar records per second.
+// Non-positive values disable the limit. Events are paced in record order;
+// pacing can also delay the first event. Remove and other records consume no
+// event budget but cannot overtake a waiting event. Pacing time does not count
+// as read-idle time.
 //
 // A WebSocket read that remains pending for idleInterval triggers a ping bounded
 // by pingTimeout. Incoming data or a successful ping restarts the idle interval.
@@ -32,8 +39,9 @@ const writeBatchLimit = 32 * 1024
 // not reported through ccf.
 //
 // ccf may be nil, in which case errors are not reported and only the loop exits.
-func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, incomingMsgCh chan<- WsMsg, idleInterval, pingTimeout time.Duration, ws *websocket.Conn) {
+func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan struct{}, incomingMsgCh chan<- WsMsg, idleInterval, pingTimeout time.Duration, ws *websocket.Conn, maxEventRate int32) {
 	ctx, cancel := contextWithDone(ctx, doneCh)
+	limiter := rate.Limiter{CloseCh: ctx.Done()}
 	readResultCh := make(chan wsReadResult)
 	pingResultCh := make(chan error, 1)
 	var workers sync.WaitGroup
@@ -75,6 +83,15 @@ func ReadLoop(ctx context.Context, ccf context.CancelCauseFunc, doneCh <-chan st
 			if result.typ == websocket.MessageText {
 				for record := range bytes.Lines(result.txt) {
 					if msg, parsed := Parse(record); parsed {
+						switch msg.What {
+						case what.Click, what.ContextMenu, what.Input, what.JsVar:
+							if maxEventRate > 0 {
+								limiter.Wait(&maxEventRate)
+								if ctx.Err() != nil {
+									return
+								}
+							}
+						}
 						select {
 						case <-ctx.Done():
 							return

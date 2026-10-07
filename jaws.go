@@ -61,6 +61,9 @@ const (
 
 	// DefaultMaxPendingRequestsPerIP is the default pending Request limit per client bucket.
 	DefaultMaxPendingRequestsPerIP = 100
+
+	// DefaultMaxEventRate is the default inbound event limit per Request, in records per second.
+	DefaultMaxEventRate = 100
 )
 
 type subscription struct {
@@ -149,6 +152,13 @@ type Jaws struct {
 	// It defaults to [DefaultWebSocketPingInterval] and must be positive;
 	// non-positive values do not disable probing.
 	WebSocketPingInterval time.Duration
+	// MaxEventRate limits incoming event records per second per Request.
+	//
+	// Click, ContextMenu, Input, and JsVar share the limit. Events are paced in
+	// order without dropping them; pacing can also delay the first event.
+	// Remove consumes no event budget but cannot overtake a waiting event.
+	// Zero selects [DefaultMaxEventRate]; a negative value disables the limit.
+	MaxEventRate int32
 	// MaxSessions limits the number of registered Sessions.
 	//
 	// A non-positive value disables the cap, which is the default. Sessions
