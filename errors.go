@@ -226,13 +226,11 @@ func newErrNoWebSocketRequest(rq *Request) error {
 	return errNoWebSocketRequest{Addr: rq.remoteIP}
 }
 
-// ErrEventHandlerPanic is returned by [CallEventHandlers] when a user event handler
-// panics.
+// ErrEventHandlerPanic reports a recovered event-handler panic.
 //
-// Match it with [errors.Is]. When the recovered panic value is itself an error it is
-// available via Unwrap (and thus [errors.As] / [errors.Is]); a non-error panic value
-// appears only in the formatted message. Request event processing logs the full
-// error without an automatic browser alert; it also matches [ErrEventLogOnly].
+// [CallEventHandlers] returns an error matching this sentinel and [ErrEventLogOnly].
+// It unwraps to the recovered value if that value is an error; other panic values
+// appear only in the error text.
 var ErrEventHandlerPanic errEventHandlerPanic
 
 type errEventHandlerPanic struct {
@@ -261,8 +259,8 @@ func (e errEventHandlerPanic) Unwrap() error {
 // ErrEventLogOnly marks event errors that are logged without automatic browser alerts.
 //
 // Request event processing suppresses an error's alert when [errors.Is] matches
-// this sentinel, including wrapped or joined errors. Explicit [Request.Alert]
-// calls are unaffected.
+// this sentinel. Recovered handler panics and JsVar rejections match it.
+// Explicit [Request.Alert] calls are unaffected.
 var ErrEventLogOnly = errors.New("event error is log-only")
 
 type errEventUnhandled struct{}
