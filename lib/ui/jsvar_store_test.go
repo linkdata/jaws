@@ -128,6 +128,10 @@ func TestJsVarStoreJSONSizeRollback(t *testing.T) {
 	if !errors.Is(err, ErrJsVarTooLarge) || state.Text != "ok" {
 		t.Fatalf("oversize proposal: state=%q err=%v", state.Text, err)
 	}
+	var silent errJsVarClientWrite
+	if !errors.As(err, &silent) || silent.JawsClientAlert() != "" {
+		t.Fatalf("oversize proposal error permits an automatic alert: %v", err)
+	}
 	if rq.Context().Err() == nil {
 		t.Fatal("oversize proposal did not cancel its Request")
 	}

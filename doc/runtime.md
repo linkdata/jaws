@@ -63,6 +63,8 @@ Register event handlers during rendering, before the Element is frozen.
 Dispatch tries attached handlers in reverse registration order, then the
 Element's UI. Return `jaws.ErrEventUnhandled` to try the next handler. Other
 errors are logged and, when possible, displayed as browser danger alerts.
+JavaScript store rejections are logged and corrected without automatic alerts;
+the application's `ClientCheck` can send its own [feedback](ui/jsvar.md).
 Recovered panics show a generic alert while logs retain details.
 If no handler accepts an event, it is ignored without an error or alert.
 

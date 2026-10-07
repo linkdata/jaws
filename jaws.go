@@ -12,8 +12,10 @@ package jaws
 // must not block or call back into the same Request.
 //
 // Bound-value locks in lib/bind, lib/ui, and lib/named are released before dirtying or
-// broadcasting. InitialHTMLAttrHandler callbacks run without caller-held widget or
-// bound-value locks; bind.Binder acquires its own lock before calling its narrower
+// broadcasting, except that a JsVar ClientCheck may send an explicit Request.Alert.
+// Broadcast delivery does not acquire bound-value locks or wait for Requests.
+// InitialHTMLAttrHandler callbacks run without caller-held widget or bound-value
+// locks; bind.Binder acquires its own lock before calling its narrower
 // InitialHTMLAttrHook. Code holding a core lock must not invoke UI value methods.
 // Container reconciliation has one deliberate reverse edge: containerState.mu may be
 // held while Request.NewElement takes Request.mu. Provider callbacks and validation

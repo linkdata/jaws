@@ -23,6 +23,9 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 		name       string
 		input      string
 		checkError error
+		alert      string
+		hook       bool
+		readOnly   bool
 		wantPatch  string
 		wantChecks int
 	}{
@@ -30,8 +33,11 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 		{name: "invalid path", input: "value..field=2", wantPatch: `={"value":1}`},
 		{name: "missing path", input: "missing=2", wantPatch: "missing="},
 		{name: "invalid JSON", input: "value={", wantPatch: `={"value":1}`},
+		{name: "read-only store", input: "value=2", checkError: ErrJsVarReadOnly, readOnly: true, wantPatch: "value=1"},
 		{name: "rejected check", input: "value=2", checkError: errors.New("private check detail"), wantPatch: "value=1", wantChecks: 1},
 		{name: "unhandled check", input: "value=2", checkError: fmt.Errorf("private check detail: %w", jaws.ErrEventUnhandled), wantPatch: "value=1", wantChecks: 1},
+		{name: "explicit alert", input: "value=2", checkError: errors.New("private check detail"), alert: "Choose a value no greater than 1.", wantPatch: "value=1", wantChecks: 1},
+		{name: "hook rejection", input: "value=2", checkError: errors.New("private check detail"), hook: true, wantPatch: "value=1", wantChecks: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,6 +46,8 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				logger := new(templateLogger)
+				jw.Logger = logger
 				go jw.Serve()
 				tr := jawstest.NewTestRequest(jw, nil)
 				<-tr.ReadyCh
@@ -55,20 +63,41 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 				}{Value: 1}
 				store := newTestJsVarStore(t, jw, "client", &mu, &state)
 				checks := 0
-				store.ClientCheck = func(*jaws.Element, *struct {
+				store.ClientCheck = func(source *jaws.Element, _ *struct {
 					Value int `json:"value"`
-				}, string,
+				}, _ string,
 				) error {
 					checks++
+					if tt.alert != "" {
+						source.Request.Alert("warning", tt.alert)
+					}
 					return tt.checkError
 				}
+				if tt.readOnly {
+					store.ClientCheck = nil
+				}
 				_, elem, _ := renderTestJsVar(t, tr.Request, store)
-				tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.JsVar, Data: tt.input}
+				if tt.hook {
+					tr.BcastCh <- wire.Message{Dest: store, What: what.Hook, Data: tt.input}
+				} else {
+					tr.InCh <- wire.WsMsg{Jid: elem.Jid(), What: what.JsVar, Data: tt.input}
+				}
 				synctest.Wait()
 				time.Sleep(jaws.DefaultUpdateInterval + time.Millisecond)
 				synctest.Wait()
+				logged := logger.sync(t, jw)
+				if len(logged) != 1 {
+					t.Fatalf("logged errors = %v, want one rejection", logged)
+				}
+				if tt.checkError != nil && logged[0].Error() != tt.checkError.Error() {
+					t.Fatalf("logged error = %q, want %q", logged[0], tt.checkError)
+				}
 
 				var alerts, patches int
+				var wantAlerts int
+				if tt.alert != "" {
+					wantAlerts = 1
+				}
 				for {
 					select {
 					case msg, ok := <-tr.OutCh:
@@ -78,7 +107,7 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 						switch msg.What {
 						case what.Alert:
 							alerts++
-							if msg.Jid != 0 || msg.Data != "danger\ninvalid JsVar update" {
+							if tt.alert == "" || msg.Jid != 0 || msg.Data != "warning\n"+tt.alert {
 								t.Fatalf("browser alert = %#v", msg)
 							}
 						case what.JsVar:
@@ -90,7 +119,7 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 							t.Fatalf("unexpected browser message: %#v", msg)
 						}
 					default:
-						if alerts != 1 || patches != 1 || checks != tt.wantChecks || state.Value != 1 {
+						if alerts != wantAlerts || patches != 1 || checks != tt.wantChecks || state.Value != 1 {
 							t.Fatalf("alerts=%d patches=%d checks=%d value=%d", alerts, patches, checks, state.Value)
 						}
 						return

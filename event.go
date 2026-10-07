@@ -147,6 +147,7 @@ type InputHandler interface {
 	//
 	// [ErrEventUnhandled] tries the next handler. Other non-nil errors are logged
 	// and queued as danger alerts when possible during Request event processing.
+	// JsVar store rejections are logged without automatic alerts.
 	JawsInput(elem *Element, value string) (err error)
 }
 

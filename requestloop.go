@@ -186,11 +186,13 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			// Hook messages synchronously invoke the element's event handler; see
 			// [what.Hook]. They exist for testing: the JaWS client never sends Hook,
 			// so they only arrive here via Broadcast. The handler must not send any
-			// messages itself, but may return an error, which is sent back to the
-			// client as an alert message.
+			// messages itself. Returned errors follow the event alert policy.
 			if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
+				if err = eventAlertError(err); err == nil {
+					continue
+				}
 				var m wire.WsMsg
-				m.FillAlert(eventAlertError(err))
+				m.FillAlert(err)
 				m.Jid = elem.Jid()
 				rq.queue(m)
 			}
@@ -541,8 +543,12 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 		default:
 		}
 		if err := rq.Jaws.Log(call.invoke()); err != nil {
+			alertErr := eventAlertError(err)
+			if alertErr == nil {
+				continue
+			}
 			var m wire.WsMsg
-			m.FillAlert(eventAlertError(err))
+			m.FillAlert(alertErr)
 			// This error alert is best-effort: unlike queueEvent, which cancels the
 			// Request with ErrRequestOverloaded when its channel fills (dropping a
 			// queued event could desync browser and backend state), a dropped alert
@@ -558,16 +564,20 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 	}
 }
 
-// clientAlertError is an internal marker for library errors with safe browser text.
+// clientAlertError selects safe browser text for library errors.
+// An empty message suppresses the automatic alert, leaving logging unchanged.
 type clientAlertError interface {
 	JawsClientAlert() string
 }
 
-// eventAlertError limits browser alerts for library errors that carry internal detail.
+// eventAlertError returns the browser-safe error, or nil to suppress the alert.
 func eventAlertError(err error) error {
 	var safe clientAlertError
 	if errors.As(err, &safe) {
-		return errors.New(safe.JawsClientAlert())
+		if msg := safe.JawsClientAlert(); msg != "" {
+			return errors.New(msg)
+		}
+		return nil
 	}
 	return err
 }

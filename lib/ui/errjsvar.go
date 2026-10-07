@@ -39,5 +39,5 @@ func (e errJsVarClientWrite) Is(target error) bool {
 	return target != jaws.ErrEventUnhandled && errors.Is(e.cause, target)
 }
 
-// JawsClientAlert returns a generic browser message for a rejected proposal.
-func (errJsVarClientWrite) JawsClientAlert() string { return "invalid JsVar update" }
+// JawsClientAlert suppresses automatic alerts for rejected proposals.
+func (errJsVarClientWrite) JawsClientAlert() string { return "" }

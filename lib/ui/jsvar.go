@@ -88,6 +88,11 @@ func validateJsVarPath(path string) error {
 // and changes through parent or root paths. A null proposal for a struct zeroes
 // all its fields, including unexported and json:"-" fields. The check sees
 // converted Go values, not raw browser JSON; see [JsVarBinding.JawsInput].
+//
+// Rejection errors are logged during event processing without automatic browser
+// alerts. When handling browser input, the check may call [jaws.Request.Alert]
+// on source.Request to provide user-facing feedback. An error matching
+// [ErrJsVarTooLarge] cancels the Request.
 type JsVarCheck[T any] func(source *jaws.Element, next *T, path string) error
 
 // JSONSizeCheck limits the encoded size of a tentative JsVar store value.
@@ -586,6 +591,7 @@ func (store *JsVarStore[T]) projectVisiblePatch(path, root string, visible any) 
 // A rejected, invalid, or unchanged proposal schedules a canonical correction
 // for its source binding. A changed accepted proposal invalidates every binding.
 // An unchanged proposal to a complex Go shape is rejected.
+// Returned errors are logged during event processing without automatic alerts.
 // A panicking check rolls back and schedules a root correction before the panic
 // continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
 //
@@ -629,7 +635,6 @@ func (binding *JsVarBinding[T]) JawsInput(elem *jaws.Element, input string) (err
 	if err != nil {
 		if errors.Is(err, ErrJsVarTooLarge) {
 			elem.Request.Cancel(err)
-			return ErrJsVarTooLarge
 		}
 		return errJsVarClientWrite{err}
 	}

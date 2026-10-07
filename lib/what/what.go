@@ -73,8 +73,8 @@ const (
 	// the JaWS client never sends it, and inbound client messages are never
 	// dispatched as Hook. Broadcasting a Hook message lets a test drive an
 	// element's event handler synchronously, without round-tripping through the
-	// client. The handler must not send messages of its own; any error it
-	// returns is delivered to the client as an [Alert].
+	// client. The handler must not send messages of its own. Returned errors are
+	// logged and normally sent as [Alert] messages; JsVar store rejections omit alerts.
 	Hook
 )
 
