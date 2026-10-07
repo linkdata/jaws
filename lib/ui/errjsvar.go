@@ -36,8 +36,5 @@ func (e errJsVarClientWrite) Error() string { return e.cause.Error() }
 func (e errJsVarClientWrite) Is(target error) bool {
 	// Event dispatch treats ErrEventUnhandled as fallthrough. A rejected proposal
 	// is always handled, even when an application check returns that sentinel.
-	return target != jaws.ErrEventUnhandled && errors.Is(e.cause, target)
+	return target == jaws.ErrEventLogOnly || (target != jaws.ErrEventUnhandled && errors.Is(e.cause, target))
 }
-
-// JawsClientAlert suppresses automatic alerts for rejected proposals.
-func (errJsVarClientWrite) JawsClientAlert() string { return "" }

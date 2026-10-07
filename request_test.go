@@ -1282,48 +1282,89 @@ func TestRequest_Trigger(t *testing.T) {
 	}
 }
 
-func TestRequest_EventHandlerPanicAlertHidesDetails(t *testing.T) {
-	tj := newTestJaws()
-	t.Cleanup(tj.Close)
-	rq := newWrappedTestRequest(tj.Jaws, nil)
-	t.Cleanup(rq.Close)
+func TestRequest_EventErrorAlerts(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		panic   bool
+		hook    bool
+		alert   bool
+		logOnly bool
+	}{
+		{name: "returned error"},
+		{name: "panic", panic: true},
+		{name: "hook returned error", hook: true},
+		{name: "hook panic", hook: true, panic: true},
+		{name: "explicit alert before panic", panic: true, alert: true},
+		{name: "wrapped log-only error", logOnly: true},
+		{name: "hook wrapped log-only error", hook: true, logOnly: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				jw, err := New()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer jw.Close()
+				logger := new(eventErrorLogger)
+				jw.Logger = logger
+				go jw.Serve()
+				rq := newWrappedTestRequest(jw, nil)
+				defer rq.Close()
+				<-rq.ReadyCh
 
-	const detail = "password authentication failed for billing_rw"
-	id := rq.Register(&testUi{}, func(*Element, string) error {
-		panic(detail)
-	})
-	rq.InCh <- wire.WsMsg{Jid: id, What: what.Input}
+				wantErr := errors.New("private handler detail")
+				const alert = "warning\nChoose a valid value."
+				ui := &testUi{}
+				id := rq.Register(ui, func(elem *Element, _ string) error {
+					if tt.alert {
+						elem.Request.Alert("warning", "Choose a valid value.")
+					}
+					if tt.panic {
+						panic(wantErr)
+					}
+					if tt.logOnly {
+						return fmt.Errorf("%w: %w", ErrEventLogOnly, wantErr)
+					}
+					return wantErr
+				})
+				if tt.hook {
+					rq.Jaws.Broadcast(wire.Message{Dest: ui, What: what.Hook})
+				} else {
+					rq.InCh <- wire.WsMsg{Jid: id, What: what.Input}
+				}
+				synctest.Wait()
 
-	select {
-	case msg := <-rq.OutCh:
-		if msg.What != what.Alert || msg.Data != "danger\nevent handler failed" {
-			t.Fatalf("panic alert = %#v, want generic danger alert", msg)
-		}
-	case <-time.After(testTimeout):
-		t.Fatal("timed out waiting for panic alert")
-	}
-	awaitTestLoggerQueue(t, tj.Jaws)
-	if got := tj.log.String(); !strings.Contains(got, detail) {
-		t.Fatalf("operator log omitted panic detail: %q", got)
-	}
-}
-
-func TestRequest_HookHandlerPanicAlertHidesDetails(t *testing.T) {
-	rq := newTestRequest(t)
-	defer rq.Close()
-	ui := &testUi{}
-	rq.Register(ui, func(*Element, string) error {
-		panic("private panic detail")
-	})
-	rq.Jaws.Broadcast(wire.Message{Dest: ui, What: what.Hook})
-
-	select {
-	case msg := <-rq.OutCh:
-		if msg.What != what.Alert || msg.Data != "danger\nevent handler failed" {
-			t.Fatalf("hook panic alert = %#v, want generic danger alert", msg)
-		}
-	case <-time.After(testTimeout):
-		t.Fatal("timed out waiting for hook panic alert")
+				logged := logger.loggedErrors()
+				if len(logged) != 1 || !errors.Is(logged[0], wantErr) || errors.Is(logged[0], ErrEventHandlerPanic) != tt.panic {
+					t.Fatalf("logged errors = %v, want handler error with panic=%v", logged, tt.panic)
+				}
+				if rq.Context().Err() != nil {
+					t.Fatal("handler failure cancelled the Request")
+				}
+				if tt.alert || (!tt.panic && !tt.logOnly) {
+					want := wire.WsMsg{What: what.Alert, Data: alert}
+					if !tt.alert {
+						want.Data = "danger\n" + wantErr.Error()
+						if tt.hook {
+							want.Jid = id
+						}
+					}
+					select {
+					case msg := <-rq.OutCh:
+						if msg != want {
+							t.Fatalf("browser alert = %#v, want %#v", msg, want)
+						}
+					default:
+						t.Fatal("missing browser alert")
+					}
+				}
+				select {
+				case msg := <-rq.OutCh:
+					t.Fatalf("unexpected browser message: %#v", msg)
+				default:
+				}
+			})
+		})
 	}
 }
 

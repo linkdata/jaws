@@ -23,6 +23,7 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 		name       string
 		input      string
 		checkError error
+		checkPanic bool
 		alert      string
 		hook       bool
 		readOnly   bool
@@ -38,6 +39,8 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 		{name: "unhandled check", input: "value=2", checkError: fmt.Errorf("private check detail: %w", jaws.ErrEventUnhandled), wantPatch: "value=1", wantChecks: 1},
 		{name: "explicit alert", input: "value=2", checkError: errors.New("private check detail"), alert: "Choose a value no greater than 1.", wantPatch: "value=1", wantChecks: 1},
 		{name: "hook rejection", input: "value=2", checkError: errors.New("private check detail"), hook: true, wantPatch: "value=1", wantChecks: 1},
+		{name: "panicking check", input: "value=2", checkError: errors.New("private panic detail"), checkPanic: true, wantPatch: `={"value":1}`, wantChecks: 1},
+		{name: "hook panic", input: "value=2", checkError: errors.New("private panic detail"), checkPanic: true, hook: true, wantPatch: `={"value":1}`, wantChecks: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -71,6 +74,9 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 					if tt.alert != "" {
 						source.Request.Alert("warning", tt.alert)
 					}
+					if tt.checkPanic {
+						panic(tt.checkError)
+					}
 					return tt.checkError
 				}
 				if tt.readOnly {
@@ -89,7 +95,14 @@ func TestJsVarRejectedBrowserInput(t *testing.T) {
 				if len(logged) != 1 {
 					t.Fatalf("logged errors = %v, want one rejection", logged)
 				}
-				if tt.checkError != nil && logged[0].Error() != tt.checkError.Error() {
+				if !errors.Is(logged[0], jaws.ErrEventLogOnly) {
+					t.Fatalf("logged error does not match ErrEventLogOnly: %v", logged[0])
+				}
+				if tt.checkPanic {
+					if !errors.Is(logged[0], jaws.ErrEventHandlerPanic) || !errors.Is(logged[0], tt.checkError) {
+						t.Fatalf("logged panic = %v, want %v", logged[0], tt.checkError)
+					}
+				} else if tt.checkError != nil && logged[0].Error() != tt.checkError.Error() {
 					t.Fatalf("logged error = %q, want %q", logged[0], tt.checkError)
 				}
 

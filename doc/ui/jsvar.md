@@ -45,7 +45,7 @@ data: do not mutate or retain it, reacquire the lock, or call a store setter.
 Rejected proposals are logged and corrected without an automatic browser alert.
 When handling browser input, `ClientCheck` can call
 `source.Request.Alert("warning", "Choose a valid value.")` before returning an
-error. A panic still produces a generic event-handler alert.
+error. Recovered panics are also logged without automatic alerts.
 
 Every binding receives the same JSON value; use separate stores for data with
 different visibility. Proposal outcomes can depend on Go fields omitted from

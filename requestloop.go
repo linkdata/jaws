@@ -187,10 +187,7 @@ func (rq *Request) handleBroadcast(tagmsg wire.Message, eventCallCh chan eventFn
 			// [what.Hook]. They exist for testing: the JaWS client never sends Hook,
 			// so they only arrive here via Broadcast. The handler must not send any
 			// messages itself. Returned errors follow the event alert policy.
-			if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil {
-				if err = eventAlertError(err); err == nil {
-					continue
-				}
+			if err := rq.Jaws.Log(rq.callAllEventHandlers(elem.Jid(), tagmsg.What, tagmsg.Data)); err != nil && !errors.Is(err, ErrEventLogOnly) {
 				var m wire.WsMsg
 				m.FillAlert(err)
 				m.Jid = elem.Jid()
@@ -542,13 +539,9 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			continue
 		default:
 		}
-		if err := rq.Jaws.Log(call.invoke()); err != nil {
-			alertErr := eventAlertError(err)
-			if alertErr == nil {
-				continue
-			}
+		if err := rq.Jaws.Log(call.invoke()); err != nil && !errors.Is(err, ErrEventLogOnly) {
 			var m wire.WsMsg
-			m.FillAlert(alertErr)
+			m.FillAlert(err)
 			// This error alert is best-effort: unlike queueEvent, which cancels the
 			// Request with ErrRequestOverloaded when its channel fills (dropping a
 			// queued event could desync browser and backend state), a dropped alert
@@ -562,24 +555,6 @@ func (rq *Request) eventCaller(eventCallCh <-chan eventFnCall, outboundMsgCh cha
 			}
 		}
 	}
-}
-
-// clientAlertError selects safe browser text for library errors.
-// An empty message suppresses the automatic alert, leaving logging unchanged.
-type clientAlertError interface {
-	JawsClientAlert() string
-}
-
-// eventAlertError returns the browser-safe error, or nil to suppress the alert.
-func eventAlertError(err error) error {
-	var safe clientAlertError
-	if errors.As(err, &safe) {
-		if msg := safe.JawsClientAlert(); msg != "" {
-			return errors.New(msg)
-		}
-		return nil
-	}
-	return err
 }
 
 // onConnect calls the [Request]'s [ConnectFn] if it is not nil, returning its

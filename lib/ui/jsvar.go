@@ -591,7 +591,8 @@ func (store *JsVarStore[T]) projectVisiblePatch(path, root string, visible any) 
 // A rejected, invalid, or unchanged proposal schedules a canonical correction
 // for its source binding. A changed accepted proposal invalidates every binding.
 // An unchanged proposal to a complex Go shape is rejected.
-// Returned errors are logged during event processing without automatic alerts.
+// Returned errors match [jaws.ErrEventLogOnly] and are logged during event
+// processing without automatic alerts.
 // A panicking check rolls back and schedules a root correction before the panic
 // continues. [ErrJsVarTooLarge] cancels the source Request for reload recovery.
 //

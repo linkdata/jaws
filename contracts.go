@@ -143,6 +143,7 @@ type ClickHandler interface {
 	//
 	// [ErrEventUnhandled] tries the next handler. Other non-nil errors are logged
 	// and queued as danger alerts when possible during Request event processing.
+	// Errors matching [ErrEventLogOnly], including recovered panics, omit the alert.
 	JawsClick(elem *Element, click Click) (err error)
 }
 
@@ -160,6 +161,7 @@ type ContextMenuHandler interface {
 	//
 	// [ErrEventUnhandled] tries the next handler. Other non-nil errors are logged
 	// and queued as danger alerts when possible during Request event processing.
+	// Errors matching [ErrEventLogOnly], including recovered panics, omit the alert.
 	JawsContextMenu(elem *Element, click Click) (err error)
 }
 
