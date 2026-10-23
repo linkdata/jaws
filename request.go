@@ -1259,6 +1259,9 @@ func (rq *Request) runWebSocket(ws *websocket.Conn, idleInterval, wsTimeout time
 // and are not reported through [Jaws.Logger]. When [Jaws.Debug] is true, their
 // underlying error is retained in the Request cancellation cause, which is
 // passed to [Jaws.Log] instead.
+//
+// A noscript probe returns 204 and cancels the Request with
+// [ErrJavascriptDisabled] without logging or increasing [Jaws.ErrorCount].
 func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rq.startServe() {
 		defer rq.stopServe()
@@ -1266,7 +1269,10 @@ func (rq *Request) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		wsTimeout := rq.Jaws.getWebSocketTimeout()
 		if strings.HasSuffix(r.URL.Path, "/noscript") {
 			w.WriteHeader(http.StatusNoContent)
-			rq.cancel(ErrJavascriptDisabled)
+			// The probe is expected; preserve its cause without reporting it.
+			rq.mu.Lock()
+			_ = rq.cancelLocked(ErrJavascriptDisabled)
+			rq.mu.Unlock()
 			return
 		}
 		var err error

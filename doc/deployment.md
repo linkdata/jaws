@@ -20,6 +20,7 @@ Oversized inbound WebSocket messages close the connection and log the read-limit
 error. Other transport errors ordinarily end the Request without a log report;
 `Debug` retains their underlying details for logging. Configure `Debug` before
 serving and regenerate head markup with `GenerateHeadHTML` when changing it.
+Noscript probes cancel Requests without logging or incrementing `ErrorCount`.
 
 ## Authorization
 

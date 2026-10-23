@@ -93,7 +93,7 @@ var ErrReplaceNotBroadcastable = errors.New("what.Replace cannot be broadcast")
 // elements, or [Element.Remove] for the per-element child form.
 var ErrRemoveNotBroadcastable = errors.New("what.Remove cannot be broadcast")
 
-// ErrJavascriptDisabled is returned when the noscript probe indicates JavaScript is disabled.
+// ErrJavascriptDisabled identifies a Request canceled by the noscript probe.
 var ErrJavascriptDisabled = errors.New("javascript is disabled")
 
 // ErrWebsocketOriginMissing is returned when a WebSocket request has no Origin header.
