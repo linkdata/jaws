@@ -5790,16 +5790,16 @@ func TestRecycleQueueRaceDoesNotLeak(t *testing.T) {
 	}
 }
 
-// TestNoscriptDuringLiveRenderRecordsJavascriptDisabled guards against re-adding a
-// render-timing gate that would 404 the <noscript> probe while a streamed page is
-// still rendering (its initial request context still live). The probe must reach the
-// Request, return 204, and record ErrJavascriptDisabled.
-func TestNoscriptDuringLiveRenderRecordsJavascriptDisabled(t *testing.T) {
+// TestNoscriptDuringLiveRenderCancelsWithoutLogging checks that a probe during
+// initial rendering returns 204 and cancels the Request without an error report.
+func TestNoscriptDuringLiveRenderCancelsWithoutLogging(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
+	logger := &captureErrorLogger{}
+	jw.Logger = logger
 	go jw.Serve()
 	waitForServeLoop(t, jw)
 
@@ -5818,6 +5818,13 @@ func TestNoscriptDuringLiveRenderRecordsJavascriptDisabled(t *testing.T) {
 	}
 	if cause := context.Cause(rq.Context()); !errors.Is(cause, ErrJavascriptDisabled) {
 		t.Fatalf("cancellation cause = %v, want ErrJavascriptDisabled", cause)
+	}
+	if got := jw.ErrorCount(); got != 0 {
+		t.Fatalf("ErrorCount() = %d, want 0", got)
+	}
+	awaitTestLoggerQueue(t, jw)
+	if errs := logger.snapshot(); len(errs) != 0 {
+		t.Fatalf("logged errors = %v, want none", errs)
 	}
 }
 

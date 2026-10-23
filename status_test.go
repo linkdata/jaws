@@ -223,7 +223,7 @@ func TestJaws_StatusMetricInvalidations(t *testing.T) {
 		}
 		requireStatusDirty(t, jw, StatusMetricPendingRequests)
 		rq.ServeHTTP(httptest.NewRecorder(), newStatusHTTPRequest("http://example.test", "/jaws/"+rq.JawsKeyString()+"/noscript"))
-		requireStatusDirty(t, jw, StatusMetricActiveRequests|StatusMetricErrors)
+		requireStatusDirty(t, jw, StatusMetricActiveRequests)
 		rq.ServeHTTP(httptest.NewRecorder(), newStatusHTTPRequest("http://example.test", "/jaws/"+rq.JawsKeyString()+"/noscript"))
 		requireStatusDirty(t, jw, 0)
 	})
@@ -245,7 +245,7 @@ func TestJaws_StatusMetricInvalidations(t *testing.T) {
 		}
 		requireStatusDirty(t, jw, StatusMetricPendingRequests)
 		rq.ServeHTTP(httptest.NewRecorder(), newStatusHTTPRequest("http://example.test", "/jaws/"+rq.JawsKeyString()+"/noscript"))
-		requireStatusDirty(t, jw, StatusMetricActiveRequests|StatusMetricActiveSessions|StatusMetricErrors)
+		requireStatusDirty(t, jw, StatusMetricActiveRequests|StatusMetricActiveSessions)
 	})
 
 	t.Run("rejected Origin", func(t *testing.T) {
