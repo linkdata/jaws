@@ -43,7 +43,7 @@ jobs:
 
       - name: Staticcheck
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@1285a6a5ec1e0ebb658f49e82b6c566a878cc3cb # v0.8.1
+          go install honnef.co/go/tools/cmd/staticcheck@54455593555daf6bfcf3c480faaada7de3145357 # v0.8.2
           staticcheck ./...
 
       - name: golangci-lint
