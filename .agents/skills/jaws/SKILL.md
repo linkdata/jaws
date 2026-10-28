@@ -84,6 +84,9 @@ Guide: `doc/ui/README.md#choose-initial-attributes`.
 
 Guide: `doc/ui/custom.md#update-attributes-after-rendering`, `doc/bindings.md`.
 
+- [ ] Do not perform long-running work in `JawsUpdate`. Each Request updates
+  selected Elements serially, so slow calls cause UI lag for affected Requests.
+  Ideally, updating all Elements on a page takes less than 100 ms.
 - [ ] Update the existing Element where possible. Handle both directions of
   attribute and class changes; preserve unrelated classes.
 - [ ] Use getters for later attribute changes. If an attribute must be correct
