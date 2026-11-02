@@ -2,12 +2,12 @@
 //
 // Its main building blocks are [HTMLInner] for dynamic inner HTML; [Input],
 // [InputText], [InputBool], and [InputDate] for typed controls; [Number] and
-// [Range] for numeric controls; [Container], [Tbody], [Select], and [MultiSelect]
-// for dynamic children; and [Template], [Handler], and [RequestWriter] for templates.
+// [Range] for numeric controls; [File] for native file upload; [Container],
+// [Tbody], [Select], and [MultiSelect] for dynamic children; and [Template],
+// [Handler], and [RequestWriter] for templates.
 //
 // Widgets follow [github.com/linkdata/jaws.UI]'s request ownership and equality
-// requirements. Input widgets retain state for one live Element; other widgets
-// document their supported multiplicity on their concrete types.
+// requirements.
 //
 // [HTMLInner] widgets adapt content with
 // [github.com/linkdata/jaws/lib/bind.MakeHTMLGetter]. Plain strings are trusted

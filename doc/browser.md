@@ -52,10 +52,12 @@ For controls that require a connection, render them disabled or inert and clear
 that state from the server after connection. See [request lifecycle](runtime.md)
 for connection handlers.
 
-Managed inputs, selects, and textareas send `Input` events. `Number` uses
-`change`; `Range` and other managed controls use `input`. Checkboxes and radio
-buttons send their checked state. A multiple-select control sends all selected
-values as a JSON string array; a single-select control sends one string.
+Managed file inputs send no WebSocket `Input` events. With submit-on-change,
+they call `requestSubmit()` on their owning form after a nonempty selection.
+Other managed inputs, selects, and textareas send `Input` events: `Number` uses
+`change`, while `Range` and the rest use `input`. Checkboxes and radio buttons
+send their checked state. A multiple-select control sends all selected values
+as a JSON string array; a single-select control sends one string.
 
 Managed non-input elements forward clicks and context-menu events through their
 managed ancestor route. Events originating inside an input, select, textarea,

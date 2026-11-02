@@ -117,6 +117,7 @@ func TestRequestWriter_MethodsAndWidgetHelpers(t *testing.T) {
 		func() error { return rw.Container("section", tc) },
 		func() error { return rw.Date(date) },
 		func() error { return rw.Div("d") },
+		func() error { return rw.File("upload", false) },
 		func() error { return rw.Img("img.png") },
 		func() error { return rw.Label("l") },
 		func() error { return rw.Li("li") },
