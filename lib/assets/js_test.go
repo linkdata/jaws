@@ -493,6 +493,67 @@ process.stdout.write(JSON.stringify({
 	}
 }
 
+func TestJawsJS_FileSubmitsNativeFormWithoutWebSocketInput(t *testing.T) {
+	runJawsJSSnippet(t, `
+const assert = require("node:assert/strict");
+jaws = { readyState: 1, sent: [], send(msg) { this.sent.push(msg); } };
+
+function fileInput(id, submitOnChange, form) {
+	const listeners = {};
+	return {
+		id, tagName: "INPUT", type: "file", files: [], form, listeners,
+		hasAttribute(name) { return name === "data-jawsonchangesubmit" && submitOnChange; },
+		addEventListener(name, handler) { (listeners[name] ||= []).push(handler); }
+	};
+}
+function change(input) {
+	for (const handler of input.listeners.change || []) {
+		handler({ currentTarget: input });
+	}
+}
+
+const form = { submissions: 0, requestSubmit() { this.submissions++; } };
+const automatic = fileInput("Jid.1", true, form);
+const manual = fileInput("Jid.2", false, form);
+document.querySelectorAll = () => [automatic, manual];
+jawsAttachChildren(document);
+assert.deepEqual(Object.keys(automatic.listeners), ["change"]);
+assert.deepEqual(Object.keys(manual.listeners), []);
+manual.files = [{}];
+change(manual);
+assert.equal(form.submissions, 0);
+
+automatic.files = [{}];
+change(automatic);
+assert.equal(form.submissions, 1);
+automatic.files = [];
+change(automatic);
+assert.equal(form.submissions, 1);
+automatic.files = [{}];
+automatic.form = null;
+change(automatic);
+assert.equal(form.submissions, 1);
+assert.deepEqual(jaws.sent, []);
+
+const replacement = fileInput("Jid.3", true, form);
+let children = [];
+const template = {
+	id: "Jid.4", html: "before",
+	get innerHTML() { return this.html; },
+	set innerHTML(value) { this.html = value; children = [replacement]; },
+	querySelectorAll() { return children; }
+};
+document.getElementById = id => id === template.id ? template : null;
+jawsPerform("Inner", template.id, JSON.stringify("<input type=file>"));
+assert.deepEqual(Object.keys(replacement.listeners), ["change"]);
+replacement.files = [{}];
+jaws.readyState = 0;
+change(replacement);
+assert.equal(form.submissions, 2);
+assert.deepEqual(jaws.sent, []);
+`)
+}
+
 func TestJawsJS_MultipleSelect(t *testing.T) {
 	raw := runJawsJSSnippet(t, `
 const assert = require("node:assert/strict");

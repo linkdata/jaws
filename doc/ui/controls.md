@@ -14,6 +14,31 @@ in its own location, but browser edits store midnight UTC. An empty edit stores
 the zero time, which renders as `0001-01-01`. Use dates in years 1 through 9999
 and keep the bound time and location irrelevant or normalized to UTC.
 
+`File` renders a named native file input in an application-owned multipart form.
+Selected files go to the form's HTTP POST handler, not through JaWS WebSocket
+events. Pass `true` to submit the form when at least one file is selected;
+`requestSubmit()` validates the form and, if valid, fires its submit event.
+Pass `false` to use a normal submit button. Canceling selection or having no
+owning form does not submit.
+
+```gotemplate
+<form action="/upload" method="post" enctype="multipart/form-data">
+  {{$.File "document" true `accept=".pdf,.png"`}}
+  <button type="submit">Upload</button>
+</form>
+```
+
+The optional `accept` attribute takes comma-separated file extensions (starting
+with `.`) or MIME types, including `image/*`; it is a picker hint, not validation.
+For a dynamic mask, build `htmlio.Attr("accept", mask)` in Go and pass the result
+as a template parameter; plain render-parameter strings are trusted raw HTML.
+Protect the HTTP handler against CSRF (for example with
+`http.CrossOriginProtection`), authorize uploads, validate files, enforce size
+limits, and write the response. A native POST normally navigates to that
+response. Replacing the file input through a
+[JaWS Template](README.md#render-a-page-or-partial) or another parent update
+clears its browser-held selection.
+
 `Number` and `Range` accept predeclared or named integer and floating-point
 types. They preserve the source type for parsing, formatting, and setter calls:
 
@@ -115,10 +140,10 @@ to fields. Updating a row Template recreates its nested Elements and can discard
 focus or unsent edits; dirty the field's tag when only its value changed.
 
 Equal containers may back several Elements only when the provider and any
-reused child widgets support that use. A repeated input widget pointer does not;
-construct separate inputs instead. Container, Template, and selection widgets
-each claim one Element state slot, so two state-owning renderers cannot share
-one Element.
+reused child widgets support that use. Construct separate widgets for child
+types that support only one live Element. Container, Template, and selection
+widgets each claim one Element state slot, so two state-owning renderers cannot
+share one Element.
 
 Use [`named.BoolArray`](../utilities.md#named-choices) for standard selection data:
 

@@ -40,6 +40,7 @@ func TestConstructors(t *testing.T) {
 		NewContainer("div", &tc),
 		NewDate(timeSetter),
 		NewDiv(htmlGetter),
+		NewFile("upload", false),
 		NewImg(imgGetter),
 		NewLabel(htmlGetter),
 		NewLi(htmlGetter),

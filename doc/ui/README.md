@@ -13,6 +13,7 @@ construction. Add JaWS widgets where values or browser events need live handling
 | --- | --- |
 | Updating text or HTML | [`Span`, `Div`, `Button`, and the other `HTMLInner` widgets](../bindings.md#compute-content-and-attributes) |
 | Editable values | [`Text`, `Password`, `Textarea`, `Checkbox`, `Radio`, `Date`, `Number`, `Range`](controls.md#input-controls) |
+| Native file upload | [`File`](controls.md#input-controls) |
 | Changing child lists | [`Container`, `Tbody`, `Select`, `MultiSelect`](controls.md#lists-and-selections) |
 | Go templates | [`Handler`, `Template`, `RequestWriter`](#render-a-page-or-partial) |
 | Initial attributes | [Constant template strings and member functions](#choose-initial-attributes) |
@@ -181,7 +182,7 @@ Render parameters supply trusted attributes (`string` or `template.HTMLAttr`),
 input/click/context-menu handlers, and dependency tags. A handler can also
 supply tags. See [actions and bindings](../bindings.md).
 
-A widget normally backs one live Element. Input widgets retain per-control
+A widget normally backs one live Element. Bound input widgets retain per-control
 state and need separate widget instances even when they share a binding:
 
 ```go
@@ -190,10 +191,10 @@ right := ui.NewText(nameBinding)
 ```
 
 Within one Request, `HTMLInner` widgets, `Img`, and `Option` can back multiple
-Elements when their sources support that use. `Template`, `Container`, `Tbody`, `Select`, and
-`MultiSelect` can also do so under their provider and child contracts. Their
-constructors return definition values: use those values directly, without
-taking their addresses.
+Elements when their sources support that use. `Template`, `Container`, `Tbody`,
+`Select`, and `MultiSelect` can also do so under their provider and child
+contracts. Their constructors return definition values: use those values
+directly, without taking their addresses.
 
 An Element belongs to its Request. Do not retain Elements or Requests in shared
 application state or background work. A nil UI interface passed directly to
