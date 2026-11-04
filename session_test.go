@@ -2200,7 +2200,12 @@ func TestSession_TouchConcurrentReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer jw.Close()
+	closeSafe := true
+	defer func() {
+		if closeSafe {
+			jw.Close()
+		}
+	}()
 
 	r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
 	old := jw.NewSession(httptest.NewRecorder(), r)
@@ -2216,6 +2221,7 @@ func TestSession_TouchConcurrentReplacement(t *testing.T) {
 		jw.mu.Unlock()
 		if time.Now().After(deadline) {
 			old.mu.Unlock()
+			closeSafe = false
 			t.Fatal("Touch did not acquire the registry read lock")
 		}
 		runtime.Gosched()
@@ -2228,15 +2234,29 @@ func TestSession_TouchConcurrentReplacement(t *testing.T) {
 		jw.mu.RUnlock()
 		if time.Now().After(deadline) {
 			old.mu.Unlock()
+			closeSafe = false
 			t.Fatal("replacement did not wait for Touch")
 		}
 		runtime.Gosched()
 	}
 	old.mu.Unlock()
-	if !<-touched {
+	var wasTouched bool
+	select {
+	case wasTouched = <-touched:
+	case <-time.After(5 * time.Second):
+		closeSafe = false
+		t.Fatal("Touch remained blocked during replacement")
+	}
+	if !wasTouched {
 		t.Fatal("Touch rejected the current session before replacement")
 	}
-	current := <-replaced
+	var current *Session
+	select {
+	case current = <-replaced:
+	case <-time.After(5 * time.Second):
+		closeSafe = false
+		t.Fatal("replacement remained blocked after Touch")
+	}
 	if current == nil || old.Touch() || !current.Touch() || jw.GetSession(r) != current {
 		t.Fatal("Touch revived the old session after replacement")
 	}
