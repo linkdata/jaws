@@ -2110,14 +2110,25 @@ func TestSession_ExtendGraceForHTTPAndWebSocketHandoff(t *testing.T) {
 		if sess == nil || !sess.ExtendGrace(10*time.Minute) {
 			t.Fatal("failed to extend a new session")
 		}
+		otherRequest := httptest.NewRequest(http.MethodGet, "/", nil)
+		if other := jw.NewSession(httptest.NewRecorder(), otherRequest); other == nil || other == sess {
+			t.Fatal("failed to create an independent session")
+		}
 		time.Sleep(2 * time.Minute)
+		if jw.GetSession(otherRequest) != nil {
+			t.Fatal("unextended session survived the default grace")
+		}
 		if got := jw.GetSession(r); got != sess {
 			t.Fatalf("HTTP session expired during provider visit: got %p, want %p", got, sess)
 		}
 		if !sess.ExtendGrace(2 * time.Minute) {
 			t.Fatal("shorter extension rejected a live session")
 		}
-		time.Sleep(8*time.Minute + time.Second)
+		time.Sleep(3 * time.Minute)
+		if got := jw.GetSession(r); got != sess {
+			t.Fatalf("shorter extension shortened grace: got %p, want %p", got, sess)
+		}
+		time.Sleep(5*time.Minute + time.Second)
 		if jw.GetSession(r) != nil || sess.ExtendGrace(time.Minute) {
 			t.Fatal("expired HTTP session was revived")
 		}
