@@ -2111,8 +2111,7 @@ func TestSession_TouchExtendsHTTPGraceAndRejectsExpiry(t *testing.T) {
 		t.Fatal("expected session")
 	}
 	sess.mu.Lock()
-	soon := time.Now().Add(time.Second)
-	sess.deadline = soon
+	sess.deadline = time.Now().Add(time.Second)
 	sess.mu.Unlock()
 	before := time.Now()
 	if !sess.Touch() {
@@ -2122,8 +2121,11 @@ func TestSession_TouchExtendsHTTPGraceAndRejectsExpiry(t *testing.T) {
 	sess.mu.RLock()
 	refreshed := sess.deadline
 	sess.mu.RUnlock()
-	if refreshed.Before(before.Add(sessionGrace)) || refreshed.After(after.Add(sessionGrace)) || jw.GetSession(r) != sess {
-		t.Fatalf("Touch did not extend grace: old=%s new=%s", soon, refreshed)
+	if refreshed.Before(before.Add(sessionGrace)) || refreshed.After(after.Add(sessionGrace)) {
+		t.Fatalf("Touch deadline outside one-minute grace: before=%s after=%s deadline=%s", before, after, refreshed)
+	}
+	if got := jw.GetSession(r); got != sess {
+		t.Fatalf("touched session not retrievable: got %p, want %p", got, sess)
 	}
 
 	sess.mu.Lock()

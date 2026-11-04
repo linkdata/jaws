@@ -19,7 +19,7 @@ import (
 
 const sessionGrace = time.Minute
 
-// Session stores server-side state shared by one or more Requests.
+// Session stores server-side state shared by HTTP handlers and JaWS Requests.
 //
 // Sessions live in memory and are bound to the remote IP that created them.
 // Their cookies have no explicit expiry or MaxAge. A Session starts with a
