@@ -145,9 +145,9 @@ func (sess *Session) Set(key string, value any) {
 }
 
 // Touch extends the one-minute grace window for a current, live Session.
-// It supports authenticated HTTP requests that do not attach a WebSocket.
-// An expired, closed, or replaced Session cannot be revived. A concurrent
-// Close may invalidate the Session immediately after Touch returns.
+// Applications can call it after authorizing an HTTP request without a WebSocket.
+// It returns true when it extends the deadline, and false for a nil, expired,
+// closed, or replaced Session. A concurrent Close may invalidate it immediately.
 func (sess *Session) Touch() bool {
 	if sess == nil {
 		return false
