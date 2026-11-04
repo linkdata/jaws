@@ -64,6 +64,15 @@ grace deadline; detaching a claimed Request refreshes it, while detaching an
 unclaimed Request leaves it unchanged. Maintenance removes expired Sessions
 without attached Requests. Cookies have no explicit expiry or MaxAge.
 
+For a bounded external flow, such as an OAuth provider visit, call
+`Session.ExtendGrace(duration)` on the current Session before redirecting the
+browser. A later WebSocket disconnect does not shorten the extended deadline.
+The method returns false if the Session is nil, expired, closed or replaced, or
+the duration is not positive. Check that result before starting the flow.
+`ExtendGrace` does not verify identity or authorize the request; the application
+must do that first. The default one-minute grace still applies to Sessions that
+do not call it.
+
 `Session.Reload` asks its active pages to reload. `Session.Close` invalidates
 the Session and queues reloads for its associated pages, including those still
 waiting to connect. It leaves stored data intact; call `Session.Clear` to remove

@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -2094,6 +2095,127 @@ func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {
 	}
 	if got := jw.GetSession(hr); got != nil {
 		t.Fatalf("expected expired session to be ignored by GetSession, got %v", got)
+	}
+}
+
+func TestSession_ExtendGraceForHTTPAndWebSocketHandoff(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		sess := jw.NewSession(httptest.NewRecorder(), r)
+		if sess == nil || !sess.ExtendGrace(10*time.Minute) {
+			t.Fatal("failed to extend a new session")
+		}
+		time.Sleep(2 * time.Minute)
+		if got := jw.GetSession(r); got != sess {
+			t.Fatalf("HTTP session expired during provider visit: got %p, want %p", got, sess)
+		}
+		if !sess.ExtendGrace(2 * time.Minute) {
+			t.Fatal("shorter extension rejected a live session")
+		}
+		time.Sleep(8*time.Minute + time.Second)
+		if jw.GetSession(r) != nil || sess.ExtendGrace(time.Minute) {
+			t.Fatal("expired HTTP session was revived")
+		}
+	})
+
+	synctest.Test(t, func(t *testing.T) {
+		jw, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer jw.Close()
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		sess := jw.NewSession(httptest.NewRecorder(), r)
+		if sess == nil {
+			t.Fatal("expected session")
+		}
+		rq := jw.newRequest(r)
+		if rq.Session() != sess {
+			t.Fatal("request did not attach to session")
+		}
+		rq.storeState(reqClaimed)
+		time.Sleep(2 * time.Minute) // The attached request keeps an old deadline live.
+		if !sess.ExtendGrace(10 * time.Minute) {
+			t.Fatal("attached session with an old deadline was rejected")
+		}
+		rq.killSession(true) // Browser leaves for the provider.
+		time.Sleep(9 * time.Minute)
+		if got := jw.GetSession(r); got != sess {
+			t.Fatalf("WebSocket disconnect shortened OAuth grace: got %p, want %p", got, sess)
+		}
+		time.Sleep(time.Minute + time.Second)
+		if jw.GetSession(r) != nil {
+			t.Fatal("extended WebSocket session survived its deadline")
+		}
+	})
+}
+
+func TestSession_ExtendGraceRejectsInvalidAndReplaced(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	var absent *Session
+	if absent.ExtendGrace(time.Minute) {
+		t.Fatal("nil session was extended")
+	}
+
+	const sessionID = key.Key(0x1122334455667788)
+	ip := netip.MustParseAddr("192.0.2.1")
+	stale := newSession(jw, sessionID, ip, false)
+	jw.mu.Lock()
+	jw.registerSessionLocked(stale, false)
+	jw.mu.Unlock()
+	if stale.ExtendGrace(0) || stale.ExtendGrace(-time.Second) {
+		t.Fatal("non-positive duration was accepted")
+	}
+	jw.deleteSessionIfCurrent(stale)
+	replacement := newSession(jw, sessionID, ip, false)
+	jw.mu.Lock()
+	jw.registerSessionLocked(replacement, false)
+	jw.mu.Unlock()
+	if stale.ExtendGrace(time.Minute) || !replacement.ExtendGrace(time.Minute) {
+		t.Fatal("replaced session was revived or current session was rejected")
+	}
+	replacement.Close()
+	if replacement.ExtendGrace(time.Minute) {
+		t.Fatal("closed session was revived")
+	}
+}
+
+func TestSession_ExtendGraceConcurrentClose(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess := jw.NewSession(httptest.NewRecorder(), r)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 32 {
+		workers.Go(func() {
+			<-start
+			sess.ExtendGrace(10 * time.Minute)
+		})
+	}
+	workers.Go(func() {
+		<-start
+		sess.Close()
+	})
+	close(start)
+	workers.Wait()
+	if sess.ExtendGrace(time.Minute) || jw.GetSession(r) != nil {
+		t.Fatal("concurrent extension revived a closed session")
 	}
 }
 
