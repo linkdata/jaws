@@ -64,6 +64,11 @@ grace deadline; detaching a claimed Request refreshes it, while detaching an
 unclaimed Request leaves it unchanged. Maintenance removes expired Sessions
 without attached Requests. Cookies have no explicit expiry or MaxAge.
 
+An application using a Session for authenticated HTTP pages without a WebSocket
+can call `Session.Touch` after authorizing each request. It extends the grace
+window for a current live Session and returns false for an expired, closed, or
+replaced Session. Authorization remains the application's responsibility.
+
 `Session.Reload` asks its active pages to reload. `Session.Close` invalidates
 the Session and queues reloads for its associated pages, including those still
 waiting to connect. It leaves stored data intact; call `Session.Clear` to remove

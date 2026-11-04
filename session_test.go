@@ -2097,6 +2097,102 @@ func TestSession_GetSessionExpiredBeforeCleanup(t *testing.T) {
 	}
 }
 
+func TestSession_TouchExtendsHTTPGraceAndRejectsExpiry(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess := jw.NewSession(httptest.NewRecorder(), r)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	sess.mu.Lock()
+	soon := time.Now().Add(time.Second)
+	sess.deadline = soon
+	sess.mu.Unlock()
+	if !sess.Touch() {
+		t.Fatal("current HTTP session was not touched")
+	}
+	sess.mu.RLock()
+	refreshed := sess.deadline
+	sess.mu.RUnlock()
+	if !refreshed.After(soon.Add(50*time.Second)) || jw.GetSession(r) != sess {
+		t.Fatalf("Touch did not extend grace: old=%s new=%s", soon, refreshed)
+	}
+
+	sess.mu.Lock()
+	sess.deadline = time.Now().Add(-time.Second)
+	sess.mu.Unlock()
+	if sess.Touch() || jw.GetSession(r) != nil {
+		t.Fatal("Touch revived an expired session")
+	}
+	var absent *Session
+	if absent.Touch() {
+		t.Fatal("nil Session.Touch succeeded")
+	}
+}
+
+func TestSession_TouchRejectsReplacedAndClosedSession(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	const sessionID = key.Key(0x1122334455667788)
+	remoteIP := netip.MustParseAddr("192.0.2.1")
+	stale := newSession(jw, sessionID, remoteIP, false)
+	jw.mu.Lock()
+	jw.registerSessionLocked(stale, false)
+	jw.mu.Unlock()
+	jw.deleteSessionIfCurrent(stale)
+
+	replacement := newSession(jw, sessionID, remoteIP, false)
+	jw.mu.Lock()
+	jw.registerSessionLocked(replacement, false)
+	jw.mu.Unlock()
+	if stale.Touch() || !replacement.Touch() {
+		t.Fatal("Touch accepted stale session or rejected current replacement")
+	}
+	replacement.Close()
+	if replacement.Touch() {
+		t.Fatal("Touch revived a closed session")
+	}
+	if stale.Touch() {
+		t.Fatal("Touch revived a replaced session after current Close")
+	}
+}
+
+func TestSession_TouchConcurrentReplacement(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	go jw.Serve()
+
+	r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	old := jw.NewSession(httptest.NewRecorder(), r)
+	if old == nil {
+		t.Fatal("expected session")
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 100 {
+			old.Touch()
+		}
+	}()
+	current := jw.NewSession(httptest.NewRecorder(), r)
+	<-done
+	if current == nil || old.Touch() || !current.Touch() || jw.GetSession(r) != current {
+		t.Fatal("Touch revived the old session during replacement")
+	}
+}
+
 func TestSession_GetSessionRejectsCookieValueWithTail(t *testing.T) {
 	jw, _ := New()
 	defer jw.Close()

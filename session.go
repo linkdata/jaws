@@ -143,6 +143,26 @@ func (sess *Session) Set(key string, value any) {
 	}
 }
 
+// Touch extends the one-minute grace window for a current, live Session.
+// It supports authenticated HTTP requests that do not attach a WebSocket.
+// An expired, closed, or replaced Session cannot be revived. A concurrent
+// Close may invalidate the Session immediately after Touch returns.
+func (sess *Session) Touch() bool {
+	if sess == nil {
+		return false
+	}
+	jw := sess.jw
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if jw.sessions[sess.sessionID] != sess || sess.isDeadLocked() {
+		return false
+	}
+	sess.deadline = time.Now().Add(sessionGrace)
+	return true
+}
+
 // ID returns the session ID, a 64-bit random value.
 func (sess *Session) ID() (id uint64) {
 	if sess != nil {
