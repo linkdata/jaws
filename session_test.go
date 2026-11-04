@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -2135,6 +2136,34 @@ func TestSession_TouchExtendsHTTPGraceAndRejectsExpiry(t *testing.T) {
 	}
 }
 
+func TestSession_TouchAttachedRequest(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+
+	r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	sess := jw.NewSession(httptest.NewRecorder(), r)
+	if sess == nil {
+		t.Fatal("expected session")
+	}
+	rq := jw.NewRequest(httptest.NewRecorder(), r)
+	if rq.Session() != sess {
+		t.Fatal("request did not attach to session")
+	}
+	sess.mu.Lock()
+	sess.deadline = time.Now().Add(-time.Second)
+	sess.mu.Unlock()
+	if !sess.Touch() {
+		t.Fatal("Touch rejected a session kept live by an attached request")
+	}
+	jw.recycle(rq)
+	if got := jw.GetSession(r); got != sess {
+		t.Fatalf("session expired after unclaimed request detached: got %p, want %p", got, sess)
+	}
+}
+
 func TestSession_TouchRejectsReplacedAndClosedSession(t *testing.T) {
 	jw, err := New()
 	if err != nil {
@@ -2172,24 +2201,43 @@ func TestSession_TouchConcurrentReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer jw.Close()
-	go jw.Serve()
 
 	r := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
 	old := jw.NewSession(httptest.NewRecorder(), r)
 	if old == nil {
 		t.Fatal("expected session")
 	}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for range 100 {
-			old.Touch()
+	old.mu.Lock()
+	touched := make(chan bool, 1)
+	go func() { touched <- old.Touch() }()
+	// Hold Touch at the session lock while it owns the registry read lock.
+	deadline := time.Now().Add(5 * time.Second)
+	for jw.mu.TryLock() {
+		jw.mu.Unlock()
+		if time.Now().After(deadline) {
+			old.mu.Unlock()
+			t.Fatal("Touch did not acquire the registry read lock")
 		}
-	}()
-	current := jw.NewSession(httptest.NewRecorder(), r)
-	<-done
+		runtime.Gosched()
+	}
+	replaced := make(chan *Session, 1)
+	go func() { replaced <- jw.NewSession(httptest.NewRecorder(), r) }()
+	// A waiting replacement writer blocks new readers until Touch releases it.
+	for jw.mu.TryRLock() {
+		jw.mu.RUnlock()
+		if time.Now().After(deadline) {
+			old.mu.Unlock()
+			t.Fatal("replacement did not wait for Touch")
+		}
+		runtime.Gosched()
+	}
+	old.mu.Unlock()
+	if !<-touched {
+		t.Fatal("Touch rejected the current session before replacement")
+	}
+	current := <-replaced
 	if current == nil || old.Touch() || !current.Touch() || jw.GetSession(r) != current {
-		t.Fatal("Touch revived the old session during replacement")
+		t.Fatal("Touch revived the old session after replacement")
 	}
 }
 
