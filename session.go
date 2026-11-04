@@ -23,9 +23,11 @@ const sessionGrace = time.Minute
 //
 // Sessions live in memory and are bound to the remote IP that created them.
 // Their cookies have no explicit expiry or MaxAge. A Session starts with a
-// one-minute grace deadline; detaching a claimed Request refreshes that deadline,
-// while detaching an unclaimed Request leaves it unchanged. It expires once the
-// deadline passes with no attached Requests, and maintenance removes it.
+// one-minute grace deadline; ExtendGrace can lengthen it for a bounded external
+// flow. Detaching a claimed Request refreshes the normal grace without shortening
+// an extended deadline, while detaching an unclaimed Request leaves it unchanged.
+// It expires once the deadline passes with no attached Requests, and
+// maintenance removes it.
 // [Jaws.Close] invalidates all Sessions and clears their data.
 //
 // Its exported methods are safe to call on a nil *Session; methods with results
@@ -100,7 +102,9 @@ func (sess *Session) delRequest(rq *Request, wasClaimed bool) {
 		// must fire even when other requests remain attached, otherwise an aged
 		// session whose last departing request is an unclaimed bootstrap render
 		// would be reaped with its stale deadline despite recent live activity.
-		sess.deadline = time.Now().Add(sessionGrace)
+		if deadline := time.Now().Add(sessionGrace); deadline.After(sess.deadline) {
+			sess.deadline = deadline
+		}
 	}
 	// For an unclaimed request (its bootstrap render finished before the
 	// WebSocket connected) leave the existing deadline intact: the creation-time
@@ -141,6 +145,29 @@ func (sess *Session) Set(key string, value any) {
 		}
 		sess.mu.Unlock()
 	}
+}
+
+// ExtendGrace keeps a current, live Session available for at least duration
+// from now when it has no attached Requests. It never shortens an existing
+// deadline and does not authorize the caller. It returns false for a nil,
+// expired, closed, or replaced Session, or a non-positive duration. A concurrent
+// Close can invalidate the Session immediately after this method returns.
+func (sess *Session) ExtendGrace(duration time.Duration) bool {
+	if sess == nil || duration <= 0 {
+		return false
+	}
+	jw := sess.jw
+	jw.mu.RLock()
+	defer jw.mu.RUnlock()
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if jw.sessions[sess.sessionID] != sess || sess.isDeadLocked() {
+		return false
+	}
+	if deadline := time.Now().Add(duration); deadline.After(sess.deadline) {
+		sess.deadline = deadline
+	}
+	return true
 }
 
 // ID returns the session ID, a 64-bit random value.

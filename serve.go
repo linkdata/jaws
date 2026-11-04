@@ -185,7 +185,7 @@ func (jw *Jaws) maintenance(requestTimeout time.Duration) {
 			_ = jw.retireNonRunningRequestLocked(rq, nil)
 		}
 	}
-	// Every tenth maintenance pass checks unattached Sessions against sessionGrace deadlines.
+	// Every tenth maintenance pass checks unattached Sessions against their deadlines.
 	jw.sessionSweep++
 	if jw.sessionSweep == 10 {
 		jw.sessionSweep = 0
