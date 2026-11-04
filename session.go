@@ -23,8 +23,9 @@ const sessionGrace = time.Minute
 //
 // Sessions live in memory and are bound to the remote IP that created them.
 // Their cookies have no explicit expiry or MaxAge. A Session starts with a
-// one-minute grace deadline; detaching a claimed Request refreshes that deadline,
-// while detaching an unclaimed Request leaves it unchanged. It expires once the
+// one-minute grace deadline; Touch can extend it for authenticated HTTP activity.
+// Detaching a claimed Request refreshes that deadline, while detaching an
+// unclaimed Request leaves it unchanged. It expires once the
 // deadline passes with no attached Requests, and maintenance removes it.
 // [Jaws.Close] invalidates all Sessions and clears their data.
 //

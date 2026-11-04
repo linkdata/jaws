@@ -2114,13 +2114,15 @@ func TestSession_TouchExtendsHTTPGraceAndRejectsExpiry(t *testing.T) {
 	soon := time.Now().Add(time.Second)
 	sess.deadline = soon
 	sess.mu.Unlock()
+	before := time.Now()
 	if !sess.Touch() {
 		t.Fatal("current HTTP session was not touched")
 	}
+	after := time.Now()
 	sess.mu.RLock()
 	refreshed := sess.deadline
 	sess.mu.RUnlock()
-	if !refreshed.After(soon.Add(50*time.Second)) || jw.GetSession(r) != sess {
+	if refreshed.Before(before.Add(sessionGrace)) || refreshed.After(after.Add(sessionGrace)) || jw.GetSession(r) != sess {
 		t.Fatalf("Touch did not extend grace: old=%s new=%s", soon, refreshed)
 	}
 
