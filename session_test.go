@@ -2223,6 +2223,7 @@ func TestSession_TouchConcurrentReplacement(t *testing.T) {
 	replaced := make(chan *Session, 1)
 	go func() { replaced <- jw.NewSession(httptest.NewRecorder(), r) }()
 	// A waiting replacement writer blocks new readers until Touch releases it.
+	deadline = time.Now().Add(5 * time.Second)
 	for jw.mu.TryRLock() {
 		jw.mu.RUnlock()
 		if time.Now().After(deadline) {
