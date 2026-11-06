@@ -20,6 +20,7 @@ import (
 	"weak"
 
 	"github.com/linkdata/jaws/lib/key"
+	"github.com/linkdata/secureheaders"
 )
 
 // NewRequest returns a new JaWS Request.
@@ -36,6 +37,7 @@ import (
 // handling and rendering; see [Request].
 //
 // If r is nil, the Request has no initial request, client address, or [Session].
+// Otherwise, Session lookup follows the request's scheme; see [Jaws.CookieName].
 //
 // [Jaws.ServeWithTimeout] periodically retires idle Requests before WebSocket
 // processing starts; [Jaws.Serve] uses [DefaultWebSocketTimeout].
@@ -294,7 +296,8 @@ func (jw *Jaws) getRequestLocked(jawsKey key.Key, r *http.Request, remoteIP neti
 	rq.remoteIP = remoteIP
 	rq.ctx, rq.cancelFn = context.WithCancelCause(jw.BaseContext)
 	if registered && r != nil {
-		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, jw.CookieName), rq.remoteIP); sess != nil {
+		cookieName := jw.sessionCookieName(secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders))
+		if sess := jw.getSessionLocked(getCookieSessionsIDs(r.Header, cookieName), rq.remoteIP, cookieName); sess != nil {
 			sess.addRequest(rq)
 			rq.session = sess
 		}

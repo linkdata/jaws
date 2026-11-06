@@ -990,6 +990,9 @@ func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	if sHTTP.Cookie() == nil || sHTTP.Cookie().Secure {
 		t.Fatal("expected insecure cookie for http request")
 	}
+	if got := sHTTP.Cookie().Name; got != jw.CookieName {
+		t.Fatalf("HTTP cookie name = %q, want %q", got, jw.CookieName)
+	}
 
 	sHTTPS := jw.NewSession(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "https://example.test/", nil))
 	if sHTTPS == nil {
@@ -997,6 +1000,9 @@ func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	}
 	if sHTTPS.Cookie() == nil || !sHTTPS.Cookie().Secure {
 		t.Fatal("expected secure cookie for https request")
+	}
+	if got := sHTTPS.Cookie().Name; got != "__Host-"+jw.CookieName {
+		t.Fatalf("HTTPS cookie name = %q, want __Host-%s", got, jw.CookieName)
 	}
 
 	// By default forwarded headers are not trusted, so a forwarded-as-https
@@ -1009,6 +1015,9 @@ func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	}
 	if sForwarded.Cookie() == nil || sForwarded.Cookie().Secure {
 		t.Fatal("expected insecure cookie when forwarded headers are not trusted")
+	}
+	if got := sForwarded.Cookie().Name; got != jw.CookieName {
+		t.Fatalf("untrusted proxy cookie name = %q, want %q", got, jw.CookieName)
 	}
 
 	// With TrustForwardedHeaders enabled, the same request yields a secure cookie.
@@ -1023,6 +1032,208 @@ func TestSession_CookieSecureMatchesRequest(t *testing.T) {
 	}
 	if sTrusted.Cookie() == nil || !sTrusted.Cookie().Secure {
 		t.Fatal("expected secure cookie when forwarded headers are trusted")
+	}
+	if got := sTrusted.Cookie().Name; got != "__Host-"+jwTrust.CookieName {
+		t.Fatalf("trusted proxy cookie name = %q, want __Host-%s", got, jwTrust.CookieName)
+	}
+}
+
+func TestSession_CookiesSeparateSchemes(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go jw.Serve()
+	t.Cleanup(jw.Close)
+
+	httpRequest := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	httpSession := jw.NewSession(httptest.NewRecorder(), httpRequest)
+	httpsRequest := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	httpsSession := jw.NewSession(httptest.NewRecorder(), httpsRequest)
+	if httpSession == nil || httpsSession == nil {
+		t.Fatal("expected separate HTTP and HTTPS sessions")
+	}
+	httpCookie, httpsCookie := httpSession.Cookie(), httpsSession.Cookie()
+	if httpCookie.Name != jw.CookieName || httpsCookie.Name != "__Host-"+jw.CookieName || !httpsCookie.Secure || httpsCookie.Path != "/" || httpsCookie.Domain != "" {
+		t.Fatalf("HTTP cookie = %#v, HTTPS cookie = %#v", httpCookie, httpsCookie)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		url     string
+		cookies []*http.Cookie
+		want    *Session
+	}{
+		{name: "HTTP selects HTTP", url: "http://example.test/", cookies: []*http.Cookie{httpsCookie, httpCookie}, want: httpSession},
+		{name: "HTTPS selects HTTPS", url: "https://example.test/", cookies: []*http.Cookie{httpCookie, httpsCookie}, want: httpsSession},
+		{name: "HTTP ignores HTTPS", url: "http://example.test/", cookies: []*http.Cookie{httpsCookie}},
+		{name: "HTTPS ignores HTTP", url: "https://example.test/", cookies: []*http.Cookie{httpCookie}},
+		{name: "HTTP rejects renamed HTTPS ID", url: "http://example.test/", cookies: []*http.Cookie{{Name: jw.CookieName, Value: httpsSession.CookieValue()}}},
+		{name: "HTTPS rejects renamed HTTP ID", url: "https://example.test/", cookies: []*http.Cookie{{Name: "__Host-" + jw.CookieName, Value: httpSession.CookieValue()}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			for _, cookie := range tc.cookies {
+				r.AddCookie(cookie)
+			}
+			if got := jw.GetSession(r); got != tc.want {
+				t.Fatalf("GetSession = %p, want %p", got, tc.want)
+			}
+			rq := jw.NewRequest(httptest.NewRecorder(), r)
+			if got := rq.Session(); got != tc.want {
+				t.Fatalf("NewRequest().Session() = %p, want %p", got, tc.want)
+			}
+			rq.Cancel(nil)
+		})
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	r.AddCookie(httpCookie)
+	r.AddCookie(httpsCookie)
+	replacement := jw.NewSession(httptest.NewRecorder(), r)
+	if replacement == nil || jw.GetSession(r) != replacement {
+		t.Fatal("HTTPS rotation did not publish replacement")
+	}
+	if httpsSession.Cookie().MaxAge != -1 || httpSession.Cookie().MaxAge < 0 || jw.GetSession(httpRequest) != httpSession {
+		t.Fatal("HTTPS rotation closed the wrong Session")
+	}
+	httpsReplacement := replacement
+
+	r = httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	r.AddCookie(httpCookie)
+	r.AddCookie(httpsCookie)
+	replacement = jw.NewSession(httptest.NewRecorder(), r)
+	if replacement == nil || jw.GetSession(r) != replacement {
+		t.Fatal("HTTP rotation did not publish replacement")
+	}
+	probe := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	probe.AddCookie(httpsReplacement.Cookie())
+	if httpSession.Cookie().MaxAge != -1 || jw.GetSession(probe) != httpsReplacement {
+		t.Fatal("HTTP rotation closed the wrong Session")
+	}
+}
+
+func TestSession_HostCookiePrefix(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		cookieName string
+		url        string
+		forwarded  bool
+		trust      bool
+		want       bool
+	}{
+		{name: "HTTPS", cookieName: "__Host-jaws", url: "https://example.test/", want: true},
+		{name: "HTTP", cookieName: "__Host-jaws", url: "http://example.test/"},
+		{name: "untrusted proxy", cookieName: "__Host-jaws", url: "http://example.test/", forwarded: true},
+		{name: "trusted proxy", cookieName: "__Host-jaws", url: "http://example.test/", forwarded: true, trust: true, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			jw.CookieName = tc.cookieName
+			jw.TrustForwardedHeaders = tc.trust
+			r := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			if tc.forwarded {
+				r.Header.Set("X-Forwarded-Proto", "https")
+			}
+			w := httptest.NewRecorder()
+			sess := jw.NewSession(w, r)
+			cookies := w.Result().Cookies()
+			if !tc.want {
+				if sess != nil || len(cookies) != 0 || len(jw.Sessions()) != 0 {
+					t.Fatalf("insecure request created session %p with cookies %v", sess, cookies)
+				}
+				return
+			}
+			if sess == nil || len(cookies) != 1 {
+				t.Fatalf("secure request created session %p with cookies %v", sess, cookies)
+			}
+			cookie := cookies[0]
+			if cookie.Name != tc.cookieName || !cookie.Secure || cookie.Path != "/" || cookie.Domain != "" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+				t.Fatalf("invalid __Host- cookie: %#v", cookie)
+			}
+			if got := jw.GetSession(r); got != sess {
+				t.Fatalf("GetSession = %p, want %p", got, sess)
+			}
+		})
+	}
+}
+
+func TestSession_ReservedCookiePrefixesRequireHTTPS(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		httpsName string
+	}{
+		{"__hOsT-jaws", "__Host-jaws"},
+		{"__sEcUrE-jaws", "__Host-__sEcUrE-jaws"},
+		{"__hTtP-jaws", "__Host-__hTtP-jaws"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			jw.CookieName = tc.name
+			httpResponse := httptest.NewRecorder()
+			httpSession := jw.NewSession(httpResponse, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+			httpsRequest := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+			httpsSession := jw.NewSession(httptest.NewRecorder(), httpsRequest)
+			httpCookies := httpResponse.Result().Cookies()
+			if httpSession != nil || len(httpCookies) != 0 {
+				t.Fatalf("HTTP Session = %p; cookies = %v", httpSession, httpCookies)
+			}
+			if httpsSession == nil || httpsSession.Cookie().Name != tc.httpsName || !httpsSession.Cookie().Secure {
+				t.Fatalf("HTTPS Session = %p", httpsSession)
+			}
+			if got := jw.GetSession(httpsRequest); got != httpsSession {
+				t.Fatalf("GetSession = %p, want %p", got, httpsSession)
+			}
+		})
+	}
+}
+
+func TestSession_HostCookiePrefixRejectsInsecureRead(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.CookieName = "__Host-jaws"
+	r := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	sess := jw.NewSession(httptest.NewRecorder(), r)
+	if sess == nil {
+		t.Fatal("expected HTTPS session")
+	}
+	insecure := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	insecure.AddCookie(sess.Cookie())
+	if got := jw.GetSession(insecure); got != nil {
+		t.Fatalf("HTTP GetSession accepted HTTPS session %p", got)
+	}
+	rq := jw.NewRequest(httptest.NewRecorder(), insecure)
+	if got := rq.Session(); got != nil {
+		t.Fatalf("HTTP NewRequest accepted HTTPS session %p", got)
+	}
+	rq.Cancel(nil)
+}
+
+func TestSessionMiddleware_HostCookieRequiresHTTPS(t *testing.T) {
+	jw, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jw.Close()
+	jw.CookieName = "__Host-jaws"
+	called := false
+	w := httptest.NewRecorder()
+	jw.SessionMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	})).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+	if w.Code != http.StatusServiceUnavailable || called || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("insecure host cookie: status=%d called=%v cookies=%v", w.Code, called, w.Result().Cookies())
 	}
 }
 
