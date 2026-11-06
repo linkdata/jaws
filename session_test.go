@@ -1162,26 +1162,36 @@ func TestSession_HostCookiePrefix(t *testing.T) {
 	}
 }
 
-func TestSession_HostCookiePrefixCaseInsensitive(t *testing.T) {
-	jw, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jw.Close()
-	jw.CookieName = "__hOsT-jaws"
-	httpResponse := httptest.NewRecorder()
-	httpSession := jw.NewSession(httpResponse, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
-	httpsRequest := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
-	httpsSession := jw.NewSession(httptest.NewRecorder(), httpsRequest)
-	httpCookies := httpResponse.Result().Cookies()
-	if httpSession != nil || len(httpCookies) != 0 {
-		t.Fatalf("HTTP Session = %p; cookies = %v", httpSession, httpCookies)
-	}
-	if httpsSession == nil || httpsSession.Cookie().Name != jw.CookieName || !httpsSession.Cookie().Secure {
-		t.Fatalf("HTTPS Session = %p", httpsSession)
-	}
-	if got := jw.GetSession(httpsRequest); got != httpsSession {
-		t.Fatalf("GetSession = %p, want %p", got, httpsSession)
+func TestSession_ReservedCookiePrefixesRequireHTTPS(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		httpsName string
+	}{
+		{"__hOsT-jaws", "__hOsT-jaws"},
+		{"__sEcUrE-jaws", "__Host-__sEcUrE-jaws"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jw, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer jw.Close()
+			jw.CookieName = tc.name
+			httpResponse := httptest.NewRecorder()
+			httpSession := jw.NewSession(httpResponse, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+			httpsRequest := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+			httpsSession := jw.NewSession(httptest.NewRecorder(), httpsRequest)
+			httpCookies := httpResponse.Result().Cookies()
+			if httpSession != nil || len(httpCookies) != 0 {
+				t.Fatalf("HTTP Session = %p; cookies = %v", httpSession, httpCookies)
+			}
+			if httpsSession == nil || httpsSession.Cookie().Name != tc.httpsName || !httpsSession.Cookie().Secure {
+				t.Fatalf("HTTPS Session = %p", httpsSession)
+			}
+			if got := jw.GetSession(httpsRequest); got != httpsSession {
+				t.Fatalf("GetSession = %p, want %p", got, httpsSession)
+			}
+		})
 	}
 }
 
