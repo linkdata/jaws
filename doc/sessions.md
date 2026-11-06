@@ -21,12 +21,12 @@ HTTP Sessions remain exposed to plaintext network traffic. Behind a
 TLS-terminating proxy, configure trusted forwarded scheme headers as described
 in [deployment](deployment.md#reverse-proxies).
 
-An explicitly `__Host-`-prefixed `jw.CookieName` (in any letter case) uses that
-name on HTTPS. A name beginning with `__Host-` or `__Secure-` in any letter
-case disables HTTP Session use: `GetSession` and `NewRequest` ignore matching
-cookies, `NewSession` returns nil, `SessionMiddleware` returns HTTP 503, and
-`AutoSession` skips creation. Existing browser sessions using an unprefixed
-HTTPS cookie name are not recognized.
+An explicitly `__Host-`-prefixed `jw.CookieName` (in any letter case) uses the
+canonical `__Host-` prefix on HTTPS. A name beginning with `__Host-`,
+`__Secure-`, or `__Http-` in any letter case disables HTTP Session use:
+`GetSession` and `NewRequest` ignore matching cookies, `NewSession` returns nil,
+`SessionMiddleware` returns HTTP 503, and `AutoSession` skips creation. Existing
+browser sessions using an unprefixed HTTPS cookie name are not recognized.
 
 ## Create a session before rendering
 

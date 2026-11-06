@@ -21,6 +21,7 @@ const (
 	sessionGrace       = time.Minute
 	hostCookiePrefix   = "__Host-"
 	secureCookiePrefix = "__Secure-"
+	httpCookiePrefix   = "__Http-"
 )
 
 func hasCookiePrefix(name, prefix string) bool {
@@ -28,7 +29,7 @@ func hasCookiePrefix(name, prefix string) bool {
 }
 
 func requiresSecureCookie(name string) bool {
-	return hasCookiePrefix(name, hostCookiePrefix) || hasCookiePrefix(name, secureCookiePrefix)
+	return hasCookiePrefix(name, hostCookiePrefix) || hasCookiePrefix(name, secureCookiePrefix) || hasCookiePrefix(name, httpCookiePrefix)
 }
 
 func (jw *Jaws) sessionCookieName(secure bool) string {
@@ -38,10 +39,10 @@ func (jw *Jaws) sessionCookieName(secure bool) string {
 		}
 		return jw.CookieName
 	}
-	if !hasCookiePrefix(jw.CookieName, hostCookiePrefix) {
-		return hostCookiePrefix + jw.CookieName
+	if hasCookiePrefix(jw.CookieName, hostCookiePrefix) {
+		return hostCookiePrefix + jw.CookieName[len(hostCookiePrefix):]
 	}
-	return jw.CookieName
+	return hostCookiePrefix + jw.CookieName
 }
 
 // Session stores server-side state shared by one or more Requests.
@@ -460,8 +461,8 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // It returns nil without closing matching Sessions if r is nil, shutdown has
 // begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
 // publication fails. It also returns nil when a [Jaws.CookieName] beginning
-// with "__Host-" or "__Secure-" in any letter case is used without recognized
-// HTTPS; w may be nil. Cookie names follow [Jaws.GetSession].
+// with "__Host-", "__Secure-", or "__Http-" in any letter case is used without
+// recognized HTTPS; w may be nil. Cookie names follow [Jaws.GetSession].
 //
 // Replacing a Session requires a free slot under each enabled limit until the
 // new cookie is published and the old Session is closed.

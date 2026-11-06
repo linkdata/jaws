@@ -1167,8 +1167,9 @@ func TestSession_ReservedCookiePrefixesRequireHTTPS(t *testing.T) {
 		name      string
 		httpsName string
 	}{
-		{"__hOsT-jaws", "__hOsT-jaws"},
+		{"__hOsT-jaws", "__Host-jaws"},
 		{"__sEcUrE-jaws", "__Host-__sEcUrE-jaws"},
+		{"__hTtP-jaws", "__Host-__hTtP-jaws"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			jw, err := New()

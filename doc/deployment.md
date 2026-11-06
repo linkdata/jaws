@@ -96,11 +96,14 @@ Sanitize all recognized headers:
 - `X-Forwarded-For` and `X-Real-IP` for client IP binding.
 - `X-Forwarded-Proto`, `X-Forwarded-Ssl`, `Front-End-Https`, and `Forwarded` for scheme resolution.
 
-JaWS parses only the rightmost comma-separated element of each header's last
-line. It prefers a valid `X-Forwarded-For` address, falling back to `X-Real-IP`.
-If neither parses or both valid addresses disagree, it uses the transport peer.
-Set or remove both IP headers. A TLS-terminating proxy forwarding plain HTTP must supply the trusted
-scheme, or HTTPS-page upgrades fail with `ErrWebsocketOriginWrongScheme`.
+For client IP, JaWS parses only the rightmost comma-separated element of each
+header's last line. It prefers a valid `X-Forwarded-For` address, falling back
+to `X-Real-IP`. If neither parses or both valid addresses disagree, it uses
+the transport peer. For scheme, it reads the first header line and the first
+comma-separated element of `X-Forwarded-Proto` or `Forwarded`.
+Set or remove both IP headers. A TLS-terminating proxy forwarding plain HTTP
+must supply the trusted scheme, or HTTPS-page upgrades fail with
+`ErrWebsocketOriginWrongScheme`.
 
 Preserve the page host, `/jaws/` paths, and WebSocket upgrades. JaWS checks the
 Origin scheme and host against the initial request, binds the callback to the
