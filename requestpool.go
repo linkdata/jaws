@@ -37,7 +37,7 @@ import (
 // handling and rendering; see [Request].
 //
 // If r is nil, the Request has no initial request, client address, or [Session].
-// Otherwise, its Session follows the request's scheme; see [Jaws.CookieName].
+// Otherwise, Session lookup follows the request's scheme; see [Jaws.CookieName].
 //
 // [Jaws.ServeWithTimeout] periodically retires idle Requests before WebSocket
 // processing starts; [Jaws.Serve] uses [DefaultWebSocketTimeout].

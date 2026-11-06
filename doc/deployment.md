@@ -74,8 +74,6 @@ Wrap page handlers in `jw.SecureHeadersMiddleware(page)` to apply the
 Behind a proxy that terminates TLS, set HSTS at the proxy: this middleware
 does not trust forwarded HTTPS headers, even when `TrustForwardedHeaders` is
 enabled for JaWS's other checks.
-JaWS uses a [host-only cookie name](sessions.md#http-and-https-cookies) for
-HTTPS Sessions. Ensure it recognizes the forwarded HTTPS scheme.
 
 `NewRequest` makes rendered pages non-cacheable. Keep callback and tail-script
 responses non-cacheable; hashed static assets may be cached.
@@ -99,10 +97,12 @@ Sanitize all recognized headers:
 For client IP, JaWS parses only the rightmost comma-separated element of each
 header's last line. It prefers a valid `X-Forwarded-For` address, falling back
 to `X-Real-IP`. If neither parses or both valid addresses disagree, it uses
-the transport peer. For scheme, it reads the first header line and the first
-comma-separated element of `X-Forwarded-Proto` or `Forwarded`.
+the transport peer. For scheme, it reads the first value of each listed header
+and the first hop of list-valued headers.
 Set or remove both IP headers. A TLS-terminating proxy forwarding plain HTTP
-must supply the trusted scheme, or HTTPS-page upgrades fail with
+must supply the trusted HTTPS scheme for
+[host-prefixed session cookies](sessions.md#http-and-https-cookies) and
+HTTPS-page WebSocket upgrades; otherwise upgrades fail with
 `ErrWebsocketOriginWrongScheme`.
 
 Preserve the page host, `/jaws/` paths, and WebSocket upgrades. JaWS checks the

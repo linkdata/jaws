@@ -141,29 +141,25 @@ Guide: `doc/sessions.md`, `doc/deployment.md`, `doc/ui/jsvar.md`.
   initialize its state atomically. Session storage supplies no dependency tags.
 - [ ] If templates use `$.Auth`, configure `MakeAuth`; enforce authorization
   independently in protected operations.
-- [ ] With `jawsauth`, use its default of keeping the JaWS Session on login and
-  logout. Let JaWS and `jawsauth` handle cookie and page lifecycle; do not add
-  application JavaScript, cookie polling, or session monitoring for auth changes.
-  Use login and logout hooks for application side effects.
-- [ ] Behind a trusted reverse proxy, configure `TrustForwardedHeaders` and have
-  the proxy replace client-supplied forwarding headers. JaWS then uses the
-  forwarded client IP for Session binding. A reverse proxy alone does not call
-  for login rotation.
-- [ ] Keep login rotation off unless a concrete session-fixation path exists:
-  distinct clients share the IP JaWS sees, and an attacker can make a victim
-  use a known pre-login Session cookie without learning the post-login cookie.
-  Then opt in with `jawsauth.Server.RotateSessionOnLogin`. A shared IP alone is
-  insufficient. HTTPS with JaWS's `__Host-` cookie name blocks ordinary sibling
-  domain and HTTP cookie planting. Do not assume browser or traffic compromise;
-  an attacker who controls those can also obtain the rotated cookie.
+- [ ] `jawsauth` keeps the JaWS Session on login and logout by default. JaWS and
+  `jawsauth` manage cookies and page reloads; applications need no cookie polling
+  or JavaScript for auth changes. Use hooks for application side effects.
+- [ ] Behind a trusted reverse proxy, set `TrustForwardedHeaders` and replace
+  client-supplied forwarding headers. JaWS then binds Sessions to the forwarded
+  client IP. A proxy alone does not require login rotation.
+- [ ] Enable `jawsauth.Server.RotateSessionOnLogin` only when an attacker can
+  plant a known pre-login cookie in a victim browser, reach JaWS from the same
+  effective client IP, and cannot learn the later cookie. Browsers enforcing
+  the `__Host-` prefix block sibling-domain and HTTP planting on HTTPS. Do not
+  assume ongoing browser or traffic control; rotation does not protect against it.
 - [ ] For browser-writable `JsVarStore`, validate the complete proposed value
   and caller authorization in `ClientCheck`.
 
-For comparison, [Gorilla sessions](https://github.com/gorilla/sessions/blob/main/store.go)
-and [Gin sessions](https://github.com/gin-contrib/sessions/blob/master/sessions.go)
-save existing sessions, while [Authboss OAuth2](https://github.com/aarondl/authboss/blob/master/oauth2/oauth2.go)
-stores the user ID in the current session. [SCS](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.RenewToken)
-exposes explicit `RenewToken` and recommends calling it on privilege changes.
+[Gorilla sessions](https://github.com/gorilla/sessions/blob/main/store.go) and
+[Gin sessions](https://github.com/gin-contrib/sessions/blob/master/sessions.go)
+save the current session; [Authboss OAuth2](https://github.com/aarondl/authboss/blob/master/oauth2/oauth2.go)
+stores the user ID in its current session. [SCS](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.RenewToken)
+exposes `RenewToken` and recommends it for privilege changes.
 
 ### Pass content or attributes across a trust boundary
 

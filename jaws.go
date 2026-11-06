@@ -100,20 +100,17 @@ type Jaws struct {
 	// executable and falls back to "jaws". CookieName must be a valid, non-empty
 	// HTTP cookie name; see [http.Cookie.Valid].
 	//
-	// HTTP sessions use this name. Recognized HTTPS sessions use a "__Host-"
-	// prefix so supporting browsers enforce host-only cookies. The two schemes
-	// do not share Sessions. A name beginning with "__Host-", "__Secure-", or
-	// "__Http-" in any letter case makes HTTP Sessions unavailable; an explicit
-	// "__Host-" prefix is emitted in canonical case on HTTPS. See
-	// [Jaws.TrustForwardedHeaders] for proxy scheme detection.
+	// HTTP uses this name; recognized HTTPS uses a "__Host-" prefix. Sessions
+	// cannot cross schemes. A name starting with "__Host-", "__Secure-", or
+	// "__Http-" in any letter case disables HTTP Sessions; an explicit "__Host-"
+	// prefix is emitted in canonical case. See [Jaws.TrustForwardedHeaders] for
+	// proxy scheme detection.
 	CookieName string
 	// AutoSession creates a [Session] on a successful WebSocket upgrade.
 	//
 	// It applies when the [Request] has no Session and Session limits allow one.
-	// The cookie name and Secure flag follow the initial page request's scheme,
-	// honoring [Jaws.TrustForwardedHeaders]. A CookieName beginning with "__Host-",
-	// "__Secure-", or "__Http-" in any letter case requires recognized HTTPS.
-	// AutoSession defaults to false.
+	// Its cookie follows the initial page request's scheme; see [Jaws.CookieName]
+	// and [Jaws.TrustForwardedHeaders]. AutoSession defaults to false.
 	AutoSession bool
 	// TrustForwardedHeaders enables trusted proxy header processing.
 	//
