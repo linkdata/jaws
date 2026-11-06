@@ -17,11 +17,32 @@ import (
 	"github.com/linkdata/secureheaders"
 )
 
-const sessionGrace = time.Minute
+const (
+	sessionGrace     = time.Minute
+	hostCookiePrefix = "__Host-"
+)
+
+func hasHostCookiePrefix(name string) bool {
+	return strings.HasPrefix(name, hostCookiePrefix)
+}
+
+func (jw *Jaws) sessionCookieName(secure bool) string {
+	if !secure {
+		if hasHostCookiePrefix(jw.CookieName) {
+			return ""
+		}
+		return jw.CookieName
+	}
+	if !hasHostCookiePrefix(jw.CookieName) {
+		return hostCookiePrefix + jw.CookieName
+	}
+	return jw.CookieName
+}
 
 // Session stores server-side state shared by one or more Requests.
 //
 // Sessions live in memory and are bound to the remote IP that created them.
+// HTTP and HTTPS requests use distinct cookie names and Sessions.
 // Their cookies have no explicit expiry or MaxAge. A Session starts with a
 // one-minute grace deadline; ExtendGrace can lengthen it for a bounded external
 // flow. Detaching a claimed Request refreshes the normal grace without shortening
@@ -50,7 +71,7 @@ func newSession(jw *Jaws, sessionID key.Key, remoteIP netip.Addr, secure bool) *
 		remoteIP:  remoteIP,
 		deadline:  time.Now().Add(sessionGrace),
 		cookie: http.Cookie{ // #nosec G124 -- Secure is set from the request scheme, and HttpOnly/SameSite are set below.
-			Name:     jw.CookieName,
+			Name:     jw.sessionCookieName(secure),
 			Path:     "/",
 			Value:    sessionID.String(),
 			Secure:   secure,
@@ -345,16 +366,18 @@ func (jw *Jaws) Sessions() (sessions []*Session) {
 	return
 }
 
-func (jw *Jaws) getSessionByIDLocked(sessionID key.Key, remoteIP netip.Addr) (sess *Session) {
-	if found, ok := jw.sessions[sessionID]; ok && equalIP(remoteIP, found.remoteIP) && !found.isDead() {
+func (jw *Jaws) getSessionByIDLocked(sessionID key.Key, remoteIP netip.Addr, cookieName string) (sess *Session) {
+	// A valid ID under the other scheme's cookie name must not cross the
+	// HTTP/HTTPS session boundary. The cookie name is fixed at creation.
+	if found, ok := jw.sessions[sessionID]; ok && found.cookie.Name == cookieName && equalIP(remoteIP, found.remoteIP) && !found.isDead() {
 		sess = found
 	}
 	return
 }
 
-func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr) (sess *Session) {
+func (jw *Jaws) getSessionLocked(sessionIDs []key.Key, remoteIP netip.Addr, cookieName string) (sess *Session) {
 	for _, sessionID := range sessionIDs {
-		if sess = jw.getSessionByIDLocked(sessionID, remoteIP); sess != nil {
+		if sess = jw.getSessionByIDLocked(sessionID, remoteIP, cookieName); sess != nil {
 			break
 		}
 	}
@@ -392,12 +415,14 @@ func getCookieSessionsIDs(h http.Header, wanted string) (cookies []key.Key) {
 // proxy that connects over loopback, every request appears to come from loopback
 // and IP binding is effectively disabled unless [Jaws.TrustForwardedHeaders] is
 // enabled so the forwarded client IP is used instead.
+// HTTP cookies are ignored on HTTPS requests and vice versa; see [Jaws.CookieName].
 func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 	if r != nil {
-		if sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName); len(sessionIDs) > 0 {
+		cookieName := jw.sessionCookieName(secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders))
+		if sessionIDs := getCookieSessionsIDs(r.Header, cookieName); len(sessionIDs) > 0 {
 			remoteIP := jw.clientIP(r)
 			jw.mu.RLock()
-			sess = jw.getSessionLocked(sessionIDs, remoteIP)
+			sess = jw.getSessionLocked(sessionIDs, remoteIP, cookieName)
 			jw.mu.RUnlock()
 		}
 	}
@@ -429,7 +454,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 //
 // It returns nil without closing matching Sessions if r is nil, shutdown has
 // begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
-// publication fails; w may be nil.
+// publication fails. It also returns nil when an explicitly "__Host-"-prefixed
+// [Jaws.CookieName] is used on a request JaWS does not recognize as HTTPS;
+// w may be nil. Cookie names follow [Jaws.GetSession].
 //
 // Replacing a Session requires a free slot under each enabled limit until the
 // new cookie is published and the old Session is closed.
@@ -438,13 +465,14 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 // generating the session ID. Go's default reader does not return errors.
 func (jw *Jaws) NewSession(w http.ResponseWriter, r *http.Request) (sess *Session) {
 	if r != nil {
-		sessionIDs := getCookieSessionsIDs(r.Header, jw.CookieName)
+		cookieName := jw.sessionCookieName(secureheaders.RequestIsSecure(r, jw.TrustForwardedHeaders))
+		sessionIDs := getCookieSessionsIDs(r.Header, cookieName)
 		sess, _ = jw.newSession(w, r)
 		if sess != nil && len(sessionIDs) > 0 {
 			remoteIP := jw.clientIP(r)
 			for _, sessionID := range sessionIDs {
 				jw.mu.RLock()
-				oldSess := jw.getSessionByIDLocked(sessionID, remoteIP)
+				oldSess := jw.getSessionByIDLocked(sessionID, remoteIP, cookieName)
 				jw.mu.RUnlock()
 				if oldSess != nil {
 					oldSess.Clear()
@@ -474,12 +502,16 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 }
 
 // newSessionLocked allocates a Session whose ID is absent from jw.sessions, or
-// returns nil after shutdown begins or a Session limit is reached. limitIP
-// distinguishes the per-client limit for SessionMiddleware's HTTP response.
+// returns nil after shutdown begins, a Session limit is reached, or a "__Host-"
+// cookie name would be used without Secure. limitIP distinguishes the per-client
+// limit for SessionMiddleware's HTTP response.
 //
 // The caller must hold jw.mu and publish any returned Session before releasing
 // it.
 func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session, limitIP bool) {
+	if !secure && hasHostCookiePrefix(jw.CookieName) {
+		return
+	}
 	select {
 	case <-jw.closeCh:
 		return

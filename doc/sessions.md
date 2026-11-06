@@ -7,6 +7,26 @@ cookie and the client IP seen by JaWS. They expire and do not survive an engine
 restart. A Session identifies stored state; application authentication and
 authorization remain separate concerns.
 
+## HTTP and HTTPS cookies
+
+JaWS uses `jw.CookieName` for HTTP Sessions and prefixes it with `__Host-` for
+recognized HTTPS Sessions. It never accepts one scheme's cookie for the other
+scheme. Browsers that enforce the [`__Host-` prefix](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis#section-4.1.3.2)
+accept the HTTPS cookie only with `Secure`, `Path=/`, and no `Domain`. JaWS sets
+these attributes when it recognizes HTTPS. This prevents sibling domains and
+browser-visible insecure HTTP responses from planting the HTTPS cookie name.
+
+Redirect browsers to HTTPS before creating Sessions for authentication.
+HTTP Sessions remain exposed to plaintext network traffic. Behind a
+TLS-terminating proxy, configure trusted forwarded scheme headers as described
+in [deployment](deployment.md#reverse-proxies).
+
+An explicitly `__Host-`-prefixed `jw.CookieName` uses that name on HTTPS and
+disables HTTP Session use: `GetSession` and `NewRequest` ignore matching cookies,
+`NewSession` returns nil, `SessionMiddleware` returns HTTP 503, and `AutoSession`
+skips creation. Existing browser sessions using an unprefixed HTTPS cookie name
+are not recognized.
+
 ## Create a session before rendering
 
 Wrap the page in `SessionMiddleware` when initial rendering needs a Session.
@@ -89,8 +109,9 @@ and cookies are preserved.
 
 `MaxSessions` limits registered Sessions globally. `MaxSessionsPerIP` limits a
 client address bucket. Both default to zero, which disables the respective
-limit. A lower per-IP cap reserves capacity for other buckets. Replacement needs
-a free slot under both enabled caps and preserves the old Session on refusal.
+limit. HTTP and HTTPS Sessions both count toward these limits. A lower per-IP cap
+reserves capacity for other buckets. Replacement needs a free slot under both
+enabled caps and preserves the old Session on refusal.
 
 When middleware cannot create a Session, it skips the page handler. A full
 per-IP bucket returns HTTP 429 while global capacity remains; the global limit

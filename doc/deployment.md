@@ -74,6 +74,8 @@ Wrap page handlers in `jw.SecureHeadersMiddleware(page)` to apply the
 Behind a proxy that terminates TLS, set HSTS at the proxy: this middleware
 does not trust forwarded HTTPS headers, even when `TrustForwardedHeaders` is
 enabled for JaWS's other checks.
+JaWS uses a [host-only cookie name](sessions.md#http-and-https-cookies) for
+HTTPS Sessions. Ensure it recognizes the forwarded HTTPS scheme.
 
 `NewRequest` makes rendered pages non-cacheable. Keep callback and tail-script
 responses non-cacheable; hashed static assets may be cached.
