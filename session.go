@@ -23,7 +23,7 @@ const (
 )
 
 func hasHostCookiePrefix(name string) bool {
-	return strings.HasPrefix(name, hostCookiePrefix)
+	return len(name) >= len(hostCookiePrefix) && strings.EqualFold(name[:len(hostCookiePrefix)], hostCookiePrefix)
 }
 
 func (jw *Jaws) sessionCookieName(secure bool) string {
@@ -454,9 +454,9 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 //
 // It returns nil without closing matching Sessions if r is nil, shutdown has
 // begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
-// publication fails. It also returns nil when an explicitly "__Host-"-prefixed
-// [Jaws.CookieName] is used on a request JaWS does not recognize as HTTPS;
-// w may be nil. Cookie names follow [Jaws.GetSession].
+// publication fails. It also returns nil when a [Jaws.CookieName] with a
+// case-insensitive "__Host-" prefix is used on a request JaWS does not recognize
+// as HTTPS; w may be nil. Cookie names follow [Jaws.GetSession].
 //
 // Replacing a Session requires a free slot under each enabled limit until the
 // new cookie is published and the old Session is closed.
@@ -502,9 +502,9 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 }
 
 // newSessionLocked allocates a Session whose ID is absent from jw.sessions, or
-// returns nil after shutdown begins, a Session limit is reached, or a "__Host-"
-// cookie name would be used without Secure. limitIP distinguishes the per-client
-// limit for SessionMiddleware's HTTP response.
+// returns nil after shutdown begins, a Session limit is reached, or a
+// case-insensitive "__Host-" cookie name would be used without Secure.
+// limitIP distinguishes the per-client limit for SessionMiddleware's HTTP response.
 //
 // The caller must hold jw.mu and publish any returned Session before releasing
 // it.

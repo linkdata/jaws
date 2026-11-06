@@ -1162,20 +1162,26 @@ func TestSession_HostCookiePrefix(t *testing.T) {
 	}
 }
 
-func TestSession_HostCookiePrefixCaseSensitive(t *testing.T) {
+func TestSession_HostCookiePrefixCaseInsensitive(t *testing.T) {
 	jw, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer jw.Close()
 	jw.CookieName = "__hOsT-jaws"
-	httpSession := jw.NewSession(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
-	httpsSession := jw.NewSession(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "https://example.test/", nil))
-	if httpSession == nil || httpSession.Cookie().Name != jw.CookieName || httpSession.Cookie().Secure {
-		t.Fatalf("HTTP Session = %p", httpSession)
+	httpResponse := httptest.NewRecorder()
+	httpSession := jw.NewSession(httpResponse, httptest.NewRequest(http.MethodGet, "http://example.test/", nil))
+	httpsRequest := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	httpsSession := jw.NewSession(httptest.NewRecorder(), httpsRequest)
+	httpCookies := httpResponse.Result().Cookies()
+	if httpSession != nil || len(httpCookies) != 0 {
+		t.Fatalf("HTTP Session = %p; cookies = %v", httpSession, httpCookies)
 	}
-	if httpsSession == nil || httpsSession.Cookie().Name != "__Host-"+jw.CookieName || !httpsSession.Cookie().Secure {
+	if httpsSession == nil || httpsSession.Cookie().Name != jw.CookieName || !httpsSession.Cookie().Secure {
 		t.Fatalf("HTTPS Session = %p", httpsSession)
+	}
+	if got := jw.GetSession(httpsRequest); got != httpsSession {
+		t.Fatalf("GetSession = %p, want %p", got, httpsSession)
 	}
 }
 
