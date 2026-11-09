@@ -4333,6 +4333,13 @@ func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
 			if cookies[0].Secure != tc.wantSecure {
 				t.Fatalf("AutoSession cookie Secure = %v, want %v", cookies[0].Secure, tc.wantSecure)
 			}
+			wantName := jw.CookieName
+			if tc.wantSecure {
+				wantName = "__Host-" + wantName
+			}
+			if cookies[0].Name != wantName {
+				t.Fatalf("AutoSession cookie name = %q, want %q", cookies[0].Name, wantName)
+			}
 		})
 	}
 }

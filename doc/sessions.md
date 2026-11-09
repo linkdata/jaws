@@ -7,6 +7,16 @@ cookie and the client IP seen by JaWS. They expire and do not survive an engine
 restart. A Session identifies stored state; application authentication and
 authorization remain separate concerns.
 
+## HTTP and HTTPS cookies
+
+`jw.CookieName` is an unprefixed base name. JaWS uses it on HTTP and
+`__Host-<CookieName>` on recognized HTTPS.
+Sessions cannot cross schemes. HTTPS cookies carry `Secure`, `Path=/`, and no
+`Domain`; browsers enforcing the [`__Host-` prefix](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis#section-4.1.3.2)
+reject sibling-domain and insecure HTTP attempts to set them. HTTP exposes
+session cookies to network traffic. For TLS-terminating proxies, see
+[deployment](deployment.md#reverse-proxies).
+
 ## Create a session before rendering
 
 Wrap the page in `SessionMiddleware` when initial rendering needs a Session.
@@ -89,8 +99,9 @@ and cookies are preserved.
 
 `MaxSessions` limits registered Sessions globally. `MaxSessionsPerIP` limits a
 client address bucket. Both default to zero, which disables the respective
-limit. A lower per-IP cap reserves capacity for other buckets. Replacement needs
-a free slot under both enabled caps and preserves the old Session on refusal.
+limit. HTTP and HTTPS Sessions both count toward these limits. A lower per-IP cap
+reserves capacity for other buckets. Replacement needs a free slot under both
+enabled caps and preserves the old Session on refusal.
 
 When middleware cannot create a Session, it skips the page handler. A full
 per-IP bucket returns HTTP 429 while global capacity remains; the global limit
