@@ -4285,15 +4285,11 @@ func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
 		pageScheme    string
 		upgradeScheme string
 		wantSecure    bool
-		hostPrefix    bool
 	}{
-		{"HTTP page", "http", "", false, false},
-		{"HTTPS scheme on both requests", "https", "https", true, false},
-		{"HTTPS scheme only on page", "https", "", true, false},
-		{"HTTPS scheme only on upgrade", "http", "https", false, false},
-		{"__Host- HTTP page", "http", "", false, true},
-		{"__Host- HTTPS page", "https", "https", true, true},
-		{"__Host- HTTPS upgrade only", "http", "https", false, true},
+		{"HTTP page", "http", "", false},
+		{"HTTPS scheme on both requests", "https", "https", true},
+		{"HTTPS scheme only on page", "https", "", true},
+		{"HTTPS scheme only on upgrade", "http", "https", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			jw, err := New()
@@ -4302,9 +4298,6 @@ func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
 			}
 			jw.AutoSession = true
 			jw.TrustForwardedHeaders = true
-			if tc.hostPrefix {
-				jw.CookieName = "__Host-" + jw.CookieName
-			}
 			go jw.Serve()
 			t.Cleanup(jw.Close)
 			server := httptest.NewServer(jw)
@@ -4334,12 +4327,6 @@ func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
 				t.Fatalf("status = %d, want 101", resp.StatusCode)
 			}
 			cookies := resp.Cookies()
-			if tc.hostPrefix && !tc.wantSecure {
-				if len(cookies) != 0 || rq.Session() != nil {
-					t.Fatalf("insecure __Host- AutoSession: cookies=%v session=%p", cookies, rq.Session())
-				}
-				return
-			}
 			if len(cookies) != 1 {
 				t.Fatalf("AutoSession cookies = %v, want one", cookies)
 			}
@@ -4347,7 +4334,7 @@ func TestWS_AutoSessionSecureFollowsPage(t *testing.T) {
 				t.Fatalf("AutoSession cookie Secure = %v, want %v", cookies[0].Secure, tc.wantSecure)
 			}
 			wantName := jw.CookieName
-			if tc.wantSecure && !tc.hostPrefix {
+			if tc.wantSecure {
 				wantName = "__Host-" + wantName
 			}
 			if cookies[0].Name != wantName {

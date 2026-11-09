@@ -17,32 +17,13 @@ import (
 	"github.com/linkdata/secureheaders"
 )
 
-const (
-	sessionGrace       = time.Minute
-	hostCookiePrefix   = "__Host-"
-	secureCookiePrefix = "__Secure-"
-	httpCookiePrefix   = "__Http-"
-)
-
-func hasCookiePrefix(name, prefix string) bool {
-	return len(name) >= len(prefix) && strings.EqualFold(name[:len(prefix)], prefix)
-}
-
-func requiresSecureCookie(name string) bool {
-	return hasCookiePrefix(name, hostCookiePrefix) || hasCookiePrefix(name, secureCookiePrefix) || hasCookiePrefix(name, httpCookiePrefix)
-}
+const sessionGrace = time.Minute
 
 func (jw *Jaws) sessionCookieName(secure bool) string {
-	if !secure {
-		if requiresSecureCookie(jw.CookieName) {
-			return ""
-		}
-		return jw.CookieName
+	if secure {
+		return "__Host-" + jw.CookieName
 	}
-	if hasCookiePrefix(jw.CookieName, hostCookiePrefix) {
-		return hostCookiePrefix + jw.CookieName[len(hostCookiePrefix):]
-	}
-	return hostCookiePrefix + jw.CookieName
+	return jw.CookieName
 }
 
 // Session stores server-side state shared by one or more Requests.
@@ -446,8 +427,7 @@ func (jw *Jaws) GetSession(r *http.Request) (sess *Session) {
 //
 // It returns nil without closing matching Sessions if r is nil, shutdown has
 // begun, [Jaws.MaxSessions] or [Jaws.MaxSessionsPerIP] is reached, or cookie
-// publication fails. It also returns nil when [Jaws.CookieName] requires HTTPS
-// and the request is not recognized as secure.
+// publication fails.
 //
 // It panics if the [crypto/rand.Reader] captured by [New] returns an error while
 // generating the session ID. Go's default reader does not return errors.
@@ -490,16 +470,12 @@ func (jw *Jaws) newSession(w http.ResponseWriter, r *http.Request) (sess *Sessio
 }
 
 // newSessionLocked allocates a Session whose ID is absent from jw.sessions, or
-// returns nil after shutdown begins, a Session limit is reached, or a
-// browser secure-only cookie prefix would be used without Secure.
+// returns nil after shutdown begins or a Session limit is reached.
 // limitIP distinguishes the per-client limit for SessionMiddleware's HTTP response.
 //
 // The caller must hold jw.mu and publish any returned Session before releasing
 // it.
 func (jw *Jaws) newSessionLocked(remoteIP netip.Addr, secure bool) (sess *Session, limitIP bool) {
-	if !secure && requiresSecureCookie(jw.CookieName) {
-		return
-	}
 	select {
 	case <-jw.closeCh:
 		return

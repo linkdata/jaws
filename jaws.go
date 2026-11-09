@@ -94,17 +94,14 @@ type Jid = jid.Jid // convenience alias
 // may be changed while serving. Methods document their own concurrency behavior
 // and may be called concurrently when stated.
 type Jaws struct {
-	// CookieName is the base name used for session cookies.
+	// CookieName is the unprefixed base name used for session cookies.
 	//
 	// It defaults to [assets.DefaultCookieName], which is derived from the
 	// executable and falls back to "jaws". CookieName must be a valid, non-empty
 	// HTTP cookie name; see [http.Cookie.Valid].
 	//
-	// HTTP uses this name; recognized HTTPS uses a "__Host-" prefix. Sessions
-	// cannot cross schemes. A name starting with "__Host-", "__Secure-", or
-	// "__Http-" in any letter case disables HTTP Sessions; an explicit "__Host-"
-	// prefix is emitted in canonical case. See [Jaws.TrustForwardedHeaders] for
-	// proxy scheme detection.
+	// HTTP uses this name; recognized HTTPS prepends "__Host-". Sessions cannot
+	// cross schemes. See [Jaws.TrustForwardedHeaders] for proxy scheme detection.
 	CookieName string
 	// AutoSession creates a [Session] on a successful WebSocket upgrade.
 	//

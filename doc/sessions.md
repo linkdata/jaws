@@ -9,18 +9,13 @@ authorization remain separate concerns.
 
 ## HTTP and HTTPS cookies
 
-JaWS uses `jw.CookieName` on HTTP and `__Host-<CookieName>` on recognized HTTPS.
+`jw.CookieName` is an unprefixed base name. JaWS uses it on HTTP and
+`__Host-<CookieName>` on recognized HTTPS.
 Sessions cannot cross schemes. HTTPS cookies carry `Secure`, `Path=/`, and no
 `Domain`; browsers enforcing the [`__Host-` prefix](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis#section-4.1.3.2)
 reject sibling-domain and insecure HTTP attempts to set them. HTTP exposes
 session cookies to network traffic. For TLS-terminating proxies, see
 [deployment](deployment.md#reverse-proxies).
-
-An explicitly `__Host-`-prefixed `jw.CookieName` (in any letter case) uses the
-canonical `__Host-` prefix on HTTPS. A name beginning with `__Host-`,
-`__Secure-`, or `__Http-` in any letter case disables HTTP Session use:
-`GetSession` and `NewRequest` ignore matching cookies, `NewSession` returns nil,
-`SessionMiddleware` returns HTTP 503, and `AutoSession` skips creation.
 
 ## Create a session before rendering
 
